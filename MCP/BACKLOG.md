@@ -21,7 +21,7 @@ P0 — PHP core
 [x] Auth: single password → session (Argon2id template hash in `api/config/auth.php`, real hash in git-ignored `auth.local.php`), 24h lifetime. TOTP optional later.
 [x] Endpoints: `GET /api/pages`, `GET /api/page/<type>/<slug>` (raw `.md`), `PUT /api/page/<type>/<slug>`, login/logout/session. (`api/index.php`)
 [x] File cache: raw-body cache keyed by mtime sentinel, dropped on write. (`api/cache.php`)
-[ ] Smoke test with PHP ≥ 8.2 — no PHP binary on this dev machine; run on target host or install locally.
+[ ] Smoke test with PHP 8.4+ — no PHP binary on this dev machine; run on target host or install locally.
 [ ] Draft/public gating: `draft: true` pages filtered out of public listings (schema has the flags; API filtering pending).
 
 P1 — SvelteKit dashboard
