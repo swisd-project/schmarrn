@@ -13,6 +13,9 @@ declare(strict_types=1);
 
 namespace Auth;
 
+// Library files stand alone: each requires its dependencies explicitly.
+require_once __DIR__ . '/router.php';
+
 securityHeaders();
 session_start();
 

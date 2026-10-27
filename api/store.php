@@ -14,6 +14,9 @@ declare(strict_types=1);
 
 namespace Store;
 
+// Library files stand alone: each requires its dependencies explicitly.
+require_once __DIR__ . '/router.php';
+
 const TYPE_PATTERN = '[a-z0-9]+(?:-[a-z0-9]+)*';
 const SLUG_PATTERN = '[a-z0-9]+(?:-[a-z0-9]+)*';
 

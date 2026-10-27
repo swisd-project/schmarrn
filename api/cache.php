@@ -14,6 +14,9 @@ declare(strict_types=1);
 
 namespace Cache;
 
+// Library files stand alone: each requires its dependencies explicitly.
+require_once __DIR__ . '/store.php';
+
 const TTL = 43200; // 12 h — same coquettish restraint Automad showed me.
 
 function dir(): string
