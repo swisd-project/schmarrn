@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "schmarrn: API (built-in PHP server)",
+      "type": "php",
+      "request": "launch",
+      "runtimeArgs": ["-S", "localhost:8080", "-t", "api"],
+      "port": 9003,
+      "noDebug": true,
+      "serverReadyAction": { "action": "openExternally" }
+    }
+  ]
+}
