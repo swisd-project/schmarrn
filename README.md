@@ -15,17 +15,29 @@ src/        SvelteKit dashboard + content tree
 MCP/        GOSPEL (law), BACKLOG (ledger), GUIDE (kinks)
 ```
 
-## Dev
+## Dev (PHP + Vite — one command, both servers)
+
+From the repo root:
 
 ```sh
-php -S localhost:8080 -t api          # API
-cd src && npm run dev                 # dashboard
+npm run dev
 ```
 
-## Dev (two servers, one proxy)
+starts both via [`concurrently`](https://www.npmjs.com/package/concurrently): the PHP API on `:8080` (blue) and the Vite dashboard on `:5173` (green). Ctrl-C stops both. Solo variants: `npm run dev:api` / `npm run dev:app`.
 
-1. **API** — `php -S localhost:8080 -t api` … or DEVSENSE's "PHP" extension: right-click `api/index.php` → *PHP: Serve Project* (it can download a PHP runtime itself if you have none; if it uses another port, change the proxy target in `vite.config.ts`).
-2. **Dashboard** — `npm run dev` (or VS Code task **Dev: BOTH**) → open http://localhost:5173. Vite proxies `/api/*` to :8080, so everything lives on one origin.
+Open **http://localhost:5173** — Vite proxies `/api/*` to `:8080`, so everything lives on one origin. First-run password is `changeme` (template hash; mint a real one, see below).
+
+Requirements: PHP ≥ 8.4 (dev on 8.5; on Ubuntu/Zorin use `ppa:ondrej/php` → `sudo apt install php8.5-cli php8.5-mbstring php8.5-xml`). VS Code riders: the DEVSENSE "PHP" extension's built-in server is just `php -S` — a PHP binary is required; the repo ships a matching `.vscode/launch.json` profile (F5 → "schmarrn: API") and `.vscode/tasks.json` task `Dev: BOTH`.
+
+## Reset the admin password
+
+The hash lives in `api/config/auth.local.php` (git-ignored; falls back to `api/config/auth.php` template). Mint one, consciously:
+
+```sh
+php -r "echo password_hash('your-login-password', PASSWORD_ARGON2ID, ['memory_cost' => 65536, 'time_cost' => 4, 'threads' => 1]), PHP_EOL;"
+```
+
+Note: PHP `password_verify` does not verify hashes minted by Node's `argon2` package — generate with PHP.
 
 ## GitHub Pages (gated releases)
 
