@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: MPL-2.0
+# Schmarrn → GitHub Pages deploy. MANUAL ONLY: a maintainer presses Run workflow
+# (plus a version note). No auto-deploy on push — releases are greenlit by a human.
+
+name: Deploy to Pages (greenlit versions only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version / release note (e.g. v0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # Pages serves the dashboard under /schmarrn/ — path base must match or the shell 404s.
+      - name: Build dashboard
+        run: npm ci && BASE_PATH=/schmarrn npm run build
+
+      - name: Static-layer sanity (no PHP on Pages)
+        run: test -f build/index.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Greenlit version note
+        run: echo "Deployed version ${{ inputs.version }}"

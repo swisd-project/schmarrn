@@ -7,9 +7,12 @@ const config = {
     // prerender the root only. Public content pages are NOT prerendered here — that
     // decision is Recipe A (PHP serves cached HTML) and lives in api/.
     adapter: adapter({
-      fallback: 'index.html',
+      fallback: 'dashboard.html',
       strict: false
-    })
+    }),
+    // GitHub Pages hosts the dashboard under /schmarrn/ (deploy workflow sets BASE_PATH).
+    // Local dev and the FTP host use no base path.
+    paths: { base: process.env.BASE_PATH || '' }
   }
 };
 

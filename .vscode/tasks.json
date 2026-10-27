@@ -1,0 +1,32 @@
+{
+  // SCHMARRN DEV FLOOR — two servers, one proxy.
+  // Task "Dev: API"     → PHP built-in server on :8080 (or DevSense's server: right-click
+  //                       api/index.php → "PHP: Serve Project" — then change the Vite proxy
+  //                       target in vite.config.ts to that port).
+  // Task "Dev: Objects" → Vite dev server on :5173, proxying /api to the PHP server.
+  //                       Open http://localhost:5173 — that's the dashboard.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Dev: API (php -S :8080)",
+      "type": "shell",
+      "command": "php -S localhost:8080 -t api",
+      "isBackground": true,
+      "problemMatcher": [],
+      "options": { "cwd": "${workspaceFolder}" }
+    },
+    {
+      "label": "Dev: Dashboard (vite :5173)",
+      "type": "shell",
+      "command": "npm run dev",
+      "isBackground": true,
+      "problemMatcher": [],
+      "options": { "cwd": "${workspaceFolder}" }
+    },
+    {
+      "label": "Dev: BOTH",
+      "dependsOn": ["Dev: API (php -S :8080)", "Dev: Dashboard (vite :5173)"],
+      "dependsOrder": "parallel"
+    }
+  ]
+}

@@ -22,7 +22,18 @@ php -S localhost:8080 -t api          # API
 cd src && npm run dev                 # dashboard
 ```
 
-## Deploy
+## Dev (two servers, one proxy)
+
+1. **API** — `php -S localhost:8080 -t api` … or DEVSENSE's "PHP" extension: right-click `api/index.php` → *PHP: Serve Project* (it can download a PHP runtime itself if you have none; if it uses another port, change the proxy target in `vite.config.ts`).
+2. **Dashboard** — `npm run dev` (or VS Code task **Dev: BOTH**) → open http://localhost:5173. Vite proxies `/api/*` to :8080, so everything lives on one origin.
+
+## GitHub Pages (gated releases)
+
+Dashboard shell deploys to `https://swisd-project.github.io/schmarrn/` **only via manual greenlight**: Actions → *Deploy to Pages (greenlit versions only)* → Run workflow → enter your version note. No push ever triggers a deploy.
+
+Note: Pages is static — the `/api` endpoints don't exist there. It's the shell/preview layer; the living CMS always runs on your PHP host.
+
+## Deploy (FTP — the real thing)
 
 Upload `api/`, the built dashboard assets and `src/content/` to the FTP host. The only writable directory is `api/cache/`.
 
