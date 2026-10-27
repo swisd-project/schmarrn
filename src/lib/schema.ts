@@ -41,10 +41,10 @@ export function schemaFor(type: string): z.ZodType {
 /** Seed .md for a fresh page — editor fills the body, frontmatter defaults are law-abiding. */
 export function seedPage(type: string, slug: string): string {
   const today = new Date().toISOString().slice(0, 10);
-  const common = `  slug: ${slug}
-  published: true
-  draft: false
-  date: ${today}`;
+  const common = `slug: ${slug}
+published: true
+draft: false
+date: ${today}`;
   const frontmatter =
     type === 'blog'
       ? `---\ntitle: ""\nauthor: ""\nabstract: ""\n${common}\ntags: []\n---\n`
