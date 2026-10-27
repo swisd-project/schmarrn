@@ -21,7 +21,7 @@ P0 — PHP core
 [x] Auth: single password → session (Argon2id template hash in `api/config/auth.php`, real hash in git-ignored `auth.local.php`), 24h lifetime. TOTP optional later.
 [x] Endpoints: `GET /api/pages`, `GET /api/page/<type>/<slug>` (raw `.md`), `PUT /api/page/<type>/<slug>`, login/logout/session. (`api/index.php`)
 [x] File cache: raw-body cache keyed by mtime sentinel, dropped on write. (`api/cache.php`)
-[ ] Smoke test with PHP 8.4+ — no PHP binary on this dev machine; run on target host or install locally.
+[ ] Smoke test with PHP 8.4+ — ~~no PHP binary on this dev machine~~ **DONE 2026-10-27 (PHP 8.5.12):** login/session/pages/raw-GET/cache-HIT verified via curl. 3 defects fixed: `self::` calls in plain namespace functions (fatal), `\SLUG_PATTERN` root-lookup (undefined const), list-destructuring of assoc-array `Cache\files()`. Note: PHP `password_verify` rejects the Node-`argon2` lib's PHC variant — generate admin hashes with PHP itself.
 [ ] Draft/public gating: `draft: true` pages filtered out of public listings (schema has the flags; API filtering pending).
 
 P1 — SvelteKit dashboard

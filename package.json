@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "concurrently -k -n api,app -c blue,green \"php -S localhost:8080 -t api\" \"vite dev\"",
+    "dev:app": "vite dev",
+    "dev:api": "php -S localhost:8080 -t api",
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
@@ -14,6 +16,7 @@
     "@sveltejs/kit": "^2.22.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@swisd-project/mdms": "^0.1.7",
+    "concurrently": "^10.0.6",
     "svelte": "^5.28.0",
     "svelte-check": "^4.1.0",
     "typescript": "^5.8.0",

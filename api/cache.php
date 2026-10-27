@@ -24,14 +24,14 @@ function dir(): string
 function files(string $type, string $slug): array
 {
     return [
-        'body'   => self::dir() . "/{$type}-{$slug}.md",
-        'sentinel' => self::dir() . "/{$type}-{$slug}.meta",
+        'body'   => dir() . "/{$type}-{$slug}.md",
+        'sentinel' => dir() . "/{$type}-{$slug}.meta",
     ];
 }
 
 function isFresh(string $type, string $slug): bool
 {
-    [$body, $sentinel] = self::files($type, $slug);
+    ["body" => $body, "sentinel" => $sentinel] = files($type, $slug);
     if (!is_file($body) || !is_file($sentinel)) {
         return false;
     }
@@ -45,13 +45,13 @@ function isFresh(string $type, string $slug): bool
 /** Write body + mtime sentinel in one breath. */
 function store(string $type, string $slug, string $raw): void
 {
-    [$body, $sentinel] = self::files($type, $slug);
+    ["body" => $body, "sentinel" => $sentinel] = files($type, $slug);
     $sourceMtime = @filemtime(\Store\pageDir($type, $slug) . '/index.md');
     if ($sourceMtime === false) {
         return;
     }
-    if (!is_dir(self::dir())) {
-        @mkdir(self::dir(), 0775, true);
+    if (!is_dir(dir())) {
+        @mkdir(dir(), 0775, true);
     }
     file_put_contents($sentinel, (string)$sourceMtime);
     file_put_contents($body, $raw);
@@ -60,12 +60,12 @@ function store(string $type, string $slug, string $raw): void
 /** Stream the cached body for our GET route. Raw passthrough, already validated at write. */
 function emit(string $type, string $slug): void
 {
-    readfile(self::files($type, $slug)['body']);
+    readfile(files($type, $slug)['body']);
 }
 
 function drop(string $type, string $slug): void
 {
-    foreach (self::files($type, $slug) as $file) {
+    foreach (files($type, $slug) as $file) {
         @unlink($file);
     }
 }

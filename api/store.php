@@ -24,14 +24,14 @@ function root(): string
 
 function pageDir(string $type, string $slug): string
 {
-    self::assertIdentifier($type, 'type');
-    self::assertIdentifier($slug, 'slug');
-    return self::root() . '/' . $type . '/' . $slug;
+    assertIdentifier($type, 'type');
+    assertIdentifier($slug, 'slug');
+    return root() . '/' . $type . '/' . $slug;
 }
 
 function assertIdentifier(string $value, string $what): void
 {
-    if (preg_match('/^' . \SLUG_PATTERN . '$/', $value) !== 1) {
+    if (preg_match('/^' . SLUG_PATTERN . '$/', $value) !== 1) {
         Router\refuse(400, "Invalid {$what}: {$value}");
     }
 }
@@ -40,8 +40,8 @@ function assertIdentifier(string $value, string $what): void
 function listAll(): array
 {
     $result = [];
-    foreach (scandir(self::root()) ?: [] as $type) {
-        $typeDir = self::root() . '/' . $type;
+    foreach (scandir(root()) ?: [] as $type) {
+        $typeDir = root() . '/' . $type;
         if (!is_dir($typeDir) || str_starts_with($type, '.')) {
             continue;
         }
@@ -61,7 +61,7 @@ function listAll(): array
 
 function read(string $type, string $slug): ?string
 {
-    $file = self::pageDir($type, $slug) . '/index.md';
+    $file = pageDir($type, $slug) . '/index.md';
     if (!is_file($file)) {
         return null;
     }
@@ -72,10 +72,10 @@ function read(string $type, string $slug): ?string
 /** Atomic write: validation → temp file → rename. Never leaves a half-Shmarrn behind. */
 function write(string $type, string $slug, string $raw): void
 {
-    self::assertNonEmpty($raw);
-    self::assertDistinctFilenameSlug($type, $slug, $raw);
+    assertNonEmpty($raw);
+    assertDistinctFilenameSlug($type, $slug, $raw);
 
-    $dir = self::pageDir($type, $slug);
+    $dir = pageDir($type, $slug);
     if (!is_dir($dir) && !mkdir($dir, 0775, true)) {
         Router\refuse(500, "Cannot create page directory: {$dir}");
     }
