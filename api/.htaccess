@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: MPL-2.0
+# Rewrite /api/* to the front controller (and nothing else — PHP stays at the door).
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Serve existing files directly (static dashboard assets, when colocated).
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Deny direct access to library files.
+    RewriteRule ^/(?:router|auth|store|cache)\.php$ - [F,L]
+
+    # Everything under /api goes to the front controller.
+    RewriteRule ^ /api/index.php [L]
+</IfModule>

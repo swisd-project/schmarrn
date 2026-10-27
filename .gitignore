@@ -1,0 +1,17 @@
+# Dependencies / build
+node_modules/
+.svelte-kit/
+output/
+build/
+dist/
+
+# PHP cache + runtime
+api/cache/
+api/config/auth.local.php
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Env
+.env

@@ -1,0 +1,22 @@
+/*
+ * 1. Relative path: src/lib/app.css
+ * 2. Description: Base look for the Schmarrn kitchen. Modest — the dashboard is a tool.
+ * 3. Provides: Tokenized colors and typography so features never hand-style.
+ * 4. SPDX-License-Identifier: MPL-2.0
+ * 5. Copyright (c) 2026 Homahuki GmbH
+ */
+
+:root {
+  --crust: #2b2118;
+  --batter: #f7f2e9;
+  --raisin: #7a5c3e;
+  --jam: #b3004c;
+  --font: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: var(--batter);
+  color: var(--crust);
+  font-family: var(--font);
+}
