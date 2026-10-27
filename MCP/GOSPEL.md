@@ -26,7 +26,7 @@ Locked Decisions (Reference)
 
 Environment
 
-- Local dev: PHP ≥ 8.2 built-in server (`php -S`) for `api/`, Vite dev server for `dashboard/`.
+- Local dev: PHP 8.5 built-in server (`php -S`) for `api/`, Vite dev server for `dashboard/`.
 - Deploy: FTP upload of one folder (api + built dashboard + content). Writable dir needed only for the cache.
 - Requirements: PHP 8.4+ on deploy (dev on 8.5 — 8.2's security support ends Dec 2026, don't build on it), gd+zip only if we support image resizing. No composer, no database, no cron.
 
