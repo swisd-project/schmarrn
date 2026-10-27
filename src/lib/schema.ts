@@ -37,3 +37,17 @@ export function schemaFor(type: string): z.ZodType {
   const schema = SCHEMAS[type];
   return schema ?? PageFrontmatterSchema;
 }
+
+/** Seed .md for a fresh page — editor fills the body, frontmatter defaults are law-abiding. */
+export function seedPage(type: string, slug: string): string {
+  const today = new Date().toISOString().slice(0, 10);
+  const common = `  slug: ${slug}
+  published: true
+  draft: false
+  date: ${today}`;
+  const frontmatter =
+    type === 'blog'
+      ? `---\ntitle: ""\nauthor: ""\nabstract: ""\n${common}\ntags: []\n---\n`
+      : `---\ntitle: ""\n${common}\n---\n`;
+  return `${frontmatter}\n\n\n`; // trailing newline so the caret has carpet
+}

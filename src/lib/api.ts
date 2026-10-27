@@ -32,9 +32,13 @@ export async function readPage(type: string, slug: string): Promise<string> {
   return res.text();
 }
 
-export async function writePage(type: string, slug: string, raw: string): Promise<void> {
+export function writePage(type: string, slug: string, raw: string): Promise<void> {
+  return updatePage('PUT', type, slug, raw);
+}
+
+async function updatePage(method: 'PUT' | 'POST', type: string, slug: string, raw: string): Promise<never | void> {
   await fetch(`/api/page/${type}/${slug}`, {
-    method: 'PUT',
+    method,
     headers: { 'Content-Type': 'text/markdown' },
     body: raw
   }).then((r) => json<{ ok: boolean }>(r));
@@ -51,6 +55,10 @@ export function login(password: string): Promise<{ ok: boolean }> {
 
 export function logout(): Promise<void> {
   return fetch('/api/logout', { method: 'POST' }).then(() => undefined);
+}
+
+export function createPage(type: string, slug: string, raw: string): Promise<void> {
+  return updatePage('POST', type, slug, raw);
 }
 
 export function session(): Promise<{ authenticated: boolean }> {

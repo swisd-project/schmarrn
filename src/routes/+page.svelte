@@ -1,6 +1,7 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen, phase 1.
-  import { session, login, logout, pageCount } from '$lib/api';
+  import { session, login, logout, pageCount, createPage } from '$lib/api';
+  import { seedPage } from '$lib/schema';
   import PageEditor from '$lib/components/PageEditor.svelte';
   import type { PageIndex, SelectedPage } from '$lib/types';
 
@@ -53,6 +54,30 @@
   function select(type: string, slug: string) {
     selected = { type, slug };
   }
+
+  // ——— new page ———
+  let newType = $state('pages');
+  let newSlug = $state('');
+  let creating = $state(false);
+  let createError = $state('');
+
+  async function createNew(event: SubmitEvent) {
+    event.preventDefault();
+    creating = true;
+    createError = '';
+    const type = newType.trim().toLowerCase();
+    const slug = newSlug.trim().toLowerCase();
+    try {
+      await createPage(type, slug, seedPage(type, slug));
+      refreshIndex();
+      select(type, slug);
+      newSlug = '';
+    } catch (e) {
+      createError = e instanceof Error ? e.message : String(e);
+    } finally {
+      creating = false;
+    }
+  }
 </script>
 
 <main class="shell">
@@ -90,6 +115,14 @@
             </ul>
           {/each}
         {/if}
+
+        <form class="newpage" onsubmit={createNew}>
+          <input bind:value={newType} placeholder="type (e.g. pages)" required />
+          <input bind:value={newSlug} placeholder="slug (e.g. my-tart)" required
+            pattern="[a-z0-9]+(-[a-z0-9]+)*" title="lowercase, digits, hyphens" />
+          <button type="submit" disabled={creating}>{creating ? 'Folding…' : 'New page'}</button>
+          {#if createError}<p class="error">{createError}</p>{/if}
+        </form>
       </nav>
 
       <section class="stage">
@@ -124,6 +157,8 @@
   .tree button:hover { background: #efe6d8; }
   .tree button.active { background: var(--raisin); color: var(--batter); }
   .draft { margin-left: 0.4rem; font-size: 0.65rem; text-transform: uppercase; opacity: 0.75; }
+  .newpage { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 1rem; }
+  .newpage input { font-size: 0.8rem; padding: 0.3rem 0.5rem; border: 1px solid #d8c7b2; border-radius: 4px; }
   .empty { opacity: 0.5; font-style: italic; }
   @media (max-width: 60rem) {
     .workbench { grid-template-columns: 1fr; }

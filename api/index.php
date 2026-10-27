@@ -80,7 +80,20 @@ try {
             echo $raw;
             break;
 
-        // Route: PUT /api/page/{type}/{slug} — atomic write of the whole .md file.
+        // Route: POST /api/page/{type}/{slug} — create (unfold) a fresh page; 409 if it exists.
+        case $method === 'POST' && preg_match('#^page/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            [, $type, $slug] = explode('/', $path);
+            if (Store\read($type, $slug) !== null) {
+                Router\refuse(409, "Page already exists: {$type}/{$slug}");
+            }
+            Store\write($type, $slug, file_get_contents('php://input') ?: '');
+            Cache\drop($type, $slug);
+            http_response_code(201);
+            echo json_encode(['ok' => true]);
+            break;
         case $method === 'PUT' && preg_match('#^page/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             if (!Auth\check()) {
                 Router\refuse(401, 'Not authenticated.');
