@@ -39,7 +39,8 @@ function assertIdentifier(string $value, string $what): void
     }
 }
 
-/** All pages: {type: [{slug, updatedAt}...]} — existence is truth, frontmatter is TS-side business. */
+/** All pages: {type: [{slug, updatedAt, draft}...]} — existence is truth.
+ *  PHP only regex-sniffs the draft flag (no Markdown parsing, byte-peek discipline). */
 function listAll(): array
 {
     $result = [];
@@ -48,18 +49,31 @@ function listAll(): array
         if (!is_dir($typeDir) || str_starts_with($type, '.')) {
             continue;
         }
+        $includeDrafts = \Auth\check();
         $pages = [];
         foreach (scandir($typeDir) ?: [] as $slug) {
             $file = $typeDir . '/' . $slug . '/index.md';
             if (!is_file($file) || str_starts_with($slug, '.')) {
                 continue;
             }
-            $pages[] = ['slug' => $slug, 'updatedAt' => filemtime($file)];
+            $raw = (string)file_get_contents($file);
+            $draft = preg_match('/^draft:\s*true\b/m', $raw) === 1;
+            if ($draft && !$includeDrafts) {
+                continue;
+            }
+            $pages[] = ['slug' => $slug, 'updatedAt' => filemtime($file), 'draft' => $draft];
         }
         usort($pages, fn($a, $b) => $a['slug'] <=> $b['slug']);
         $result[$type] = $pages;
     }
     return $result;
+}
+
+/** Anonymous requests are the public: hide drafts from them. */
+function isDraft(string $type, string $slug): bool
+{
+    $raw = read($type, $slug);
+    return $raw !== null && preg_match('/^draft:\s*true\b/m', $raw) === 1;
 }
 
 function read(string $type, string $slug): ?string

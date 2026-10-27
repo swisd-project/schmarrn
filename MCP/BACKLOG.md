@@ -22,15 +22,15 @@ P0 — PHP core
 [x] Endpoints: `GET /api/pages`, `GET /api/page/<type>/<slug>` (raw `.md`), `PUT /api/page/<type>/<slug>`, login/logout/session. (`api/index.php`)
 [x] File cache: raw-body cache keyed by mtime sentinel, dropped on write. (`api/cache.php`)
 [ ] Smoke test with PHP 8.4+ — ~~no PHP binary on this dev machine~~ **DONE 2026-10-27 (PHP 8.5.12):** login/session/pages/raw-GET/cache-HIT verified via curl. 3 defects fixed: `self::` calls in plain namespace functions (fatal), `\SLUG_PATTERN` root-lookup (undefined const), list-destructuring of assoc-array `Cache\files()`. Note: PHP `password_verify` rejects the Node-`argon2` lib's PHC variant — generate admin hashes with PHP itself.
-[ ] Draft/public gating: `draft: true` pages filtered out of public listings (schema has the flags; API filtering pending).
+[ ] Draft/public gating: ~~schema flags~~ **DONE:** PHP regex-sniffs `draft: true` (no Markdown parsing); anon `/api/pages` excludes drafts + raw draft GET = 404; authed sees all with `draft` badge data.
 
 P1 — SvelteKit dashboard
 [x] `adapter-static` scaffold (fallback SPA), Svelte 5 runes, svelte-check clean. Builds: `npm run build` → `build/`.
 [ ] Tailwind (currently hand-rolled tokens in `src/lib/app.css`).
 [x] Login view → PHP session. (`src/routes/+page.svelte`)
-[x] Page tree browser over `/api/pages` (basic list; polish pending).
-[ ] Editor: textarea + Zod frontmatter form → live preview via `parseMdms()`.
-[ ] Save flow: write raw `.md` (frontmatter + body) via `PUT`.
+[x] Page tree browser over `/api/pages` — clickable, draft badges, refresh on save.
+[x] Editor: raw-`.md` textarea + LIVE preview via `parseMdms()` with per-type Zod gate (`src/lib/components/PageEditor.svelte`). One renderer, by law.
+[x] Save flow: raw `.md` via `PUT` (API atomic-writes + drops cache — verified roundtrip).
 
 P2 — Public serving strategy
 [ ] Decide: prerendered adapter-static public site vs. PHP routed cached HTML (Recipe A) — lock in GOSPEL when decided.

@@ -14,6 +14,10 @@ Schmarrn GUIDE
 - SvelteKit = the dashboard, not the content surface: no `import.meta.glob` for content. Content is fetched from `/api`, never baked into the bundle (SwISD-site `loader.ts` lesson).
 - One parser to rule them all: every rendered HTML in editor preview AND public routes must originate from one `parseMdms()` invocation — no second renderer sneaks in.
 - `.md` files single-file write on save (frontmatter + body in one atomic PUT). No partial state, use temp+rename in the PHP layer.
+- Runes rule enforced live: never write `$state` from inside `$derived` — docs forbid impurity; derive the object including its own error field and render from there.
+- `$effect` page-load guard: track the key being loaded in a `loadedFor` pointer and skip refetch when a save just wrote the same file.
+- Namespace resolution trap: inside `namespace Store`, unqualified `Auth\check()` resolves to `Store\Auth\check()` — always fully qualify cross-namespace calls (`\Auth\check()`).
+- API contract: `GET /api/pages` is PUBLIC (anon gets drafts filtered; editors get the full tree with `draft` flags) — public rendering depends on it staying open.
 - PHP never parses Markdown; it stores, serves and caches bytes. Parsing decision lives in TS/browser.
 - Sanitization boundary: admin content trusted, everything else DOMPurify'd (dompurify via `parseMdms` output).
 - Slug discipline: filename = slug = `^[a-z0-9-]+$`; PHP validates on save, Zod validates on read. If one strays — hard failure.

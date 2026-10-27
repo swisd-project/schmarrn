@@ -10,6 +10,7 @@
 export interface PageRef {
   readonly slug: string;
   readonly updatedAt: number;
+  readonly draft?: boolean;
 }
 export type PageIndex = Readonly<Record<string, readonly PageRef[]>>;
 

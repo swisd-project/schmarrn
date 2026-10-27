@@ -54,9 +54,7 @@ try {
             break;
 
         case $method === 'GET' && $path === 'pages':
-            if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
-            }
+            // Public listing for strangers (drafts filtered inside), full tree for editors.
             echo json_encode(Store\listAll(), JSON_UNESCAPED_SLASHES);
             break;
 
@@ -65,6 +63,10 @@ try {
             [, $type, $slug] = explode('/', $path);
             $raw = Store\read($type, $slug);
             if ($raw === null) {
+                Router\refuse(404, "Page not found: {$type}/{$slug}");
+            }
+            // Public strangers never taste drafts — but editors do, via the same URL.
+            if (Store\isDraft($type, $slug) && !Auth\check()) {
                 Router\refuse(404, "Page not found: {$type}/{$slug}");
             }
             if (Cache\isFresh($type, $slug)) {

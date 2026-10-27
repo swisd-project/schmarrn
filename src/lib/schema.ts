@@ -26,3 +26,14 @@ export const BlogFrontmatterSchema = PageFrontmatterSchema.extend({
 });
 
 export type BlogFrontmatter = z.infer<typeof BlogFrontmatterSchema>;
+
+/** One Zod gate per content type — schema.ts is the register. */
+const SCHEMAS: Record<string, z.ZodType> = {
+  blog: BlogFrontmatterSchema,
+  pages: PageFrontmatterSchema
+};
+
+export function schemaFor(type: string): z.ZodType {
+  const schema = SCHEMAS[type];
+  return schema ?? PageFrontmatterSchema;
+}
