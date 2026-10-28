@@ -628,7 +628,7 @@ async function boot(root: HTMLElement): Promise<void> {
         writeBlock(index, { kind: 'module', name: parsed, source: next }, isNew);
       }
     }, [
-      el('p', { class: 'sm-alert sm-alert-ok', style: 'margin:0 0 .5rem' }, [`Module: ${name} — raw source, full control.`]),
+      el('p', { class: 'sm-alert sm-alert-ok', style: 'margin:0 0 .5rem' }, [`Module: ${name} — raw source, full control. Nesting a module inside? The outer fence needs more colons: ::::slide wraps :::note.`]),
       sourceBox,
       err,
       el('div', { style: 'display:flex;justify-content:flex-end;gap:.5rem' }, [

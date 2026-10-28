@@ -1,33 +1,84 @@
 /*
- * deck.js — the slide deck's helper script.
+ * deck.js — the slide deck's helper script: full-page scroll, done properly.
  *
- * The deck is CSS-first: the stage scroll-snaps vertically and the scrollbar
- * stays hidden without any script. What a script is genuinely needed for:
- *  - real slide heights (a measured px minimum beats the 100% guesswork that
- *    collapses slides when the stage's own flex height is indeterminate);
- *  - anchor links (#title) gliding instead of jumping — mandatory snap can
- *    fight the browser's instant fragment scroll, and smooth fragment
- *    navigation is unreliable across browsers;
- *  - landing softly on the slide a URL hash points at.
+ * CSS lays the deck out (vertical scroll-snap, hidden scrollbar). The script
+ * gives it the behavior full-page decks are READ for:
+ *  - measured slide heights (--sm-slide-h; measured after fonts settle, so no
+ *    collapsed first paint and no mega-top);
+ *  - one slide per wheel/trackpad gesture (full-page feel), while a slide
+ *    taller than the stage keeps normal inner scrolling until its edge;
+ *  - keyboard: ↑/↓, PageUp/PageDown, Home/End;
+ *  - anchor links (#title) glide instead of jumping;
+ *  - arriving with a URL hash lands softly on that slide.
  *
- * Deployed inside themes/<name>/slide.html. No dependencies. Passive listener.
- * SPDX-License-Identifier: MPL-2.0
+ * No dependencies. SPDX-License-Identifier: MPL-2.0
  * Copyright (c) 2026 Homahuki GmbH
  */
 (() => {
   const stage = document.querySelector('.slide-stage');
   if (!stage || !stage.querySelector(':scope > .sm-slide')) return;
-  const slides = stage.querySelectorAll(':scope > .sm-slide');
+  const slides = Array.from(stage.querySelectorAll(':scope > .sm-slide'));
 
-  // Heights: the stage tells the truth; the CSS fallback stays for no-JS eyes.
+  // ——— heights: measure the stage, not vibes ———
   const fit = () => stage.style.setProperty('--sm-slide-h', `${stage.clientHeight}px`);
+  const settle = () => requestAnimationFrame(fit);
   fit();
-  window.addEventListener('resize', fit, { passive: true });
+  window.addEventListener('resize', settle, { passive: true });
+  if (document.fonts?.ready) document.fonts.ready.then(fit);
 
-  const byId = (id) =>
-    id !== '' && stage.querySelector(`.sm-slide[id="${CSS.escape(id)}"]`);
+  const index = () =>
+    Math.min(Math.max(Math.round(stage.scrollTop / stage.clientHeight), 0), slides.length - 1);
 
-  // Anchor links inside the deck glide; instant jumps die here.
+  const glide = (slide) => slide.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const byId = (id) => {
+    const el = id !== '' ? stage.querySelector(`.sm-slide[id="${CSS.escape(id)}"]`) : null;
+    return el;
+  };
+
+  // ——— one slide per gesture; inner scroll wins inside an overflowing slide ———
+  let lock = 0;
+  stage.addEventListener(
+    'wheel',
+    (e) => {
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // horizontal trackpad flick
+      const current = slides[index()];
+      const inside = current.scrollHeight - current.clientHeight;
+      if (inside > 1) {
+        const atTop = current.scrollTop <= 0 && e.deltaY < 0;
+        const atBottom = current.scrollTop + current.clientHeight >= inside - 1 && e.deltaY > 0;
+        if (!atTop && !atBottom) return; // the slide owns this scroll
+      }
+      e.preventDefault();
+      const now = Date.now();
+      if (now < lock) return;
+      lock = now + 500;
+      const dir = e.deltaY > 0 ? 1 : -1;
+      const next = slides[Math.min(Math.max(index() + dir, 0), slides.length - 1)];
+      if (next !== current) glide(next);
+    },
+    { passive: false }
+  );
+
+  // ——— keyboard, but never while someone types ———
+  document.addEventListener('keydown', (e) => {
+    const t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|SUMMARY)$/.test(t.tagName))) return;
+    const map = { ArrowDown: 1, PageDown: 1, ArrowUp: -1, PageUp: -1 };
+    if (e.key in map) {
+      e.preventDefault();
+      const next = slides[Math.min(Math.max(index() + map[e.key], 0), slides.length - 1)];
+      glide(next);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      glide(slides[0]);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      glide(slides[slides.length - 1]);
+    }
+  });
+
+  // ——— anchors glide; the URL stays honest, no second jump ———
   document.addEventListener('pointerdown', (e) => {
     const link = e.target.closest('a[href^="#"]');
     if (!link) return;
@@ -35,14 +86,14 @@
     if (!slide) return;
     e.preventDefault();
     requestAnimationFrame(() => {
-      slide.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      glide(slide);
       history.replaceState(null, '', `#${slide.id}`);
     });
   });
 
-  // Arriving with a hash (reload, shared link): land on the slide, smoothly.
+  // ——— soft landing when the URL already carries a hash ———
   window.addEventListener('load', () => {
     const slide = byId(location.hash.slice(1));
-    if (slide) requestAnimationFrame(() => slide.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    if (slide) requestAnimationFrame(() => glide(slide));
   });
 })();

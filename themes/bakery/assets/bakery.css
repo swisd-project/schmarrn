@@ -186,6 +186,10 @@ body.slide {
   min-height: var(--sm-slide-h, 100%); /* deck.js measures; CSS is the fallback */
   scroll-snap-align: start;
 }
+/* slide content breathes: nothing pins to the very edge of a full-height slide */
+.sm-slide > :first-child { margin-top: 0; }
+.sm-slide > :last-child { margin-bottom: 0; }
+.sm-slide p, .sm-slide ul, .sm-slide ol { max-width: 52rem; }
 .sm-slide {
   display: flex;
   flex-direction: column;

@@ -146,6 +146,10 @@ body.slide {
 }
 .slide-stage:has(> .sm-slide)::-webkit-scrollbar { display: none; }
 .slide-stage:has(> .sm-slide) > * { flex: 0 0 auto; min-height: var(--sm-slide-h, 100%); scroll-snap-align: start; }
+/* slide content breathes: nothing pins to the very edge of a full-height slide */
+.sm-slide > :first-child { margin-top: 0; }
+.sm-slide > :last-child { margin-bottom: 0; }
+.sm-slide p, .sm-slide ul, .sm-slide ol { max-width: 56rem; }
 .sm-slide {
   display: flex; flex-direction: column; justify-content: center;
   padding: 2rem 2.5rem;
