@@ -42,7 +42,8 @@
 │   ├── store.php                 # content store: list/read/write (atomic), slug discipline
 │   ├── cache.php                 # raw cache + rendered-HTML cache (storeHtml/htmlStale), mtime sentinels
 │   ├── assets/
-│   │   └── render.esm.js         # committed fallback render bundle (client-side mdms)
+│   │   ├── render.esm.js         # committed fallback render bundle (client-side mdms)
+│   │   └── design.html           # /design workbench — public style guide, user-steered
 │   ├── config/
 │   │   ├── auth.php              # TEMPLATE (hash of "changeme")
 │   │   ├── accounts.php          # TEMPLATE

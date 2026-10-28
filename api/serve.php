@@ -33,6 +33,9 @@ function dispatch(string $path): never
     if ($path === '') {
         home($site);
     }
+    if ($path === 'design') {
+        design($site);
+    }
     $segments = explode('/', $path);
     if (count($segments) === 1) {
         page('pages', $segments[0], $site);
@@ -41,6 +44,18 @@ function dispatch(string $path): never
         page($segments[0], $segments[1], $site);
     }
     notFound($site);
+}
+
+/** The design workbench — static bytes, public, not content. The system gets steered here. */
+function design(array $site): never
+{
+    $file = __DIR__ . '/assets/design.html';
+    if (!is_file($file)) {
+        notFound($site);
+    }
+    header('Content-Type: text/html; charset=utf-8');
+    readfile($file);
+    exit;
 }
 
 /** The front door: \Site\home slug, else the first published page of "pages". */

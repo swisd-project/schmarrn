@@ -54,6 +54,7 @@ v1 — Schmarrn "known to work"
 [ ] First-visit setup wizard (admin account, site name, theme)
 
 ## p4 dashboard chrome & design system
+[~] Design workbench FIRST (user-ordered 2026-10-28): `/design` publicly served (Serve\design → api/assets/design.html, static, no login) — all UI primitives (color tokens incl. proposed neons, type scale, buttons, forms, badges, feedback, cards, overlay bits) then composed patterns (header, hero, text/card-grid/form sections, footer). User guides the system's evolution from this page; tokens in ONE :root block. NEXT: iterate on user feedback, then port the settled system to the dashboard (Tailwind) + themes.
 [ ] Tailwind in (replace hand-rolled tokens); design tokens: palette + shapes + motion as pinned above
 [ ] Burger menu → full-screen overlay (settings, global settings, media tab lazy, page tree)
 [ ] Round elements, hover slide-up + paper-cast shadows, micro-animations; no ornament
