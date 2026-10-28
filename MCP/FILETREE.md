@@ -74,17 +74,17 @@
 │   ├── lib/
 │   │   ├── api.ts                # typed fetcher for /api
 │   │   ├── blocks.ts             # block model: splitBlocks/joinPage (exact source spans)
-│   │   ├── modules.ts            # the module wall: directive allowlist → hast
-│   │   ├── render.ts             # THE one render pipeline (canvas, fallback, editor share it)
+│   │   ├── modules.ts            # the module wall: directive allowlist → hast (incl. empty-slot placeholder)
+│   │   ├── render.ts             # THE one render pipeline (fallback + editor share it)
 │   │   ├── schema.ts             # Zod: PageFrontmatter (blog left for plugin-land)
 │   │   └── app.css               # tokens: crust/batter/raisin/jam
 │   ├── public/
 │   │   ├── fallback.ts           # client fallback renderer → render.esm.js
-│   │   └── edit.ts               # live-page editor (burger, click-to-edit, settings overlay) → edit.esm.js
+│   │   └── edit.ts               # live-page editor (burger overlay, click-to-edit, new-page modal) → edit.esm.js
 │   ├── routes/
 │   │   ├── +layout.svelte        # imports ../lib/app.css (relative — $lib evasion, see GUIDE)
 │   │   ├── +layout.ts            # prerender = true
-│   │   └── +page.svelte          # login/setup + burger overlay (Pages/Site/Accounts/Media/Plugins) + editor stage (runes, Tailwind)
+│   │   └── +page.svelte          # login/setup + burger overlay (Pages/Site/Accounts/Media/Plugins) — MANAGEMENT-ONLY: picking a page navigates to the live page (canvas retired)
 │   └── content/                  # install-local user data — GITIGNORED, never committed
 │       ├── pages/                # content types (dirs = types, subdirs = slugs)
 │       │   └── <slug>/index.md   # + .draft.md sidecar + page-local media files

@@ -5,8 +5,7 @@
   import { schemaFor, withDraftFlag } from '$lib/schema';
   import { splitFrontmatter } from '$lib/blocks';
   import { parseMdms } from '@swisd-project/mdms';
-  import CanvasEditor from '$lib/components/CanvasEditor.svelte';
-  import type { PageIndex, SelectedPage, AccountRef } from '$lib/types';
+  import type { PageIndex, AccountRef } from '$lib/types';
   import type { SiteMediaRef } from '$lib/api';
 
   let authenticated = $state<boolean | null>(null);
@@ -16,7 +15,6 @@
   let error = $state('');
   let busy = $state(false);
   let index = $state<PageIndex | null>(null);
-  let selected = $state<SelectedPage | null>(null);
 
   // establish session state once — and check whether the bakery needs founding
   let setupNeeded = $state(false);
@@ -151,7 +149,6 @@
   async function signOut() {
     await logout();
     authenticated = false;
-    selected = null;
     menuOpen = false;
   }
 
@@ -169,15 +166,10 @@
   }
 
   function select(type: string, slug: string) {
-    selected = { type, slug };
-    menuOpen = false; // picking a page leaves the overlay — back to the canvas
+    // The canvas retired — editing lives on the LIVE page now (the injected editor).
+    // The dashboard is management-only: picking a page walks you onto it.
+    window.location.href = type === 'pages' ? `/${slug}` : `/${type}/${slug}`;
   }
-
-  const selectedPublished = $derived.by(() => {
-    if (selected === null) return false;
-    const sel = selected;
-    return (index?.[sel.type] ?? []).some((p) => p.slug === sel.slug && p.draft !== true);
-  });
 
   // ——— the burger overlay: Pages / Site / Accounts / Media / Plugins ———
   type Tab = 'pages' | 'site' | 'accounts' | 'media' | 'plugins';
@@ -340,7 +332,7 @@
       const frontmatter = `---\ntitle: ${JSON.stringify(m.title)}\nslug: ${m.slug}\npublished: true\ndraft: ${m.asDraft}\ndate: ${today}\ntags: []\n---`;
       await createPage('pages', m.slug, `${frontmatter}\n\n\n`);
       refreshIndex();
-      select('pages', m.slug);
+      select('pages', m.slug); // onto the live page — fill it there
       newModal = null;
     } catch (e) {
       newError = e instanceof Error ? e.message : String(e);
@@ -419,7 +411,7 @@
       }
       await createPage('pages', m.slug, rawToStore);
       refreshIndex();
-      select('pages', m.slug);
+      select('pages', m.slug); // onto the live page — fill it there
       uploadModal = null;
     } catch (e) {
       uploadError = e instanceof Error ? e.message : String(e);
@@ -436,7 +428,6 @@
     if (!confirm(`Delete ${type}/${slug} for good? No undo, no tears.`)) return;
     try {
       await deletePage(type, slug);
-      if (selected?.type === type && selected?.slug === slug) selected = null;
       refreshIndex();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -456,7 +447,6 @@
     try {
       const newSlug = await renamePage(type, slug, to);
       renaming = null;
-      if (selected?.type === type && selected?.slug === slug) selected = { type, slug: newSlug };
       refreshIndex();
     } catch (e) {
       renameError = e instanceof Error ? e.message : String(e);
@@ -503,32 +493,14 @@
         <span></span><span></span><span></span>
       </button>
       <span class="font-extrabold text-lg tracking-tight">Schmarrn</span>
-      {#if selected}
-        <span class="text-sm text-ink-soft">{selected.type} / {selected.slug}</span>
-      {/if}
       <span class="ml-auto text-sm text-ink-soft">{user}{#if role} · {role}{/if}</span>
       <button class="btn btn-secondary" onclick={signOut}>Log out</button>
     </header>
 
     <section class="px-4 pb-8 max-w-6xl mx-auto w-full">
-      {#if selected}
-        {#key `${selected.type}/${selected.slug}`}
-          <CanvasEditor
-            page={selected}
-            published={selectedPublished}
-            currentUserName={user}
-            onsaved={refreshIndex}
-            onrenamed={(slug) => {
-              if (selected) selected = { ...selected, slug };
-              refreshIndex();
-            }}
-          />
-        {/key}
-      {:else}
-        <div class="mg py-16 text-center">
-          <p class="m-0 italic text-ink-soft">Pick a shredded piece from the menu, sugar.</p>
-        </div>
-      {/if}
+      <div class="mg py-16 text-center">
+        <p class="m-0 italic text-ink-soft">Pick a shredded piece from the menu — editing happens on the live page.</p>
+      </div>
     </section>
   {/if}
 
@@ -548,7 +520,7 @@
       </button>
       <span class="font-extrabold text-lg tracking-tight">Schmarrn</span>
       <span class="ml-auto text-sm text-ink-soft">{user}{#if role} · {role}{/if}</span>
-      <button class="btn btn-secondary" onclick={closeMenu}>Back to the canvas</button>
+      <button class="btn btn-secondary" onclick={closeMenu}>Close</button>
     </div>
 
     <nav class="flex gap-2 px-4 pb-4 flex-wrap" aria-label="Menu sections">
@@ -591,7 +563,7 @@
                       </form>
                     {:else}
                       <button
-                        class="btn btn-secondary flex-1 justify-start {selected?.type === type && selected?.slug === page.slug ? 'ring-2 ring-jam' : ''}"
+                        class="btn btn-secondary flex-1 justify-start"
                         onclick={() => select(type, page.slug)}
                       >
                         {page.slug}

@@ -15,11 +15,6 @@ export interface PageRef {
 }
 export type PageIndex = Readonly<Record<string, readonly PageRef[]>>;
 
-export interface SelectedPage {
-  readonly type: string;
-  readonly slug: string;
-}
-
 export interface AccountRef {
   readonly user: string;
   readonly role: 'admin' | 'editor';
