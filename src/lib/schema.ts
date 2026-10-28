@@ -38,6 +38,32 @@ export function schemaFor(type: string): z.ZodType {
   return schema ?? PageFrontmatterSchema;
 }
 
+/** Human-readable issue list — "title: Required · slug: lowercase only" — never a JSON dump. */
+export function formatIssues(error: z.ZodError): string {
+  return error.issues.map((i) => `${i.path.length > 0 ? i.path.join('.') : 'frontmatter'}: ${i.message}`).join(' · ');
+}
+
+/** validateFrontmatter adapter for mdms: throws a human-readable error, not a Zod dump. */
+export function frontmatterValidator(type: string): (data: unknown) => Record<string, unknown> {
+  const schema = schemaFor(type);
+  return (data: unknown) => {
+    const result = schema.safeParse(data);
+    if (!result.success) {
+      throw new Error(formatIssues(result.error));
+    }
+    return result.data as Record<string, unknown>;
+  };
+}
+
+/** Flip (or insert) the `draft:` flag in a frontmatter document — byte-level, no YAML parse. */
+export function withDraftFlag(raw: string, on: boolean): string {
+  const flag = `draft: ${on}`;
+  if (/^draft:\s*(true|false)\s*$/m.test(raw)) {
+    return raw.replace(/^draft:\s*(true|false)\s*$/m, flag);
+  }
+  return raw.replace(/^---\r?\n/, `---\n${flag}\n`);
+}
+
 /** Seed .md for a fresh page — editor fills the body, frontmatter defaults are law-abiding. */
 export function seedPage(type: string, slug: string): string {
   const today = new Date().toISOString().slice(0, 10);

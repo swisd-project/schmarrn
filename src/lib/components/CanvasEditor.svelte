@@ -24,7 +24,7 @@
     ConflictError
   } from '$lib/api';
   import { renderMdms } from '$lib/render';
-  import { schemaFor } from '$lib/schema';
+  import { frontmatterValidator } from '$lib/schema';
   import { splitFrontmatter, splitBlocks, joinPage, directiveInner, attr, type Block, type PageSplit } from '$lib/blocks';
   import type { SelectedPage } from '$lib/types';
   import type { MediaRef } from '$lib/api';
@@ -106,17 +106,18 @@
 
   const pageTitle = $derived(/^title:\s*(.+)$/m.exec(canvas.split.frontmatter)?.[1]?.trim() ?? page.slug);
 
-  // Frontmatter schema gate — same validation the public render applies.
+  // Frontmatter schema gate — same validation the public render applies, human-readable.
   const schemaWarning = $derived.by(() => {
     try {
       renderMdms(raw, {
         type: page.type,
         slug: page.slug,
-        validateFrontmatter: schemaFor(page.type).parse
+        validateFrontmatter: frontmatterValidator(page.type)
       });
       return '';
     } catch (e) {
-      return e instanceof Error ? e.message : String(e);
+      const message = e instanceof Error ? e.message : String(e);
+      return message.replace(/^mdms: Frontmatter validation failed\. /, '');
     }
   });
 

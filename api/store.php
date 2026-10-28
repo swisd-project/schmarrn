@@ -240,10 +240,10 @@ function move(string $type, string $slug, string $newSlug): void
     $from = pageDir($type, $slug);
     $to = pageDir($type, $newSlug);
     if (is_dir($to)) {
-        Router\refuse(409, "Target exists: {$type}/{$newSlug}");
+        \Router\refuse(409, "Target exists: {$type}/{$newSlug}");
     }
     if (!@\rename($from, $to)) {
-        Router\refuse(500, 'Rename failed.');
+        \Router\refuse(500, 'Rename failed.');
     }
 }
 

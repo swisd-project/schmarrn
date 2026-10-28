@@ -1,7 +1,9 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen, phase 1.
   import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount } from '$lib/api';
-  import { seedPage } from '$lib/schema';
+  import { seedPage, schemaFor, withDraftFlag } from '$lib/schema';
+  import { splitFrontmatter } from '$lib/blocks';
+  import { parseMdms } from '@swisd-project/mdms';
   import CanvasEditor from '$lib/components/CanvasEditor.svelte';
   import type { PageIndex, SelectedPage, AccountRef } from '$lib/types';
 
@@ -145,29 +147,88 @@
     }
   }
 
-  // ——— upload .md → new page (route a); the tree button (route b) stays below ———
+  // ——— upload .md → modal: validate frontmatter, fix slug/title, choose draft or publish ———
   let uploadError = $state('');
+  let uploading = $state(false);
+  let uploadModal = $state<null | {
+    fileName: string;
+    raw: string;
+    slug: string;
+    title: string;
+    issues: string[];
+    valid: boolean;
+    asDraft: boolean;
+  }>(null);
 
-  async function uploadMd(event: Event) {
+  const slugify = (name: string): string =>
+    name.replace(/\.(md|markdown)$/i, '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || `uploaded-${Date.now()}`;
+
+  async function onUploadPick(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     input.value = '';
     if (!file) return;
     uploadError = '';
-    const base = file.name.replace(/\.(md|markdown)$/i, '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
-    const slug = base || `uploaded-${Date.now()}`;
-    const type = 'pages';
+    const raw = await file.text();
+    // Probe the frontmatter: capture the parsed object, then gate it through Zod.
+    let data: Record<string, unknown> = {};
+    let issues: string[] = [];
     try {
-      await createPage(type, slug, await file.text());
+      parseMdms(raw, {
+        validateFrontmatter: (d) => {
+          data = d as Record<string, unknown>;
+          return data;
+        }
+      });
+      const result = schemaFor('pages').safeParse(data);
+      if (!result.success) {
+        issues = result.error.issues.map((i) => `${i.path.length > 0 ? i.path.join('.') : 'frontmatter'}: ${i.message}`);
+      }
+    } catch (e) {
+      issues = [e instanceof Error ? e.message : String(e)];
+    }
+    uploadModal = {
+      fileName: file.name,
+      raw,
+      slug: slugify(typeof data.slug === 'string' ? data.slug : file.name),
+      title: typeof data.title === 'string' && data.title !== '' ? data.title : file.name.replace(/\.(md|markdown)$/i, ''),
+      issues,
+      valid: issues.length === 0,
+      asDraft: false
+    };
+  }
+
+  async function saveUpload(event: SubmitEvent) {
+    event.preventDefault();
+    const m = uploadModal;
+    if (m === null) return;
+    uploading = true;
+    uploadError = '';
+    try {
+      const split = splitFrontmatter(m.raw);
+      let rawToStore: string;
+      if (m.valid) {
+        rawToStore = m.asDraft ? withDraftFlag(m.raw, true) : m.raw;
+      } else {
+        // Broken frontmatter: rebuild it from the modal fields, keep the body verbatim.
+        const today = new Date().toISOString().slice(0, 10);
+        const frontmatter = `---\ntitle: ${JSON.stringify(m.title)}\nslug: ${m.slug}\npublished: true\ndraft: ${m.asDraft}\ndate: ${today}\ntags: []\n---`;
+        rawToStore = `${frontmatter}\n\n${split.body}`;
+      }
+      await createPage('pages', m.slug, rawToStore);
       refreshIndex();
-      select(type, slug);
+      select('pages', m.slug);
+      uploadModal = null;
     } catch (e) {
       uploadError = e instanceof Error ? e.message : String(e);
+    } finally {
+      uploading = false;
     }
   }
 
   // ——— delete + rename per page ———
   let renaming = $state<{ type: string; slug: string; value: string } | null>(null);
+  let renameError = $state('');
 
   async function removePage(type: string, slug: string) {
     if (!confirm(`Delete ${type}/${slug} for good? No undo, no tears.`)) return;
@@ -181,6 +242,7 @@
   }
 
   function startRename(type: string, slug: string) {
+    renameError = '';
     renaming = { type, slug, value: slug };
   }
 
@@ -195,7 +257,7 @@
       if (selected?.type === type && selected?.slug === slug) selected = { type, slug: newSlug };
       refreshIndex();
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      renameError = e instanceof Error ? e.message : String(e);
     }
   }
 </script>
@@ -231,6 +293,7 @@
                       <input bind:value={renaming.value} pattern="[a-z0-9]+(-[a-z0-9]+)*" required />
                       <button type="submit">✓</button>
                       <button type="button" onclick={() => (renaming = null)}>×</button>
+                      {#if renameError}<span class="rename-error">{renameError}</span>{/if}
                     </form>
                   {:else}
                     <button
@@ -310,7 +373,7 @@
         </form>
 
         <label class="upload-md">
-          <input type="file" accept=".md,.markdown,text/markdown" onchange={uploadMd} />
+          <input type="file" accept=".md,.markdown,text/markdown" onchange={onUploadPick} />
           Upload .md → new page
         </label>
         {#if uploadError}<p class="error">{uploadError}</p>{/if}
@@ -340,6 +403,52 @@
   {/if}
 </main>
 
+{#if uploadModal}
+  <div class="overlay" role="dialog" aria-modal="true" aria-label="Upload markdown page">
+    <form class="card" onsubmit={saveUpload}>
+      <header class="card-head">
+        <h3>Upload — {uploadModal.fileName}</h3>
+        <button type="button" class="close" onclick={() => (uploadModal = null)}>×</button>
+      </header>
+
+      {#if uploadModal.valid}
+        <p class="ok">Frontmatter checks out. Serving as-is.</p>
+      {:else}
+        <p class="warn">
+          The frontmatter needs attention — save will rebuild it from the fields below (body stays untouched):
+        </p>
+        <ul class="issues">
+          {#each uploadModal.issues as issue}
+            <li>{issue}</li>
+          {/each}
+        </ul>
+      {/if}
+
+      <label class="field">
+        <span>Title</span>
+        <input bind:value={uploadModal.title} required placeholder="Page title" />
+      </label>
+      <label class="field">
+        <span>Slug (URL)</span>
+        <input bind:value={uploadModal.slug} required pattern="[a-z0-9]+(-[a-z0-9]+)*"
+          title="lowercase letters, digits, hyphens" />
+      </label>
+
+      <fieldset class="serving">
+        <legend>Serve this page as</legend>
+        <label><input type="radio" bind:group={uploadModal.asDraft} value={false} /> Published — visible to the public</label>
+        <label><input type="radio" bind:group={uploadModal.asDraft} value={true} /> Draft — editors only until you publish</label>
+      </fieldset>
+
+      {#if uploadError}<p class="error" role="alert">{uploadError}</p>{/if}
+      <footer class="card-foot">
+        <button type="button" class="cancel" onclick={() => (uploadModal = null)}>Cancel</button>
+        <button type="submit" class="save" disabled={uploading}>{uploading ? 'Folding…' : 'Create page'}</button>
+      </footer>
+    </form>
+  </div>
+{/if}
+
 <style>
   .shell { max-width: 72rem; margin: 0 auto; padding: 2rem; }
   .login { display: flex; flex-direction: column; gap: 0.75rem; max-width: 16rem; }
@@ -361,8 +470,32 @@
   .mini { border: 0; background: transparent; cursor: pointer; font-size: 0.75rem; opacity: 0.5; padding: 0 0.2rem; }
   .mini:hover { opacity: 1; }
   .mini.danger { color: #b3004c; }
-  .rename { display: flex; gap: 0.2rem; width: 100%; }
+  .rename { display: flex; gap: 0.2rem; width: 100%; flex-wrap: wrap; }
   .rename input { width: 100%; font-size: 0.8rem; padding: 0.15rem 0.3rem; border: 1px solid #d8c7b2; border-radius: 4px; }
+  .rename-error { flex-basis: 100%; color: #b3004c; font-size: 0.7rem; }
+  .overlay {
+    position: fixed; inset: 0; background: rgba(40, 25, 15, 0.45);
+    display: grid; place-items: center; z-index: 50;
+  }
+  .card {
+    background: #fffdf9; border-radius: 12px; padding: 1rem 1.25rem;
+    width: min(30rem, 92vw); max-height: 84vh; overflow: auto;
+    box-shadow: 0 12px 30px rgba(60, 30, 10, 0.25);
+    display: flex; flex-direction: column; gap: 0.7rem;
+  }
+  .card-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .card-head h3 { margin: 0; font-size: 1rem; }
+  .close { border: 0; background: transparent; font-size: 1.2rem; cursor: pointer; }
+  .field { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; }
+  .field input { border: 1px solid #d8c7b2; border-radius: 6px; padding: 0.4rem 0.6rem; background: #fff; }
+  .serving { border: 1px dashed #d8c7b2; border-radius: 8px; padding: 0.5rem 0.75rem; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; }
+  .serving legend { font-size: 0.75rem; opacity: 0.7; padding: 0 0.3rem; }
+  .ok { color: #1d7a3a; font-size: 0.85rem; margin: 0; }
+  .warn { color: #7a4a00; font-size: 0.85rem; margin: 0; }
+  .issues { margin: 0; padding-left: 1.2rem; color: #b3004c; font-size: 0.8rem; }
+  .card-foot { display: flex; justify-content: flex-end; gap: 0.5rem; }
+  .save { font-weight: 600; }
+  .cancel { opacity: 0.7; }
   .upload-md { display: block; margin-top: 0.75rem; font-size: 0.8rem; opacity: 0.8; cursor: pointer; }
   .upload-md input { display: none; }
   .upload-md:hover { opacity: 1; }
