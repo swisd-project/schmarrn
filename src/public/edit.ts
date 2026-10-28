@@ -358,7 +358,14 @@ async function boot(root: HTMLElement): Promise<void> {
       el('button', { onclick: () => openModuleModal(insertAt, 'video', true) }, ['Video']),
       el('button', { onclick: () => openModuleModal(insertAt, 'embed', true) }, ['Embed'])
     ]);
-    menu.append(add);
+    const addMore = el('div', { class: `sm-float-row${isEmpty ? '' : ' sm-float-add'}` }, [
+      el('span', { style: 'font-size:11px;opacity:.7;align-self:center' }, ['More:']),
+      el('button', { onclick: () => openModuleModal(insertAt, 'slide', true) }, ['Slide']),
+      el('button', { onclick: () => openModuleModal(insertAt, 'note', true) }, ['Note']),
+      el('button', { onclick: () => openModuleModal(insertAt, 'details', true) }, ['Details']),
+      el('button', { onclick: () => openModuleModal(insertAt, 'more', true) }, ['Fold'])
+    ]);
+    menu.append(add, addMore);
     // Keep the menu on-screen.
     const left = Math.min(x, window.innerWidth - 240);
     const top = Math.min(y + 8, window.innerHeight - 120);
@@ -572,26 +579,63 @@ async function boot(root: HTMLElement): Promise<void> {
     }
 
     // embed
-    const url = el('input', { class: 'sm-input', value: attrOf('url'), placeholder: 'https://…' });
+    if (name === 'embed') {
+      const url = el('input', { class: 'sm-input', value: attrOf('url'), placeholder: 'https://…' });
+      const err = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:0' });
+      const form = el('form', {
+        onsubmit: (e: Event) => {
+          e.preventDefault();
+          if (!/^https?:\/\//i.test(url.value.trim())) {
+            err.textContent = 'Embeds need an http(s) URL.';
+            err.style.display = '';
+            return;
+          }
+          writeBlock(index, { kind: 'module', name: 'embed', source: `:::embed{url="${attr(url.value.trim())}"}\n:::` }, isNew);
+        }
+      }, [
+        field('Embed URL', url),
+        err,
+        el('div', { style: 'display:flex;justify-content:flex-end;gap:.5rem' }, [
+          el('button', { class: 'sm-btn sm-btn-primary', type: 'submit' }, [isNew ? 'Add embed' : 'Save'])
+        ])
+      ]);
+      openModal(isNew ? 'Add embed' : 'Edit embed', form);
+      return;
+    }
+
+    // Everything else (slide / note / details / more / future wall modules):
+    // the generic source editor — the full directive source in one textarea.
+    // Templates for the common shapes; the round-trip is exact (AST spans).
+    const templates: Record<string, string> = {
+      slide: ':::slide{title="Slide title"}\n\nType the slide content here.\n\n:::',
+      note: ':::note{kind="tip"}\nThe note text.\n:::',
+      details: ':::details{summary="More"}\nThe hidden text.\n:::',
+      more: ':::more\n:::'
+    };
+    const sourceBox = el('textarea', { class: 'sm-input', rows: '10', spellcheck: 'false' }, [isNew ? (templates[name] ?? `:::${name}\n:::`) : source]);
     const err = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:0' });
     const form = el('form', {
       onsubmit: (e: Event) => {
         e.preventDefault();
-        if (!/^https?:\/\//i.test(url.value.trim())) {
-          err.textContent = 'Embeds need an http(s) URL.';
+        const next = sourceBox.value.trim();
+        // The fence law: open and close, both present. The parser gets the last word.
+        if (!/^:::[a-z][a-z-]*(\{[\s\S]*\})?\s*\n[\s\S]*\n:::$/.test(next)) {
+          err.textContent = 'Keep the :::name{props} open and the ::: close on its own line.';
           err.style.display = '';
           return;
         }
-        writeBlock(index, { kind: 'module', name: 'embed', source: `:::embed{url="${attr(url.value.trim())}"}\n:::` }, isNew);
+        const parsed = /^:::([a-z][a-z-]*)/.exec(next)?.[1] ?? name;
+        writeBlock(index, { kind: 'module', name: parsed, source: next }, isNew);
       }
     }, [
-      field('Embed URL', url),
+      el('p', { class: 'sm-alert sm-alert-ok', style: 'margin:0 0 .5rem' }, [`Module: ${name} — raw source, full control.`]),
+      sourceBox,
       err,
       el('div', { style: 'display:flex;justify-content:flex-end;gap:.5rem' }, [
-        el('button', { class: 'sm-btn sm-btn-primary', type: 'submit' }, [isNew ? 'Add embed' : 'Save'])
+        el('button', { class: 'sm-btn sm-btn-primary', type: 'submit' }, [isNew ? `Add ${name}` : 'Save'])
       ])
     ]);
-    openModal(isNew ? 'Add embed' : 'Edit embed', form);
+    openModal(isNew ? `Add ${name}` : `Edit ${name}`, form);
   }
 
   function writeBlock(index: number, block: Block, isNew: boolean): void {

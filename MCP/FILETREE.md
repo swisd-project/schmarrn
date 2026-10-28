@@ -73,7 +73,7 @@
 │   ├── lib/
 │   │   ├── api.ts                # typed fetcher for /api (dashboard-facing surface only — the live editor fetches /api directly)
 │   │   ├── blocks.ts             # block model: splitBlocks/joinPage (exact source spans)
-│   │   ├── modules.ts            # the module wall: directive allowlist → hast (incl. empty-slot placeholder)
+│   │   ├── modules.ts            # the module wall: directive allowlist → hast — image (+fillable empty slot), video, embed, slide (deck), note (tip/warn), details, more (+fold); unknown → p.sm-unknown-module, hostile attrs dead at the stamper
 │   │   ├── render.ts             # THE one render pipeline (fallback + editor share it)
 │   │   ├── schema.ts             # Zod: PageFrontmatter (blog left for plugin-land)
 │   │   └── app.css               # tokens: crust/batter/raisin/jam

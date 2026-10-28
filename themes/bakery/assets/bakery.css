@@ -166,3 +166,61 @@ body.slide {
   color: var(--ink-soft, #777);
   font-style: italic;
 }
+
+/* ——— the deck: :::slide containers paginate the stage (scroll-snap, no JS) ——— */
+.slide-stage:has(> .sm-slide) {
+  flex-direction: row;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  max-width: none;
+  padding: 0;
+}
+.slide-stage:has(> .sm-slide) > * {
+  flex: 0 0 100%;
+  scroll-snap-align: center;
+}
+.sm-slide {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 3rem 2rem;
+  max-width: 52rem;
+  margin: 0 auto;
+}
+
+/* ——— the callout (:::note) ——— */
+.sm-note {
+  padding: 1rem 1.25rem;
+  border-left: 4px solid var(--sky);
+  background: rgba(122, 170, 187, 0.1);
+  border-radius: 4px;
+}
+.sm-note-tip { border-left-color: var(--blossom); }
+.sm-note-warn { border-left-color: var(--jam, #a33); background: rgba(170, 51, 51, 0.08); }
+
+/* ——— the disclosure (:::details) ——— */
+.sm-details {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  margin: 1.5rem 0;
+}
+.sm-details > summary {
+  cursor: pointer;
+  padding: 0.8rem 1.25rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.sm-details > *:not(summary) { padding: 0 1.25rem 1rem; }
+.sm-details > *:first-child { margin-top: 0; }
+
+/* ——— the teaser fold (:::more) ——— */
+hr.sm-more {
+  border: none;
+  border-top: 2px dotted var(--ink-soft);
+  width: 40%;
+  margin: 2.5rem auto;
+  opacity: 0.5;
+}

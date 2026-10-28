@@ -12,8 +12,10 @@
 import { visit } from 'unist-util-visit';
 
 // v1 modules (pinned — MCP/BACKLOG Locked Decisions): text is plain Markdown (zero
-// boundary). Boundaries shipped: image (+caption), video (page file or url), embed (url).
-export const MODULE_NAMES = ['image', 'video', 'embed'] as const;
+// boundary). Boundaries shipped: image (+caption, fillable empty slot), video (page
+// file or url), embed (url), slide (deck section), note (callout, kind=tip|warn),
+// details (disclosure), more (teaser fold marker).
+export const MODULE_NAMES = ['image', 'video', 'embed', 'slide', 'note', 'details', 'more'] as const;
 
 /**
  * The injection wall: per-module attribute allowlist. Any directive attribute
@@ -22,7 +24,11 @@ export const MODULE_NAMES = ['image', 'video', 'embed'] as const;
 const MODULE_ATTRS: Record<string, readonly string[]> = {
   image: ['file', 'caption'],
   video: ['url', 'file'],
-  embed: ['url']
+  embed: ['url'],
+  slide: ['title'],
+  note: ['kind'],
+  details: ['summary'],
+  more: []
 };
 
 /** Local media references are plain relative paths — no schemes, no `..` games. */
@@ -146,6 +152,54 @@ export function renderModule(
         tagName: 'figure',
         properties: { className: 'sm-module sm-embed' },
         children: [frame]
+      };
+    }
+    case 'slide': {
+      // A deck slide: one full-viewport section. The slide template paginates the
+      // stage (scroll-snap); in a classical page the sections simply stack.
+      // Children pass through untouched — slides are regular markdown inside.
+      const title = str(props.title).replace(/["<>&]/g, '').trim();
+      return {
+        type: 'element',
+        tagName: 'section',
+        properties: { className: 'sm-slide', ...(title !== '' ? { 'data-slide-title': title, 'aria-label': title } : {}) },
+        children: (node.children ?? []) as HastNode[]
+      };
+    }
+    case 'note': {
+      // Callout box. kind="tip" or kind="warn"; anything else is the honest default.
+      const kind = str(props.kind) === 'tip' || str(props.kind) === 'warn' ? ` sm-note-${str(props.kind)}` : '';
+      return {
+        type: 'element',
+        tagName: 'aside',
+        properties: { className: `sm-module sm-note${kind}` },
+        children: (node.children ?? []) as HastNode[]
+      };
+    }
+    case 'details': {
+      // Native disclosure — details/summary, zero JS.
+      const summary = str(props.summary) || alt || 'More';
+      const summaryEl: HastNode = {
+        type: 'element',
+        tagName: 'summary',
+        properties: {},
+        children: [text(summary.replace(/["<>&]/g, ''))]
+      };
+      return {
+        type: 'element',
+        tagName: 'details',
+        properties: { className: 'sm-module sm-details' },
+        children: [summaryEl, ...((node.children ?? []) as HastNode[])]
+      };
+    }
+    case 'more': {
+      // The teaser fold — where a listing (the blog plugin's future home) stops.
+      // Renders as a quiet, visible fold so editors always see the boundary.
+      return {
+        type: 'element',
+        tagName: 'hr',
+        properties: { className: 'sm-more' },
+        children: []
       };
     }
     default:
