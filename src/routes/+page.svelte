@@ -1,6 +1,6 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen, phase 1.
-  import { session, login, logout, pageCount, createPage, listAccounts, addAccount, removeAccount } from '$lib/api';
+  import { session, login, logout, pageCount, createPage, listAccounts, addAccount, removeAccount, inviteAccount } from '$lib/api';
   import { seedPage } from '$lib/schema';
   import PageEditor from '$lib/components/PageEditor.svelte';
   import type { PageIndex, SelectedPage, AccountRef } from '$lib/types';
@@ -70,7 +70,9 @@
   let accountAddUser = $state('');
   let accountAddRole = $state<'admin' | 'editor'>('editor');
   let accountAddPassword = $state('');
+  let accountAddEmail = $state('');
   let accountError = $state('');
+  let accountNote = $state('');
 
   async function toggleAccounts() {
     showAccounts = !showAccounts;
@@ -83,9 +85,10 @@
     event.preventDefault();
     accountError = '';
     try {
-      await addAccount(accountAddUser, accountAddPassword, accountAddRole);
+      await addAccount(accountAddUser, accountAddPassword, accountAddRole, accountAddEmail);
       accountAddUser = '';
       accountAddPassword = '';
+      accountAddEmail = '';
       accounts = await listAccounts();
     } catch (e) {
       accountError = e instanceof Error ? e.message : String(e);
@@ -96,6 +99,17 @@
     try {
       await removeAccount(user);
       accounts = await listAccounts();
+    } catch (e) {
+      accountError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function inviteNow(user: string) {
+    accountError = '';
+    accountNote = '';
+    try {
+      await inviteAccount(user);
+      accountNote = `Credentials mailed to ${user}.`;
     } catch (e) {
       accountError = e instanceof Error ? e.message : String(e);
     }
@@ -173,13 +187,22 @@
               <ul>
                 {#each accounts as account (account.user)}
                   <li>
-                    <span>{account.user} · {account.role}</span>
+                    <span>{account.user} · {account.role}{#if account.email} · {account.email}{/if}</span>
                     {#if account.user !== user}
-                      <button
-                        class="account-remove"
-                        aria-label={`Remove account ${account.user}`}
-                        onclick={() => deleteAccountNow(account.user)}>×</button
-                      >
+                      <span class="account-actions">
+                        {#if account.email}
+                          <button
+                            class="account-mail"
+                            title="Mail freshly issued credentials"
+                            onclick={() => inviteNow(account.user)}>✉</button
+                          >
+                        {/if}
+                        <button
+                          class="account-remove"
+                          aria-label={`Remove account ${account.user}`}
+                          onclick={() => deleteAccountNow(account.user)}>×</button
+                        >
+                      </span>
                     {/if}
                   </li>
                 {/each}
@@ -193,6 +216,7 @@
                   minlength="8"
                   required
                 />
+                <input bind:value={accountAddEmail} type="email" placeholder="email (for invites)" />
                 <select bind:value={accountAddRole}>
                   <option value="editor">editor</option>
                   <option value="admin">admin</option>
@@ -200,6 +224,7 @@
                 <button type="submit">Add account</button>
               </form>
               {#if accountError}<p class="error">{accountError}</p>{/if}
+              {#if accountNote}<p class="account-note">{accountNote}</p>{/if}
             </div>
           {/if}
         {/if}
@@ -255,6 +280,9 @@
   .account-remove { border: 0; background: transparent; cursor: pointer; color: #b3004c; font-weight: bold; }
   .accounts select { font-size: 0.8rem; padding: 0.25rem; border: 1px solid #d8c7b2; border-radius: 4px; }
   .accounts { border: 1px solid #efe6d8; border-radius: 4px; padding: 0.5rem; }
+  .account-actions { display: inline-flex; gap: 0.35rem; }
+  .account-mail { border: 0; background: transparent; cursor: pointer; }
+  .account-note { font-size: 0.75rem; opacity: 0.75; margin: 0.25rem 0 0; }
   @media (max-width: 60rem) {
     .workbench { grid-template-columns: 1fr; }
   }

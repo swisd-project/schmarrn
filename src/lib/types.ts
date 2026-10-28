@@ -22,4 +22,5 @@ export interface SelectedPage {
 export interface AccountRef {
   readonly user: string;
   readonly role: 'admin' | 'editor';
+  readonly email?: string;
 }

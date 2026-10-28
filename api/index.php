@@ -14,6 +14,7 @@ declare(strict_types=1);
 require __DIR__ . '/router.php';
 require __DIR__ . '/auth.php';
 require __DIR__ . '/accounts.php';
+require __DIR__ . '/mail.php';
 require __DIR__ . '/store.php';
 require __DIR__ . '/cache.php';
 
@@ -61,6 +62,90 @@ try {
             ]);
             break;
 
+        // ——— password flows ———
+
+        // POST /api/me/password — self-service change (authed + knows current).
+        case $method === 'POST' && $path === 'me/password':
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $current = is_string($body['current'] ?? null) ? $body['current'] : '';
+            $fresh = is_string($body['password'] ?? null) ? $body['password'] : '';
+            $record = Accounts\all()[Auth\user()] ?? null;
+            if ($record === null || !password_verify($current, $record['passwordHash'])) {
+                Router\refuse(401, 'Current password is wrong.');
+            }
+            if (strlen($fresh) < 8) {
+                Router\refuse(400, 'Password must be at least 8 characters.');
+            }
+            Accounts\setHash(Auth\user(), password_hash($fresh, PASSWORD_ARGON2ID));
+            echo json_encode(['ok' => true]);
+            break;
+
+        // POST /api/account/<user>/invite — admin (re)issues credentials by mail.
+        case $method === 'POST' && preg_match('#^account/[a-z0-9][a-z0-9._-]{0,63}/invite$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only.');
+            }
+            Auth\assertCsrf();
+            $target = substr($path, strlen('account/'), -7);
+            $record = Accounts\all()[$target] ?? null;
+            if ($record === null || ($record['email'] ?? '') === '') {
+                Router\refuse(409, "No account with an email: {$target}");
+            }
+            $temp = bin2hex(random_bytes(9));
+            Accounts\setHash($target, password_hash($temp, PASSWORD_ARGON2ID));
+            \Mail\send((string)$record['email'], 'Your Schmarrn login',
+                "A Schmarrn account for '{$target}' was (re)issued.\n\n"
+                . "User:     {$target}\n"
+                . "Password: {$temp}\n\n"
+                . "Sign in and change this password promptly under me/password.");
+            echo json_encode(['ok' => true]);
+            break;
+
+        // POST /api/reset-request — anonymous self-reset door. Enumeration-proof, rate-limited.
+        case $method === 'POST' && $path === 'reset-request':
+            $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+            Auth\gateLogin($ip);
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $user = is_string($body['user'] ?? null) ? $body['user'] : '';
+            if ($user !== '') {
+                $record = Accounts\all()[$user] ?? null;
+                if ($record !== null && ($record['email'] ?? '') !== '' && \Mail\enabled()) {
+                    Accounts\issueMailToken($user, (string)$record['email']);
+                } else {
+                    @error_log('[schmarrn-reset] request for unknown/unmailable/no-smtp user, ip logged');
+                }
+            }
+            Auth\tick($ip);
+            echo json_encode(['ok' => true, 'message' => 'If the account exists and can be mailed, a token is on its way.']);
+            break;
+
+        // POST /api/reset-confirm — anonymous: one-time token + new password.
+        case $method === 'POST' && $path === 'reset-confirm':
+            $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+            Auth\gateLogin($ip);
+            Auth\tick($ip);
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $user = is_string($body['user'] ?? null) ? $body['user'] : '';
+            $token = is_string($body['token'] ?? null) ? $body['token'] : '';
+            $fresh = is_string($body['password'] ?? null) ? $body['password'] : '';
+            if ($user === '' || $token === '') {
+                Router\refuse(400, 'User and token required.');
+            }
+            if (strlen($fresh) < 8) {
+                Router\refuse(400, 'Password must be at least 8 characters.');
+            }
+            Accounts\takeMailToken($user, $token);
+            Accounts\setHash($user, password_hash($fresh, PASSWORD_ARGON2ID));
+            echo json_encode(['ok' => true]);
+            break;
+
         // ——— account management: admin-only, CSRF-gated ———
         case $method === 'GET' && $path === 'accounts':
             if (!Auth\check()) {
@@ -71,7 +156,7 @@ try {
             }
             $accounts = Accounts\all();
             echo json_encode(array_map(
-                fn($user, $r) => ['user' => $user, 'role' => $r['role']],
+                fn($user, $r) => ['user' => $user, 'role' => $r['role'], 'email' => $r['email'] ?? ''],
                 array_keys($accounts),
                 $accounts
             ));
@@ -89,10 +174,11 @@ try {
             $user = is_string($body['user'] ?? null) ? $body['user'] : '';
             $password = is_string($body['password'] ?? null) ? $body['password'] : '';
             $role = is_string($body['role'] ?? null) ? $body['role'] : 'editor';
+            $email = is_string($body['email'] ?? null) ? trim($body['email']) : '';
             if (strlen($password) < 8) {
                 Router\refuse(400, 'Password must be at least 8 characters.');
             }
-            Accounts\add($user, password_hash($password, PASSWORD_ARGON2ID), $role);
+            Accounts\add($user, password_hash($password, PASSWORD_ARGON2ID), $role, $email);
             http_response_code(201);
             echo json_encode(['ok' => true]);
             break;
@@ -119,6 +205,9 @@ try {
             }
             if ($roles !== null) {
                 Accounts\setRole($target, $roles);
+            }
+            if (is_string($body['email'] ?? null)) {
+                Accounts\setEmail($target, trim($body['email']));
             }
             if (is_string($body['password'] ?? null)) {
                 if (strlen($body['password']) < 8) {
@@ -211,5 +300,6 @@ try {
             Router\refuse(404, 'Unknown route.');
     }
 } catch (Throwable $e) {
+    @error_log('[schmarrn-500] ' . get_class($e) . ': ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
     Router\refuse(500, 'Internal error.');
 }

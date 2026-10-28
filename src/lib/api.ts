@@ -25,6 +25,7 @@ export interface SessionInfo {
 export interface AccountRef {
   readonly user: string;
   readonly role: 'admin' | 'editor';
+  readonly email?: string;
 }
 
 let csrf = '';
@@ -98,22 +99,64 @@ export function listAccounts(): Promise<readonly AccountRef[]> {
   return fetch('/api/accounts').then((r) => json<readonly AccountRef[]>(r));
 }
 
-export function addAccount(user: string, password: string, role: 'admin' | 'editor'): Promise<void> {
+export function addAccount(
+  user: string,
+  password: string,
+  role: 'admin' | 'editor',
+  email = ''
+): Promise<void> {
   return fetch('/api/accounts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
-    body: JSON.stringify({ user, password, role })
+    body: JSON.stringify({ user, password, role, email })
   }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
 }
 
 export function patchAccount(
   user: string,
-  patch: { password?: string; role?: 'admin' | 'editor' }
+  patch: { password?: string; role?: 'admin' | 'editor'; email?: string }
 ): Promise<void> {
   return fetch(`/api/account/${encodeURIComponent(user)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
     body: JSON.stringify(patch)
+  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
+}
+
+/** Mail (re)issued credentials to the account's email. 503 when SMTP unconfigured. */
+export function inviteAccount(user: string): Promise<void> {
+  return fetch(`/api/account/${encodeURIComponent(user)}/invite`, {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': csrfToken() }
+  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
+}
+
+export interface ResetDoors {
+  requestToken(user: string): Promise<{ ok: boolean; message: string }>;
+  confirmReset(user: string, token: string, password: string): Promise<void>;
+}
+
+export function requestResetToken(user: string): Promise<{ ok: boolean; message: string }> {
+  return fetch('/api/reset-request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user })
+  }).then((r) => json<{ ok: boolean; message: string }>(r));
+}
+
+export function confirmReset(user: string, token: string, password: string): Promise<void> {
+  return fetch('/api/reset-confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user, token, password })
+  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
+}
+
+export function changeOwnPassword(current: string, password: string): Promise<void> {
+  return fetch('/api/me/password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({ current, password })
   }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
 }
 

@@ -71,8 +71,15 @@ function gateLogin(string $ip): int
 function countFailure(string $ip): void
 {
     $count = gateLogin($ip); // also validates the window
-    @file_put_contents(attemptFile($ip), json_encode(['count' => $count + 1, 'windowStart' => time()]));
+    tick($ip);
     usleep(200_000); // cheap brake for online guessing
+}
+
+/** Count one request against the IP ledger (reset-request endpoints tick per visit). */
+function tick(string $ip): void
+{
+    gateLogin($ip); // keep the 429 wall up for ledger-full IPs
+    @file_put_contents(attemptFile($ip), json_encode(['count' => gateLogin($ip) + 1, 'windowStart' => time()]));
 }
 
 function clearFailures(string $ip): void

@@ -56,7 +56,8 @@ function all(): array
         if ($hash === null) {
             continue;
         }
-        $clean[$user] = ['role' => $role, 'passwordHash' => $hash];
+        $email = isset($record['email']) && is_string($record['email']) ? $record['email'] : '';
+        $clean[$user] = ['role' => $role, 'passwordHash' => $hash, 'email' => $email];
     }
     // Legacy migration: the old single-password hash becomes the 'admin' account.
     if ($clean === [] && is_file(__DIR__ . '/config/auth.local.php')) {
@@ -96,17 +97,33 @@ function assertKnownRole(string $role): void
     }
 }
 
-function add(string $user, string $hash, string $role): void
+function add(string $user, string $hash, string $role, string $email = ''): void
 {
     if (!is_string($user) || preg_match(USER_PATTERN, $user) !== 1) {
         \Router\refuse(400, 'Invalid username.');
     }
     assertKnownRole($role);
+    if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+        \Router\refuse(400, 'Invalid email address.');
+    }
     $accounts = all();
     if (isset($accounts[$user])) {
         \Router\refuse(409, "Account exists: {$user}");
     }
-    $accounts[$user] = ['role' => $role, 'passwordHash' => $hash];
+    $accounts[$user] = ['role' => $role, 'passwordHash' => $hash, 'email' => $email];
+    save($accounts);
+}
+
+function setEmail(string $user, string $email): void
+{
+    if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+        \Router\refuse(400, 'Invalid email address.');
+    }
+    $accounts = all();
+    if (!isset($accounts[$user])) {
+        \Router\refuse(404, "No account: {$user}");
+    }
+    $accounts[$user]['email'] = $email;
     save($accounts);
 }
 
@@ -139,4 +156,48 @@ function setHash(string $user, string $hash): void
     }
     $accounts[$user]['passwordHash'] = $hash;
     save($accounts);
+}
+
+// ——— one-time password-reset tokens (stored in the file cache, single-use, TTL'd) ———
+
+function tokenDir(): string
+{
+    $dir = __DIR__ . '/cache/tokens';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
+    }
+    return $dir;
+}
+
+/** Mails a reset token (hashed at rest) and returns the slicer it cut the token file with. */
+function issueMailToken(string $user, string $to, int $ttl = 7200): void
+{
+    $token = bin2hex(random_bytes(24));
+    $record = ['t' => hash('sha256', $token), 'user' => $user, 'exp' => time() + $ttl];
+    $file = tokenDir() . '/' . hash('sha256', $user) . '.json';
+    $tmp = $file . '.tmp';
+    if (file_put_contents($tmp, json_encode($record)) === false || !rename($tmp, $file)) {
+        @unlink($tmp);
+        \Router\refuse(500, 'Cannot store reset token.');
+    }
+    \Mail\send($to, "Schmarrn password reset ({$user})",
+        "Someone asked for a Schmarrn password reset for the account '{$user}'.\n\n"
+        . "Reset token (valid 2 h, single use):\n\n    {$token}\n\n"
+        . "Didn't ask for this? Ignore and shoo.");
+}
+
+/** Consumes a token: right user, not expired, still on file. Single use — it eats itself. */
+function takeMailToken(string $user, string $token): void
+{
+    $file = tokenDir() . '/' . hash('sha256', $user) . '.json';
+    $record = $file !== '' && is_file($file) ? json_decode((string)file_get_contents($file), true) : null;
+    @unlink($file); // single use: gone the moment someone presents any ticket for this user
+    $ok = is_array($record)
+        && is_string($record['t'] ?? null)
+        && ($record['user'] ?? '') === $user
+        && ($record['exp'] ?? 0) >= time()
+        && hash_equals($record['t'], hash('sha256', $token));
+    if (!$ok) {
+        \Router\refuse(401, 'Invalid or expired reset token.');
+    }
 }
