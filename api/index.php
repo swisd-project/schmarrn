@@ -276,6 +276,56 @@ try {
             break;
 
 
+        // ——— editorial drafts + publishing: the editor's dirty little secret ———
+
+        // GET — editorial copy (sidecar or published file, whichever freshest in life).
+        case $method === 'GET' && preg_match('#^draft/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            [, $type, $slug] = explode('/', $path);
+            $raw = Store\readDraft($type, $slug);
+            if ($raw === null) {
+                Router\refuse(404, "Page not found: {$type}/{$slug}");
+            }
+            header('Content-Type: text/markdown; charset=utf-8');
+            header('X-Has-Draft: ' . (Store\hasDraft($type, $slug) ? '1' : '0'));
+            echo $raw;
+            break;
+
+        // PUT — autosave-to-draft lives here. Lock-gated like page writes.
+        case $method === 'PUT' && preg_match('#^draft/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            Auth\assertCsrf();
+            [, $type, $slug] = explode('/', $path);
+            Lock\assertFreeOrMine($type, $slug, Auth\user());
+            Store\writeDraft($type, $slug, file_get_contents('php://input') ?: '');
+            Lock\acquire($type, $slug, Auth\user());
+            echo json_encode(['ok' => true]);
+            break;
+
+        // POST — `draft/<t>/<s>/publish` and `/unpublish`. The button behind the glass.
+        case $method === 'POST' && preg_match('#^draft/[a-z0-9-]+/[a-z0-9-]+/(publish|unpublish)$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            Auth\assertCsrf();
+            [, $type, $slug, $verb] = explode('/', $path);
+            Lock\assertFreeOrMine($type, $slug, Auth\user());
+            if (is_string($verb) && $verb === 'publish') {
+                Store\publish($type, $slug);
+                Cache\drop($type, $slug);
+                Lock\acquire($type, $slug, Auth\user());
+                echo json_encode(['ok' => true, 'published' => true]);
+            } else {
+                Store\unpublish($type, $slug);
+                Cache\drop($type, $slug);
+                echo json_encode(['ok' => true, 'published' => false]);
+            }
+            break;
+
         // Route: GET /api/page/{type}/{slug} — raw markdown, body passthrough (not JSON).
         case $method === 'GET' && preg_match('#^page/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             [, $type, $slug] = explode('/', $path);

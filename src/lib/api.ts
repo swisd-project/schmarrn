@@ -53,6 +53,40 @@ export function writePage(type: string, slug: string, raw: string): Promise<void
   return updatePage('PUT', type, slug, raw);
 }
 
+// ——— editorial copies + publishing ———
+
+export async function readDraft(type: string, slug: string): Promise<{ raw: string; hasDraft: boolean }> {
+  const res = await fetch(`/api/draft/${type}/${slug}`);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error ?? `API ${res.status}`);
+  }
+  const raw = await res.text();
+  return { raw, hasDraft: res.headers.get('X-Has-Draft') === '1' };
+}
+
+export function writeDraft(type: string, slug: string, raw: string): Promise<void> {
+  return fetch(`/api/draft/${type}/${slug}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'text/markdown', 'X-CSRF-Token': csrfToken() },
+    body: raw
+  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
+}
+
+export function publishPage(type: string, slug: string): Promise<void> {
+  return fetch(`/api/draft/${type}/${slug}/publish`, {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': csrfToken() }
+  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
+}
+
+export function unpublishPage(type: string, slug: string): Promise<void> {
+  return fetch(`/api/draft/${type}/${slug}/unpublish`, {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': csrfToken() }
+  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
+}
+
 async function updatePage(method: 'PUT' | 'POST', type: string, slug: string, raw: string): Promise<never | void> {
   await fetch(`/api/page/${type}/${slug}`, {
     method,

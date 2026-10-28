@@ -64,6 +64,12 @@
     selected = { type, slug };
   }
 
+  const selectedPublished = $derived.by(() => {
+    if (selected === null) return false;
+    const sel = selected;
+    return (index?.[sel.type] ?? []).some((p) => p.slug === sel.slug && p.draft !== true);
+  });
+
   // ——— accounts (admin) ———
   let showAccounts = $state(false);
   let accounts = $state<readonly AccountRef[]>([]);
@@ -240,9 +246,16 @@
 
       <section class="stage">
         {#if selected}
-          {#key `${selected.type}/${selected.slug}`}
-            <PageEditor page={selected} currentUserName={user} onsaved={refreshIndex} />
-          {/key}
+          {#if selected}
+            {#key `${selected.type}/${selected.slug}`}
+              <PageEditor
+                page={selected}
+                published={selectedPublished}
+                currentUserName={user}
+                onsaved={refreshIndex}
+              />
+            {/key}
+          {/if}
         {:else}
           <p class="empty">Pick a shredded piece from the left, sugar.</p>
         {/if}
