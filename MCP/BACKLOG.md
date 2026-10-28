@@ -63,11 +63,10 @@ v1 — Schmarrn "known to work"
 [ ] SPA fallback renamed to `dashboard.html` (adapter root-overwrite warning) — ALREADY DONE in svelte.config (fallback: 'dashboard.html', build emits both index.html prerender + dashboard.html fallback); row closed as stale
 
 ## p5 v1 ship-out
-[ ] README install guide — DEPLOY LAW CHANGED 2026-10-28 (user): public site at /, dashboard/login at /_; the SPA is BUILT with paths.base '/_' (svelte.config default; Pages overrides via BASE_PATH) — the dashboard's client router 404s anywhere else, and /_ canonicalizes to /_/; FTP deploy = index.php + .htaccess + themes/ + api/ + the contents of build/ INSIDE a host folder named _/ (NOT loose at the root — the built index.html would shadow index.php via DirectoryIndex and put the login wall on the public face)
-[ ] Full smoke test on a real FTP host (PHP 8.4+, .htaccess honored, writable cache)
-[ ] README install guide (FTP one folder, wizard walkthrough)
+[x] README install guide — DEPLOY LAW CHANGED 2026-10-28 (user): public site at /, dashboard/login at /_; the SPA is BUILT with paths.base '/_' (svelte.config default; Pages overrides via BASE_PATH) — the dashboard's client router 404s anywhere else, and /_ canonicalizes to /_/; FTP deploy = index.php + .htaccess + themes/ + api/ + pagetypes/ + src/content/ + the contents of build/ INSIDE a host folder named _/ (NOT loose at the root — the built index.html would shadow index.php via DirectoryIndex and put the login wall on the public face); writable set = api/config/ + api/cache/ + src/content/; first-run wizard at /_/ then redirect to /; DONE 2026-10-28 (README "Deploy (FTP)" rewritten as the full install guide).
+[ ] Full smoke test on a real FTP host (PHP 8.4+, .htaccess honored, writable cache) — needs the user's host
 [ ] Docs on GitHub Pages with examples (module cookbook, theme manifest spec, API shape)
-[ ] Tag v1.0.0
+[ ] Tag v1.0.0 — red-flag action: needs the user's explicit, separate go
 
 v2 — ideas (next era, post-v1)
 ---

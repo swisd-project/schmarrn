@@ -47,6 +47,35 @@ Note: Pages is static — the `/api` endpoints don't exist there. It's the shell
 
 ## Deploy (FTP — the real thing)
 
-Upload `api/`, the built dashboard assets and `src/content/` to the FTP host. The only writable directory is `api/cache/`.
+Requirements on the host: PHP ≥ 8.4, Apache with `.htaccess` honored (`AllowOverride All`), and three writable paths: `api/config/`, `api/cache/`, `src/content/`. Nothing else — no database, no composer, no Node on the server.
+
+### What to upload
+
+```
+index.php            front controller: /api/* → core, /_ → dashboard, else the public site
+.htaccess            whitelist law (only _/, themes/, api/assets/, dashboard/, plugins/*/assets/ serve static)
+api/                 the PHP core (api/assets/ ships the committed render/edit bundles)
+themes/              your theme(s)
+pagetypes/           the page-type scaffolds
+src/content/         your content tree (start with the seeded pages)
+_/                   the CONTENTS of build/ — inside a host folder literally named _
+```
+
+Build the dashboard once, locally:
+
+```sh
+npm ci && npm run build
+```
+
+then upload the **contents of `build/` into a folder named `_`** on the host. Not loose at the root: the built `index.html` would shadow `index.php` via `DirectoryIndex` and put a login wall on your public face. (The editor bundles `api/assets/edit.esm.js` and `render.esm.js` are committed — you only need Node if you change `src/` yourself; then also run `npm run build:edit` / `npm run build:fallback`.)
+
+### First run
+
+1. Open `https://your-host.example/_/` — the setup wizard appears (site name, theme, admin account).
+2. After setup you land on the public site at `/`. The public face never wears a login form.
+3. Log in any time at `/_/`. Editing happens **on the live page**: click a block → floating menu → edit → save, live instantly. The burger (bottom-right) opens the full-screen overlay: page settings, the site-wide template (admins), ＋ New page from a page-type scaffold, log out.
+4. The dashboard at `/_/` stays management-only: page tree (rename/delete/upload), site settings, accounts, media, plugins.
+
+`/_` canonicalizes to `/_/` — the trailing slash is load-bearing.
 
 SPDX-License-Identifier: MPL-2.0 · Copyright (c) 2026 Homahuki GmbH
