@@ -8,6 +8,7 @@ dist/
 # PHP cache + runtime
 api/cache/
 api/config/auth.local.php
+api/config/accounts.local.php
 
 # OS junk
 .DS_Store

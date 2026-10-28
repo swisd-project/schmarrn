@@ -1,11 +1,13 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen, phase 1.
-  import { session, login, logout, pageCount, createPage } from '$lib/api';
+  import { session, login, logout, pageCount, createPage, listAccounts, addAccount, removeAccount } from '$lib/api';
   import { seedPage } from '$lib/schema';
   import PageEditor from '$lib/components/PageEditor.svelte';
-  import type { PageIndex, SelectedPage } from '$lib/types';
+  import type { PageIndex, SelectedPage, AccountRef } from '$lib/types';
 
   let authenticated = $state<boolean | null>(null);
+  let user = $state('');
+  let role = $state('');
   let password = $state('');
   let error = $state('');
   let busy = $state(false);
@@ -14,7 +16,13 @@
 
   // establish session state once
   $effect(() => {
-    session().then((s) => (authenticated = s.authenticated)).catch(() => (authenticated = false));
+    session()
+      .then((s) => {
+        authenticated = s.authenticated;
+        user = s.user;
+        role = s.role;
+      })
+      .catch(() => (authenticated = false));
   });
 
   async function signIn(event: SubmitEvent) {
@@ -22,8 +30,9 @@
     busy = true;
     error = '';
     try {
-      await login(password);
+      const s = await login(user, password);
       authenticated = true;
+      role = s.role;
       password = '';
     } catch (e) {
       error = e instanceof Error ? e.message : 'Login failed';
@@ -53,6 +62,43 @@
 
   function select(type: string, slug: string) {
     selected = { type, slug };
+  }
+
+  // ——— accounts (admin) ———
+  let showAccounts = $state(false);
+  let accounts = $state<readonly AccountRef[]>([]);
+  let accountAddUser = $state('');
+  let accountAddRole = $state<'admin' | 'editor'>('editor');
+  let accountAddPassword = $state('');
+  let accountError = $state('');
+
+  async function toggleAccounts() {
+    showAccounts = !showAccounts;
+    if (showAccounts) {
+      accounts = await listAccounts();
+    }
+  }
+
+  async function addAccountNow(event: SubmitEvent) {
+    event.preventDefault();
+    accountError = '';
+    try {
+      await addAccount(accountAddUser, accountAddPassword, accountAddRole);
+      accountAddUser = '';
+      accountAddPassword = '';
+      accounts = await listAccounts();
+    } catch (e) {
+      accountError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function deleteAccountNow(user: string) {
+    try {
+      await removeAccount(user);
+      accounts = await listAccounts();
+    } catch (e) {
+      accountError = e instanceof Error ? e.message : String(e);
+    }
   }
 
   // ——— new page ———
@@ -86,13 +132,15 @@
   {:else if authenticated === false}
     <form onsubmit={signIn} class="login">
       <h1>Schmarrn</h1>
-      <input type="password" bind:value={password} placeholder="Kitchen password" required />
+      <input type="text" bind:value={user} placeholder="Who's kneading?" autocomplete="username" required />
+      <input type="password" bind:value={password} placeholder="Kitchen password" autocomplete="current-password" required />
       <button type="submit" disabled={busy}>{busy ? 'Plating…' : 'Schnitten!'}</button>
       {#if error}<p class="error">{error}</p>{/if}
     </form>
   {:else}
     <header>
       <h1>Schmarrn</h1>
+      <span class="whoami">{user}{#if role} · {role}{/if}</span>
       <button onclick={signOut}>Log out</button>
     </header>
 
@@ -114,6 +162,46 @@
               {/each}
             </ul>
           {/each}
+        {/if}
+
+        {#if role === 'admin'}
+          <button class="accounts-toggle" onclick={toggleAccounts}>
+            {showAccounts ? 'Hide accounts' : 'Accounts'}
+          </button>
+          {#if showAccounts}
+            <div class="accounts">
+              <ul>
+                {#each accounts as account (account.user)}
+                  <li>
+                    <span>{account.user} · {account.role}</span>
+                    {#if account.user !== user}
+                      <button
+                        class="account-remove"
+                        aria-label={`Remove account ${account.user}`}
+                        onclick={() => deleteAccountNow(account.user)}>×</button
+                      >
+                    {/if}
+                  </li>
+                {/each}
+              </ul>
+              <form class="newpage" onsubmit={addAccountNow}>
+                <input bind:value={accountAddUser} placeholder="username" required />
+                <input
+                  bind:value={accountAddPassword}
+                  type="password"
+                  placeholder="password (min 8)"
+                  minlength="8"
+                  required
+                />
+                <select bind:value={accountAddRole}>
+                  <option value="editor">editor</option>
+                  <option value="admin">admin</option>
+                </select>
+                <button type="submit">Add account</button>
+              </form>
+              {#if accountError}<p class="error">{accountError}</p>{/if}
+            </div>
+          {/if}
         {/if}
 
         <form class="newpage" onsubmit={createNew}>
@@ -160,6 +248,13 @@
   .newpage { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 1rem; }
   .newpage input { font-size: 0.8rem; padding: 0.3rem 0.5rem; border: 1px solid #d8c7b2; border-radius: 4px; }
   .empty { opacity: 0.5; font-style: italic; }
+  .whoami { opacity: 0.6; font-size: 0.85rem; }
+  .accounts-toggle { font-size: 0.8rem; width: 100%; margin-top: 0.75rem; }
+  .accounts ul { list-style: none; padding: 0; margin: 0.25rem 0; }
+  .accounts li { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; }
+  .account-remove { border: 0; background: transparent; cursor: pointer; color: #b3004c; font-weight: bold; }
+  .accounts select { font-size: 0.8rem; padding: 0.25rem; border: 1px solid #d8c7b2; border-radius: 4px; }
+  .accounts { border: 1px solid #efe6d8; border-radius: 4px; padding: 0.5rem; }
   @media (max-width: 60rem) {
     .workbench { grid-template-columns: 1fr; }
   }

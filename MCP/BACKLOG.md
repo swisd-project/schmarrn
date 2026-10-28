@@ -2,39 +2,89 @@
 1. Relative path: MCP/BACKLOG.md
 2. Description: The "don't you dare forget" ledger for Schmarrn.
 3. Expects: Continuous updates as milestones are conquered and new layers defined.
-4. Provides: Project state, locked decisions, and roadmap.
+4. Provides: Locked decisions, roadmap (v1 todos → v2 ideas → deferred), and working info.
 5. SPDX-License-Identifier: MPL-2.0
 6. Copyright (c) 2026 Homahuki GmbH
 -->
 
 Schmarrn BACKLOG
-The "don't you dare forget" ledger. One project, one app: PHP `api/` + SvelteKit `dashboard/`.
+The "don't you dare forget" ledger. One project, one app: PHP `api/` + SvelteKit dashboard.
 
-🔒 Locked Decisions (Reference)
-See GOSPEL.md — all locked doctrine lives there. Backlog references, does not restate.
+Marking law: done = `[x]`, work in progress = `[~]`, deferred/must-decide-later = `[o](remark)` — remark appended to the todo item.
 
-SECTION 0 — SCAFFOLD (do first)
+🔒 LOCKED DECISIONS
+See GOSPEL.md — the law lives there. Locked here on 2026-10-28:
+- Vision: open-source flat-file CMS inspired by Automad, for others to install (FTP one folder, no DB/composer/cron). First real site: artist presentation page.
+- v1 page model: full-screen slide page first (inspiration: alvarotrigo.com/fullPage) as the standard; alternative classical style with menu + subpages selectable.
+- Editor: single-canvas wysiwyg (Markdown truth + preset module tags; edit via save-confirm modals; two-column layout binned).
+- Multi-editor: named accounts, roles admin/editor, file-backed store on plain FTP; SMTP mail (vendored lib) for invites/resets; edit-lock per page.
+- Media: uploads via modal (no drag-drop), immutable assets, media browser = lazy-loaded tab in settings overlay.
+- UI: no sidebar — burger menu → full-screen overlay (settings, global settings, media). Design system "warm hipster bakery": peach/cherry blossom/vanilla/baby-blue + strong neon accents, 50s Hofbäckerei fin-de-siècle ↔ neon, round elements w/ hover slide-up + paper shadow, Google-fresh compact spacing, micro-animations, no ornament, no AI-slop patterns. Tailwind, very wanted.
+- Serving: clean URLs, editor-browser renders HTML at save, PHP caches (per-page hash + mtime sentinel), read-only public JSON API, SEO/link previews.
+- Docs: README install guide + docs on GitHub Pages with examples.
+
+v1 — Schmarrn "known to work"
 ---
-P0 — PHP core
-[x] `/api` router skeleton (front controller, strict JSON out, CORS for dashboard). (`api/index.php`, `api/router.php`)
-[x] Content store: read/list `src/content/**/index.md`, slug validation, frontmatter sanity. (`api/store.php` — slug/type regexes, atomic temp+rename writes)
-[x] Auth: single password → session (Argon2id template hash in `api/config/auth.php`, real hash in git-ignored `auth.local.php`), 24h lifetime. TOTP optional later.
-[x] Endpoints: `GET /api/pages`, `GET /api/page/<type>/<slug>` (raw `.md`), `PUT /api/page/<type>/<slug>`, login/logout/session. (`api/index.php`)
-[x] File cache: raw-body cache keyed by mtime sentinel, dropped on write. (`api/cache.php`)
-[ ] Smoke test with PHP 8.4+ — ~~no PHP binary on this dev machine~~ **DONE 2026-10-27 (PHP 8.5.12):** login/session/pages/raw-GET/cache-HIT verified via curl. 3 defects fixed: `self::` calls in plain namespace functions (fatal), `\SLUG_PATTERN` root-lookup (undefined const), list-destructuring of assoc-array `Cache\files()`. Note: PHP `password_verify` rejects the Node-`argon2` lib's PHC variant — generate admin hashes with PHP itself.
-[ ] Draft/public gating: ~~schema flags~~ **DONE:** PHP regex-sniffs `draft: true` (no Markdown parsing); anon `/api/pages` excludes drafts + raw draft GET = 404; authed sees all with `draft` badge data.
 
-P1 — SvelteKit dashboard
-[x] `adapter-static` scaffold (fallback SPA), Svelte 5 runes, svelte-check clean. Builds: `npm run build` → `build/`.
-[ ] Tailwind (currently hand-rolled tokens in `src/lib/app.css`).
-[x] Login view → PHP session. (`src/routes/+page.svelte`)
-[x] Page tree browser over `/api/pages` — clickable, draft badges, refresh on save.
-[x] Editor: raw-`.md` textarea + LIVE preview via `parseMdms()` with per-type Zod gate (`src/lib/components/PageEditor.svelte`). One renderer, by law.
-[x] Save flow: raw `.md` via `PUT` (API atomic-writes + drops cache — verified roundtrip).
+## p1 multi-user core
+[ ] File-backed account store: `username → {argon2id hash, role}`, template + git-ignored real file
+[ ] Login/session per account, role attached to session; CSRF tokens on all mutating API calls
+[ ] File-cache-based login rate limiting; session records in writable dir (self-managed lifetime, 24h)
+[ ] SMTP: vendor PHPMailer (or equal, no composer); admin SMTP config; invite new editor + password-reset (self-reset for lost admin password via config file regeneration)
+[ ] Edit-lock per page (coarse, heartbeat + takeover UX)
 
-P2 — Public serving strategy
-[ ] Decide: prerendered adapter-static public site vs. PHP routed cached HTML (Recipe A) — lock in GOSPEL when decided.
-[ ] `mdms` bumped with `hasMore` flag; wire preview/full split for blog type.
-P3 — Nice-to-haves
-[ ] Image handling (upload, resize via gd) — only if needed.
-[ ] TOTP 2FA, multilingual pages, aliases.
+## p2 visual editor (the build's heart)
+[ ] Single-canvas editor: page rendered as-is, click into text/paragraphs inline
+[ ] Module spec v1 + implement in mdms: text, image, image with caption, video/html embed — boundary syntax + data location decided on the go, pinned per module
+[ ] Module modals: open → edit single item → must save (no live Markdown mangling of module internals)
+[ ] Uploads via modal into immutable IDed assets (v1: originals stored untouched, no gd); media browser = lazy-loaded tab in settings overlay
+[ ] Autosave-to-draft; draft/publish gate; draft preview link
+[ ] Delete/rename page in UI; new page: (a) upload `.md` then edit on page, (b) new-page button in page-tree inside settings overlay
+[ ] Site menu editing (classical style)
+
+## p3 serving & public site
+[ ] Clean URLs: front controller routes + `.htaccess` rewrite rules; 404/fallback
+[ ] Save-time render: dashboard client renders `parseMdms()` HTML → PHP stores + cache dir per-page hash files; site-mtime sentinel invalidation
+[ ] Public theme rendering (classical style + full-page slide style), artist reference theme installable via theme contract (manifest, assets, settings)
+[ ] Global brand settings (logo, claim, name) referenced across pages
+[ ] Read-only public JSON API per page (title, body HTML, children, files), CORS scoped
+[ ] SEO/link-preview basics (og tags, titles)
+[ ] First-visit setup wizard (admin account, site name, theme)
+
+## p4 dashboard chrome & design system
+[ ] Tailwind in (replace hand-rolled tokens); design tokens: palette + shapes + motion as pinned above
+[ ] Burger menu → full-screen overlay (settings, global settings, media tab lazy, page tree)
+[ ] Round elements, hover slide-up + paper-cast shadows, micro-animations; no ornament
+[ ] SPA fallback renamed to `dashboard.html` (adapter root-overwrite warning)
+
+## p5 v1 ship-out
+[ ] Full smoke test on a real FTP host (PHP 8.4+, .htaccess honored, writable cache)
+[ ] README install guide (FTP one folder, wizard walkthrough)
+[ ] Docs on GitHub Pages with examples (module cookbook, theme manifest spec, API shape)
+[ ] Tag v1.0.0
+
+v2 — ideas (next era, post-v1)
+---
+
+## p6 plugins (own phase)
+[ ] Capability contract: may register template functions, API routes, editor blocks — nothing else; scanned `plugins/` dir; admin installs like WP with tighter lid
+## p7 media & packaging
+[ ] gd: image processing/derivatives on upload + on-the-fly resize; zip: theme/plugin packaging + installer
+## p8 multilingual
+[ ] Per-language page variants (design deferred until v1 shipped)
+## p9 auth hardening
+[ ] TOTP 2FA for accounts
+
+Deferred / graveyard
+---
+
+- Aliases: KILLED (v1 use-case absent).
+- `hasMore`/preview-full split: superseded by visual editor + module model (revisit only if blog needs it).
+- Composer: never (vendored single libs are the only permitted exception, per GOSPEL mail line).
+
+Working info
+---
+- FTP hosting is the contract; every feature must survive "dumb host" reality (writable dir + PHP + Apache assumed, nothing more).
+- Cache pruning not planned: per-file TTL + overwrite-on-write (Automad pattern) suffices at our scale.
+- The `@swisd-project/*` npm namespace still hosts shared types; mdms grows the module renderer as `@swisd-project/mdms`.
+- GOSPEL amendments 2026-10-28: multi-editor, SMTP-bend, modules/themes/public API/serving/requirements-phasing lines added; dashboards edited-model line rewritten.

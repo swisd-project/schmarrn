@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/router.php';
 require __DIR__ . '/auth.php';
+require __DIR__ . '/accounts.php';
 require __DIR__ . '/store.php';
 require __DIR__ . '/cache.php';
 
@@ -25,8 +26,8 @@ if ($origin !== '') {
     header('Access-Control-Allow-Origin: ' . $origin);
     header('Access-Control-Allow-Credentials: true');
     header('Vary: Origin');
-    header('Access-Control-Allow-Methods: GET, PUT, POST, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type');
+    header('Access-Control-Allow-Methods: GET, PUT, POST, DELETE, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
 }
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -41,17 +42,117 @@ try {
     switch (true) {
         case $method === 'POST' && $path === 'login':
             Auth\login();
-            echo json_encode(['ok' => true]);
+            // First-class CSRF receipt, right off the login counter.
+            echo json_encode(['ok' => true, 'user' => Auth\user(), 'role' => Auth\role(), 'csrf' => Auth\csrf()]);
             break;
 
         case $method === 'POST' && $path === 'logout':
+            Auth\assertCsrf();
             Auth\logout();
             echo json_encode(['ok' => true]);
             break;
 
         case $method === 'GET' && $path === 'session':
-            echo json_encode(['authenticated' => Auth\check()]);
+            echo json_encode([
+                'authenticated' => Auth\check(),
+                'user' => Auth\user(),
+                'role' => Auth\role(),
+                'csrf' => Auth\csrf(),
+            ]);
             break;
+
+        // ——— account management: admin-only, CSRF-gated ———
+        case $method === 'GET' && $path === 'accounts':
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only.');
+            }
+            $accounts = Accounts\all();
+            echo json_encode(array_map(
+                fn($user, $r) => ['user' => $user, 'role' => $r['role']],
+                array_keys($accounts),
+                $accounts
+            ));
+            break;
+
+        case $method === 'POST' && $path === 'accounts':
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $user = is_string($body['user'] ?? null) ? $body['user'] : '';
+            $password = is_string($body['password'] ?? null) ? $body['password'] : '';
+            $role = is_string($body['role'] ?? null) ? $body['role'] : 'editor';
+            if (strlen($password) < 8) {
+                Router\refuse(400, 'Password must be at least 8 characters.');
+            }
+            Accounts\add($user, password_hash($password, PASSWORD_ARGON2ID), $role);
+            http_response_code(201);
+            echo json_encode(['ok' => true]);
+            break;
+
+        case $method === 'PUT' && preg_match('#^account/[a-z0-9][a-z0-9._-]{0,63}$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only.');
+            }
+            Auth\assertCsrf();
+            $target = substr($path, strlen('account/'));
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $accounts = Accounts\all();
+            if (!isset($accounts[$target])) {
+                Router\refuse(404, "No account: {$target}");
+            }
+            // Never leave the bakery without an admin — demote/demolish the last one and the door locks.
+            $roles = isset($body['role']) && is_string($body['role']) ? $body['role'] : null;
+            if ($roles !== null && $roles !== 'admin' && $accounts[$target]['role'] === 'admin'
+                && count(array_filter($accounts, fn($r) => $r['role'] === 'admin')) === 1) {
+                Router\refuse(409, 'Refusing to demote the last admin.');
+            }
+            if ($roles !== null) {
+                Accounts\setRole($target, $roles);
+            }
+            if (is_string($body['password'] ?? null)) {
+                if (strlen($body['password']) < 8) {
+                    Router\refuse(400, 'Password must be at least 8 characters.');
+                }
+                Accounts\setHash($target, password_hash($body['password'], PASSWORD_ARGON2ID));
+            }
+            echo json_encode(['ok' => true]);
+            break;
+
+        case $method === 'DELETE' && preg_match('#^account/[a-z0-9][a-z0-9._-]{0,63}$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only.');
+            }
+            Auth\assertCsrf();
+            $target = substr($path, strlen('account/'));
+            $accounts = Accounts\all();
+            if ($target === Auth\user()) {
+                Router\refuse(409, 'Refusing to delete the account behind this session.');
+            }
+            if (!isset($accounts[$target])) {
+                Router\refuse(404, "No account: {$target}");
+            }
+            if ($accounts[$target]['role'] === 'admin'
+                && count(array_filter($accounts, fn($r) => $r['role'] === 'admin')) === 1) {
+                Router\refuse(409, 'Refusing to delete the last admin.');
+            }
+            Accounts\remove($target);
+            echo json_encode(['ok' => true]);
+            break;
+
 
         case $method === 'GET' && $path === 'pages':
             // Public listing for strangers (drafts filtered inside), full tree for editors.
@@ -85,6 +186,7 @@ try {
             if (!Auth\check()) {
                 Router\refuse(401, 'Not authenticated.');
             }
+            Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
             if (Store\read($type, $slug) !== null) {
                 Router\refuse(409, "Page already exists: {$type}/{$slug}");
@@ -98,6 +200,7 @@ try {
             if (!Auth\check()) {
                 Router\refuse(401, 'Not authenticated.');
             }
+            Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
             Store\write($type, $slug, file_get_contents('php://input') ?: '');
             Cache\drop($type, $slug);
