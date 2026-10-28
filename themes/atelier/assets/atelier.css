@@ -138,17 +138,17 @@ body.slide {
 
 /* ——— the deck: :::slide containers paginate the stage (scroll-snap, no JS) ——— */
 .slide-stage:has(> .sm-slide) {
-  flex-direction: row; align-items: stretch;
-  overflow-x: auto; overflow-y: hidden;
-  scroll-snap-type: x mandatory;
-  max-width: none; padding: 0;
+  flex-direction: column; align-items: stretch;
+  overflow-y: auto; overflow-x: hidden;
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+  max-width: none; margin: 0; padding: 0;
 }
-.slide-stage:has(> .sm-slide) > * { flex: 0 0 100%; scroll-snap-align: center; }
+.slide-stage:has(> .sm-slide) > * { flex: 0 0 auto; min-height: 100%; scroll-snap-align: start; }
 .sm-slide {
-  min-height: 100%;
   display: flex; flex-direction: column; justify-content: center;
   padding: 2rem 2.5rem;
-  max-width: 56rem; margin: 0 auto;
+  max-width: 56rem; width: 100%; margin: 0 auto;
 }
 
 /* ——— the callout (:::note) ——— */

@@ -71,15 +71,23 @@ function safeUrl(url: string): string {
   return /^https?:\/\//i.test(trimmed) ? trimmed : '';
 }
 
+/** Title → anchor id: lowercase, runs of non-alphanumerics become one hyphen. */
+function anchorId(title: string): string {
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return slug === '' || /^\d/.test(slug) ? '' : slug;
+}
+
 /** Trim the directive payload: only an http(s) URL survives. */
 function cleanUrl(url: string): string {
   return safeUrl(url);
 }
 
-/** Directive → hast. Unknown names return null (unrendered, plain). */
+/** Directive → hast. Unknown names return null (unrendered, plain).
+ *  state carries the per-document id registry (slides claim anchors). */
 export function renderModule(
   node: ElementNode,
-  ctx: ModuleContext
+  ctx: ModuleContext,
+  state: { readonly usedIds: Map<string, number> } = { usedIds: new Map() }
 ): HastNode | null {
   const props = node.properties ?? {};
   const alt = str(node.children?.[0]?.value).trim();
@@ -156,9 +164,27 @@ export function renderModule(
     }
     case 'slide': {
       // A deck slide: one full-viewport section. The slide template paginates the
-      // stage (scroll-snap); in a classical page the sections simply stack.
-      // Children pass through untouched — slides are regular markdown inside.
+      // stage vertically (scroll-snap, smooth); in a classical page the sections
+      // simply stack. Children pass through untouched — slides are markdown inside.
+      // The title doubles as the anchor: '[to the proof](#the-proof)' links to it.
       const title = str(props.title).replace(/["<>&]/g, '').trim();
+      const id = anchorId(title);
+      if (id !== '') {
+        const seen = state.usedIds.get(id) ?? 0;
+        state.usedIds.set(id, seen + 1);
+        // Duplicates rank: "the-proof" then "the-proof-2" — every link lands somewhere.
+        const anchor = seen === 0 ? id : `${id}-${seen + 1}`;
+        return {
+          type: 'element',
+          tagName: 'section',
+          properties: {
+            className: 'sm-slide',
+            id: anchor,
+            ...(title !== '' ? { 'data-slide-title': title, 'aria-label': title } : {})
+          },
+          children: (node.children ?? []) as HastNode[]
+        };
+      }
       return {
         type: 'element',
         tagName: 'section',
@@ -213,13 +239,15 @@ export function schmarrnModules(ctx: ModuleContext = {}) {
   return () => (tree: unknown) => {
     // Generated output must never be re-processed when the walk descends into it.
     const generated = new WeakSet<object>();
+    // Per-document registry: slide anchors stay unique within one page render.
+    const usedIds = new Map<string, number>();
     const markAll = (node: HastNode): void => {
       generated.add(node);
       node.children?.forEach(markAll);
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     visit(tree, 'element' as never, (node: any) => {
-      const html = renderModule(node as ElementNode, ctx);
+      const html = renderModule(node as ElementNode, ctx, { usedIds });
       if (html !== null) {
         Object.assign(node, { tagName: html.tagName, properties: { ...(html.properties ?? {}) }, children: html.children });
         markAll(node);
