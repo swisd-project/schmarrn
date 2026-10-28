@@ -241,7 +241,7 @@
       <section class="stage">
         {#if selected}
           {#key `${selected.type}/${selected.slug}`}
-            <PageEditor page={selected} onsaved={refreshIndex} />
+            <PageEditor page={selected} currentUserName={user} onsaved={refreshIndex} />
           {/key}
         {:else}
           <p class="empty">Pick a shredded piece from the left, sugar.</p>

@@ -160,6 +160,38 @@ export function changeOwnPassword(current: string, password: string): Promise<vo
   }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
 }
 
+// ——— edit locks ———
+
+export interface LockStatus {
+  readonly holder: string | null;
+  readonly expiresIn: number;
+}
+
+export function peekLock(type: string, slug: string): Promise<LockStatus> {
+  return fetch(`/api/lock/${type}/${slug}`).then((r) => json<LockStatus>(r));
+}
+
+export function acquireLock(type: string, slug: string, force = false): Promise<LockStatus> {
+  return fetch(`/api/lock/${type}/${slug}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({ force })
+  }).then(
+    (r) =>
+      json<LockStatus>(r),
+    (e) => {
+      throw e;
+    }
+  );
+}
+
+export function releaseLock(type: string, slug: string): Promise<void> {
+  return fetch(`/api/lock/${type}/${slug}`, {
+    method: 'DELETE',
+    headers: { 'X-CSRF-Token': csrfToken() }
+  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
+}
+
 export function removeAccount(user: string): Promise<void> {
   return fetch(`/api/account/${encodeURIComponent(user)}`, {
     method: 'DELETE',

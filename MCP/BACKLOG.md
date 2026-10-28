@@ -27,11 +27,11 @@ v1 — Schmarrn "known to work"
 ---
 
 ## p1 multi-user core
-[ ] File-backed account store: `username → {argon2id hash, role}`, template + git-ignored real file
-[ ] Login/session per account, role attached to session; CSRF tokens on all mutating API calls
-[ ] File-cache-based login rate limiting; session records in writable dir (self-managed lifetime, 24h)
-[ ] SMTP: vendor PHPMailer (or equal, no composer); admin SMTP config; invite new editor + password-reset (self-reset for lost admin password via config file regeneration)
-[ ] Edit-lock per page (coarse, heartbeat + takeover UX)
+[x] File-backed account store: `username → {argon2id hash, role}`, template + git-ignored real file
+[x] Login/session per account, role attached to session; CSRF tokens on all mutating API calls
+[x] File-cache-based login rate limiting; session records in writable dir (self-managed lifetime, 24h)
+[~] SMTP: vendor PHPMailer (or equal, no composer); admin SMTP config; invite new editor + password-reset (self-reset for lost admin password via config file regeneration) (vendored 6.9.3; config template + endpoints done; real SMTP host still unconfigured — docs at p5)
+[x] Edit-lock per page (coarse, heartbeat + takeover UX)
 
 ## p2 visual editor (the build's heart)
 [ ] Single-canvas editor: page rendered as-is, click into text/paragraphs inline

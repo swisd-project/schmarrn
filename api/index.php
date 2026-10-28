@@ -15,6 +15,7 @@ require __DIR__ . '/router.php';
 require __DIR__ . '/auth.php';
 require __DIR__ . '/accounts.php';
 require __DIR__ . '/mail.php';
+require __DIR__ . '/lock.php';
 require __DIR__ . '/store.php';
 require __DIR__ . '/cache.php';
 
@@ -99,12 +100,13 @@ try {
                 Router\refuse(409, "No account with an email: {$target}");
             }
             $temp = bin2hex(random_bytes(9));
-            Accounts\setHash($target, password_hash($temp, PASSWORD_ARGON2ID));
+            // Mail flies BEFORE the hash lands — mail failure then can't strand a muted account.
             \Mail\send((string)$record['email'], 'Your Schmarrn login',
                 "A Schmarrn account for '{$target}' was (re)issued.\n\n"
                 . "User:     {$target}\n"
                 . "Password: {$temp}\n\n"
                 . "Sign in and change this password promptly under me/password.");
+            Accounts\setHash($target, password_hash($temp, PASSWORD_ARGON2ID));
             echo json_encode(['ok' => true]);
             break;
 
@@ -248,6 +250,32 @@ try {
             echo json_encode(Store\listAll(), JSON_UNESCAPED_SLASHES);
             break;
 
+        // ——— edit locks: heartbeat in warm, silence and polite exit free ———
+        case $method === 'PUT' && preg_match('#^lock/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            Auth\assertCsrf();
+            [, $type, $slug] = explode('/', $path);
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            Lock\acquire($type, $slug, Auth\user(), ($body['force'] ?? null) === true);
+            echo json_encode(Lock\peek($type, $slug));
+            break;
+        case $method === 'GET' && preg_match('#^lock/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
+            [, $type, $slug] = explode('/', $path);
+            echo json_encode(Lock\peek($type, $slug));
+            break;
+        case $method === 'DELETE' && preg_match('#^lock/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            Auth\assertCsrf();
+            [, $type, $slug] = explode('/', $path);
+            Lock\release($type, $slug, Auth\user());
+            echo json_encode(['ok' => true]);
+            break;
+
+
         // Route: GET /api/page/{type}/{slug} — raw markdown, body passthrough (not JSON).
         case $method === 'GET' && preg_match('#^page/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             [, $type, $slug] = explode('/', $path);
@@ -280,6 +308,7 @@ try {
             if (Store\read($type, $slug) !== null) {
                 Router\refuse(409, "Page already exists: {$type}/{$slug}");
             }
+            Lock\assertFreeOrMine($type, $slug, Auth\user());
             Store\write($type, $slug, file_get_contents('php://input') ?: '');
             Cache\drop($type, $slug);
             http_response_code(201);
@@ -291,8 +320,10 @@ try {
             }
             Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
+            Lock\assertFreeOrMine($type, $slug, Auth\user());
             Store\write($type, $slug, file_get_contents('php://input') ?: '');
             Cache\drop($type, $slug);
+            Lock\acquire($type, $slug, Auth\user()); // writer owns the lock — kitchen etiquette
             echo json_encode(['ok' => true]);
             break;
 

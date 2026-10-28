@@ -8,24 +8,70 @@
    * 5. SPDX-License-Identifier: MPL-2.0
    * 6. Copyright (c) 2026 Homahuki GmbH
    */
-  import { readPage, writePage } from '$lib/api';
+  import { readPage, writePage, peekLock, acquireLock, releaseLock } from '$lib/api';
   import { schemaFor } from '$lib/schema';
   import { parseMdms } from '@swisd-project/mdms';
   import type { SelectedPage } from '$lib/types';
 
   interface Props {
     page: SelectedPage;
+    currentUserName?: string;
     onsaved?: () => void;
   }
 
-  let { page, onsaved }: Props = $props();
+  let { page, currentUserName = '', onsaved }: Props = $props();
 
   let raw = $state<string>('');
   let loadedFor = $state<string>('');
   let error = $state('');
   let saveState = $state<'saved' | 'dirty' | 'busy' | 'error'>('saved');
+  let lockHolder = $state<string | null>(null);
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
 
   const currentKey = $derived(`${page.type}/${page.slug}`);
+
+  // ——— edit lock: acquire on load, heartbeat, release when we leave the kitchen ———
+  $effect(() => {
+    const key = currentKey;
+    let cancelled = false;
+    acquireLock(page.type, page.slug, false)
+      .then((status) => {
+        if (cancelled || currentKey !== key) {
+          void releaseLock(page.type, page.slug);
+          return;
+        }
+        lockHolder = status.holder; // null → we hold it
+        heartbeat = setInterval(() => {
+          void acquireLock(page.type, page.slug, false)
+            .catch((e: unknown) => {
+              lockHolder = e instanceof Error ? e.message : String(e);
+              if (heartbeat !== null) clearInterval(heartbeat);
+            });
+        }, 60_000);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) lockHolder = e instanceof Error ? e.message : String(e);
+      });
+    // cleanup when the page changes or the component goes away
+    return () => {
+      cancelled = true;
+      if (heartbeat !== null) clearInterval(heartbeat);
+      if (loadedFor === key) void releaseLock(page.type, page.slug);
+    };
+  });
+
+  async function takeover() {
+    error = '';
+    try {
+      const status = await acquireLock(page.type, page.slug, true);
+      lockHolder = status.holder;
+      readPage(page.type, page.slug)
+        .then((text) => (raw = text))
+        .catch(() => undefined);
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
 
   // Load the file when a different page gets selected (skip reload when we just saved it).
   $effect(() => {
@@ -72,10 +118,16 @@
 <section class="editor">
   <header>
     <h2>{page.type} / {page.slug}</h2>
-    <button onclick={save} disabled={saveState === 'busy'}>
+    <button onclick={save} disabled={saveState === 'busy' || (lockHolder !== null && lockHolder !== currentUserName)}>
       {saveState === 'busy' ? 'Serving…' : 'Save'}
     </button>
     <span class="state">{saveState === 'saved' ? 'stored' : saveState}</span>
+    {#if lockHolder !== null && lockHolder !== currentUserName}
+      <span class="lock-banner" role="alert">
+        Locked by {lockHolder}
+        <button class="takeover" onclick={takeover}>Take over</button>
+      </span>
+    {/if}
     {#if preview.warning}
       <span class="v-error" role="alert">{preview.warning}</span>
     {/if}
@@ -124,4 +176,6 @@
   }
   .preview :global(h1), .preview :global(h2), .preview :global(h3) { margin-top: 0.5rem; }
   .preview :global(p) { margin: 0.4rem 0; }
+  .lock-banner { font-size: 0.8rem; color: #7a4a00; background: #ffe9d6; border-radius: 4px; padding: 0.2rem 0.5rem; }
+  .takeover { font-size: 0.8rem; margin-left: 0.4rem; }
 </style>
