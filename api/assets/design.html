@@ -167,8 +167,8 @@ code { font-family: var(--font-mono); background: var(--crust); padding: 0.1em 0
 blockquote.t { margin: 0; padding: var(--sp-3) var(--sp-4); background: var(--crust); color: var(--ink-soft); font-style: italic; }
 
 /* ————————————————————————————————————————————————
-   04 · BUTTONS — fg rests FLAT on its surface; interaction
-   lifts it (small, subtle shadow); release returns it flat.
+   04 · BUTTONS — three intents, one size. fg rests FLAT;
+   interaction lifts it (small, subtle shadow); release is flat.
    ———————————————————————————————————————————————— */
 .btn {
   display: inline-flex; align-items: center; gap: var(--sp-2);
@@ -177,24 +177,17 @@ blockquote.t { margin: 0; padding: var(--sp-3) var(--sp-4); background: var(--cr
   border-radius: var(--radius-md);
   border: none;
   cursor: pointer; text-decoration: none; color: var(--ink);
-  background: linear-gradient(145deg, #fffdf7, var(--batter) 55%, #f5e7d2);
-  box-shadow: none;
   transition: box-shadow var(--lift), transform var(--lift), filter var(--lift);
 }
 .btn:hover { transform: translateY(-2px); box-shadow: var(--hover-lift); }
 .btn:active { transform: translateY(0); box-shadow: none; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
 
+.btn-secondary { background: linear-gradient(145deg, #fffdf7, var(--batter) 55%, #f5e7d2); }
 .btn-primary { background: linear-gradient(145deg, #f06a52, var(--jam) 55%, #c94630); color: #fff; }
 .btn-primary:hover { filter: brightness(1.06); }
-.btn-neon { background: linear-gradient(145deg, #ff55a0, var(--neon-pink) 55%, #d9006a); color: #fff; }
-.btn-neon:hover { filter: brightness(1.08); }
-.btn-soft { background: linear-gradient(145deg, #f8ccd6, var(--blossom) 60%, #e8a3b4); }
-.btn-ghost { background: transparent; color: var(--ink-soft); }
-.btn-ghost:hover { background: var(--crust); color: var(--ink); }
-.btn-danger { background: linear-gradient(145deg, #f7ded9, #f0cfc7); color: var(--error); }
-.btn-sm { padding: var(--sp-1) var(--sp-3); font-size: var(--text-xs); }
-.btn-lg { padding: var(--sp-3) var(--sp-6); font-size: var(--text-base); }
+.btn-attention { background: linear-gradient(145deg, #ff55a0, var(--neon-pink) 55%, #d9006a); color: #fff; }
+.btn-attention:hover { filter: brightness(1.08); }
 
 /* ————————————————————————————————————————————————
    05 · FORMS — the dent is the type-here key: a bg-colored
@@ -367,7 +360,7 @@ textarea.input { resize: vertical; min-height: 5rem; }
   <p class="demo-note">One fake light source, top-left. <b>bg</b> is the page — elements on it sit flat. <b>mg</b> panels raise: the grouping signal. <b>fg</b> rests flat on its mg; if it's interactive it rises on hover and casts a small, subtle shadow — if not, it stays flat. The inset dent belongs to inputs alone: a bg-colored field pressed into an mg panel is the visual key that says <i>type here</i>.</p>
   <div class="depth-demo">
     <div class="depth-cell">
-      <div class="stage"><button class="btn" style="cursor:default">flat on bg</button></div>
+      <div class="stage"><button class="btn btn-secondary" style="cursor:default">flat on bg</button></div>
       <p>Elements on the bg are flat. No resting shadow, ever.</p>
     </div>
     <div class="depth-cell">
@@ -416,22 +409,14 @@ textarea.input { resize: vertical; min-height: 5rem; }
 
 <!-- 04 -->
 <section>
-  <p class="sec-label">04 · Buttons — flat at rest, rise on hover, flat on release</p>
+  <p class="sec-label">04 · Buttons — three intents, one size</p>
   <div class="demo-row">
     <button class="btn btn-primary">Publish</button>
-    <button class="btn">Preview</button>
-    <button class="btn btn-soft">Save draft</button>
-    <button class="btn btn-ghost">Cancel</button>
-    <button class="btn btn-danger">Delete</button>
-    <button class="btn btn-neon">Attention</button>
+    <button class="btn btn-secondary">Cancel</button>
+    <button class="btn btn-attention">Delete</button>
+    <button class="btn btn-secondary" disabled>Disabled</button>
   </div>
-  <div class="demo-row" style="margin-top:var(--sp-4)">
-    <button class="btn btn-primary btn-sm">Small</button>
-    <button class="btn btn-primary">Regular</button>
-    <button class="btn btn-primary btn-lg">Large</button>
-    <button class="btn" disabled>Disabled</button>
-  </div>
-  <p class="demo-note">Rest: flat, gradient running with the light. Hover: up 2px, small shadow. Click: back to flat — pressing down is the input's job, not the button's.</p>
+  <p class="demo-note">Publish is primary (jam). Cancel is secondary (neutral, gradient with the light). Delete is attention (neon) — the destructive action speaks in the attention voice. Rest: flat. Hover: up 2px, small shadow. Click: flat again.</p>
 </section>
 
 <!-- 05 -->
@@ -492,13 +477,13 @@ textarea.input { resize: vertical; min-height: 5rem; }
       <div class="thumb"></div>
       <h4>Off the Griddle</h4>
       <span class="meta">pages · updated 2 h ago</span>
-      <div class="row"><button class="btn btn-soft btn-sm">Edit</button><button class="btn btn-ghost btn-sm">View</button></div>
+      <div class="row"><button class="btn btn-primary">Edit</button><button class="btn btn-secondary">View</button></div>
     </div>
     <div class="card">
       <h4>Hidden Pudding</h4>
       <span class="badge badge-draft" style="align-self:flex-start">Draft</span>
       <span class="meta">blog · updated yesterday</span>
-      <div class="row"><button class="btn btn-soft btn-sm">Edit</button><button class="btn btn-ghost btn-sm">View</button></div>
+      <div class="row"><button class="btn btn-primary">Edit</button><button class="btn btn-secondary">View</button></div>
     </div>
     <div class="card">
       <div class="thumb" style="background:linear-gradient(135deg,var(--sky),var(--crust))"></div>
@@ -515,7 +500,7 @@ textarea.input { resize: vertical; min-height: 5rem; }
     <div class="modal-demo">
       <div class="head"><h4>Page settings</h4><button class="close-x">×</button></div>
       <div class="body">Raw frontmatter editing lives here in the real modal. Save-confirm, always — no silent writes.</div>
-      <div class="foot"><button class="btn btn-ghost btn-sm">Cancel</button><button class="btn btn-primary btn-sm">Save</button></div>
+      <div class="foot"><button class="btn btn-secondary">Cancel</button><button class="btn btn-primary">Save</button></div>
     </div>
     <div>
       <span class="burger" title="Burger — opens the full-screen overlay"><span></span><span></span><span></span></span>
@@ -549,7 +534,7 @@ textarea.input { resize: vertical; min-height: 5rem; }
     <div class="hero-p">
       <h2>Take your time.</h2>
       <p>A full-screen slide for the page that deserves one — big type, one idea, nothing else on stage.</p>
-      <button class="btn btn-primary btn-lg">Enter the bakery</button>
+      <button class="btn btn-primary">Enter the bakery</button>
     </div>
   </div>
 
