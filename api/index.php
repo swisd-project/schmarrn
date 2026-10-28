@@ -18,6 +18,7 @@ require __DIR__ . '/mail.php';
 require __DIR__ . '/lock.php';
 require __DIR__ . '/store.php';
 require __DIR__ . '/cache.php';
+require __DIR__ . '/site.php';
 require __DIR__ . '/serve.php'; // public JSON API reuses the serving engine's byte-peeks
 
 $path = Router\pathAfter('/api/');
@@ -155,6 +156,97 @@ try {
             }
             Accounts\takeMailToken($user, $token);
             Accounts\setHash($user, password_hash($fresh, PASSWORD_ARGON2ID));
+            echo json_encode(['ok' => true]);
+            break;
+
+        // ——— first-visit setup: the wizard's two doors ———
+
+        // Route: GET /api/setup/status — public.needed = no accounts exist yet;
+        // themes = the theme contract's installed wares (dir with a theme.json).
+        case $method === 'GET' && $path === 'setup/status':
+            try {
+                $needed = count(Accounts\all()) === 0;
+            } catch (\Throwable) {
+                $needed = true; // no account store = nothing set up yet
+            }
+            $themes = [];
+            foreach (glob(dirname(__DIR__) . '/themes/*', GLOB_ONLYDIR) ?: [] as $themeDir) {
+                $themeName = basename($themeDir);
+                if (preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*$#', $themeName) === 1 && is_file($themeDir . '/theme.json')) {
+                    $themes[] = $themeName;
+                }
+            }
+            echo json_encode(['needed' => $needed, 'themes' => $themes]);
+            break;
+
+        // Route: POST /api/setup — public, but only while the bakery has no accounts.
+        // Creates the first admin, writes brand settings, and logs the founder in
+        // (Auth\login() re-reads the same user/password keys from the body).
+        case $method === 'POST' && $path === 'setup':
+            try {
+                $needed = count(Accounts\all()) === 0;
+            } catch (\Throwable) {
+                $needed = true;
+            }
+            if (!$needed) {
+                Router\refuse(403, 'Already set up.');
+            }
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $user = is_string($body['user'] ?? null) ? trim($body['user']) : '';
+            $password = is_string($body['password'] ?? null) ? $body['password'] : '';
+            $siteName = is_string($body['siteName'] ?? null) ? trim($body['siteName']) : '';
+            $claim = is_string($body['claim'] ?? null) ? trim($body['claim']) : '';
+            $theme = is_string($body['theme'] ?? null) ? $body['theme'] : 'bakery';
+            if ($user === '' || $siteName === '' || strlen($password) < 8) {
+                Router\refuse(400, 'User, site name and a password of 8+ characters required.');
+            }
+            if (preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*$#', $theme) !== 1
+                || !is_file(dirname(__DIR__) . '/themes/' . $theme . '/theme.json')) {
+                Router\refuse(400, "Unknown theme: {$theme}");
+            }
+            Accounts\add($user, password_hash($password, PASSWORD_ARGON2ID), 'admin');
+            Site\save(['name' => $siteName, 'claim' => $claim, 'logo' => '', 'theme' => $theme, 'home' => '']);
+            Auth\login();
+            echo json_encode(['ok' => true, 'user' => Auth\user(), 'role' => Auth\role(), 'csrf' => Auth\csrf()]);
+            break;
+
+        // ——— brand settings: admin-only read/write over Site\ ———
+        case $method === 'GET' && $path === 'site':
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only.');
+            }
+            echo json_encode(Site\load());
+            break;
+
+        case $method === 'PUT' && $path === 'site':
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $settings = Site\load();
+            foreach (\Site\KEYS as $key) {
+                if (is_string($body[$key] ?? null)) {
+                    $settings[$key] = trim($body[$key]);
+                }
+            }
+            if ($settings['name'] === '') {
+                Router\refuse(400, 'Site name required.');
+            }
+            if (preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*$#', $settings['theme']) !== 1
+                || !is_file(dirname(__DIR__) . '/themes/' . $settings['theme'] . '/theme.json')) {
+                Router\refuse(400, "Unknown theme: {$settings['theme']}");
+            }
+            if ($settings['home'] !== '' && preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*$#', $settings['home']) !== 1) {
+                Router\refuse(400, 'Home must be a slug or empty.');
+            }
+            Site\save($settings);
             echo json_encode(['ok' => true]);
             break;
 

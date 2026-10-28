@@ -1,6 +1,6 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen, phase 1.
-  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount } from '$lib/api';
+  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings } from '$lib/api';
   import { schemaFor, withDraftFlag } from '$lib/schema';
   import { splitFrontmatter } from '$lib/blocks';
   import { parseMdms } from '@swisd-project/mdms';
@@ -16,7 +16,9 @@
   let index = $state<PageIndex | null>(null);
   let selected = $state<SelectedPage | null>(null);
 
-  // establish session state once
+  // establish session state once — and check whether the bakery needs founding
+  let setupNeeded = $state(false);
+  let setupThemes = $state<readonly string[]>([]);
   $effect(() => {
     session()
       .then((s) => {
@@ -25,7 +27,80 @@
         role = s.role;
       })
       .catch(() => (authenticated = false));
+    setupStatus()
+      .then((st) => {
+        setupNeeded = st.needed;
+        setupThemes = st.themes;
+      })
+      .catch(() => {});
   });
+
+  // ——— first-visit setup wizard ———
+  let setupUser = $state('');
+  let setupPassword = $state('');
+  let setupSiteName = $state('');
+  let setupClaim = $state('');
+  let setupTheme = $state('bakery');
+  let setupBusy = $state(false);
+  let setupError = $state('');
+
+  async function foundBakery(event: SubmitEvent) {
+    event.preventDefault();
+    setupBusy = true;
+    setupError = '';
+    try {
+      const s = await runSetup({
+        user: setupUser.trim(),
+        password: setupPassword,
+        siteName: setupSiteName.trim(),
+        claim: setupClaim.trim(),
+        theme: setupTheme
+      });
+      setupNeeded = false;
+      authenticated = true;
+      user = s.user;
+      role = s.role;
+      setupPassword = '';
+    } catch (e) {
+      setupError = e instanceof Error ? e.message : String(e);
+    } finally {
+      setupBusy = false;
+    }
+  }
+
+  // ——— brand settings (admin) ———
+  let showSite = $state(false);
+  let siteSettings = $state<{ name: string; claim: string; logo: string; theme: string; home: string } | null>(null);
+  let siteBusy = $state(false);
+  let siteError = $state('');
+  let siteNote = $state('');
+
+  async function toggleSite() {
+    showSite = !showSite;
+    if (showSite && siteSettings === null) {
+      try {
+        siteSettings = { ...(await getSiteSettings()) };
+      } catch (e) {
+        siteError = e instanceof Error ? e.message : String(e);
+      }
+    }
+  }
+
+  async function saveSiteNow(event: SubmitEvent) {
+    event.preventDefault();
+    if (siteSettings === null) return;
+    siteBusy = true;
+    siteError = '';
+    siteNote = '';
+    try {
+      await saveSiteSettings(siteSettings);
+      siteNote = 'Saved. The public face updates on the next serve.';
+    } catch (e) {
+      siteError = e instanceof Error ? e.message : String(e);
+    } finally {
+      siteBusy = false;
+    }
+  }
 
   async function signIn(event: SubmitEvent) {
     event.preventDefault();
@@ -272,6 +347,22 @@
 <main class="shell">
   {#if authenticated === null}
     <p aria-live="polite">Reaching for the pantry…</p>
+  {:else if setupNeeded}
+    <form onsubmit={foundBakery} class="login setup">
+      <h1>Welcome to Schmarrn</h1>
+      <p class="setup-note">First visit — found the bakery. One admin account, one name, one theme.</p>
+      <input type="text" bind:value={setupUser} placeholder="admin username" autocomplete="username" required />
+      <input type="password" bind:value={setupPassword} placeholder="password (min 8)" minlength="8" autocomplete="new-password" required />
+      <input type="text" bind:value={setupSiteName} placeholder="site name" required />
+      <input type="text" bind:value={setupClaim} placeholder="claim (optional)" />
+      <select bind:value={setupTheme}>
+        {#each setupThemes as theme (theme)}
+          <option value={theme}>{theme}</option>
+        {/each}
+      </select>
+      <button type="submit" disabled={setupBusy}>{setupBusy ? 'Lighting the ovens…' : 'Found the bakery'}</button>
+      {#if setupError}<p class="error">{setupError}</p>{/if}
+    </form>
   {:else if authenticated === false}
     <form onsubmit={signIn} class="login">
       <h1>Schmarrn</h1>
@@ -321,6 +412,27 @@
         {/if}
 
         {#if role === 'admin'}
+          <button class="accounts-toggle" onclick={toggleSite}>
+            {showSite ? 'Hide site settings' : 'Site settings'}
+          </button>
+          {#if showSite && siteSettings}
+            <form class="site-settings" onsubmit={saveSiteNow}>
+              <input bind:value={siteSettings.name} placeholder="site name" required />
+              <input bind:value={siteSettings.claim} placeholder="claim" />
+              <input bind:value={siteSettings.logo} placeholder="logo (URL or /path)" />
+              <select bind:value={siteSettings.theme}>
+                {#each setupThemes as theme (theme)}
+                  <option value={theme}>{theme}</option>
+                {/each}
+              </select>
+              <input bind:value={siteSettings.home} placeholder="home slug (empty = first page)"
+                pattern="[a-z0-9]+(-[a-z0-9]+)*" title="lowercase, digits, hyphens — or empty" />
+              <button type="submit" disabled={siteBusy}>{siteBusy ? 'Saving…' : 'Save site'}</button>
+              {#if siteError}<p class="error">{siteError}</p>{/if}
+              {#if siteNote}<p class="account-note">{siteNote}</p>{/if}
+            </form>
+          {/if}
+
           <button class="accounts-toggle" onclick={toggleAccounts}>
             {showAccounts ? 'Hide accounts' : 'Accounts'}
           </button>
@@ -549,6 +661,8 @@
   .account-remove { border: 0; background: transparent; cursor: pointer; color: #b3004c; font-weight: bold; }
   .accounts select { font-size: 0.8rem; padding: 0.25rem; border: 1px solid #d8c7b2; border-radius: 4px; }
   .accounts { border: 1px solid #efe6d8; border-radius: 4px; padding: 0.5rem; }
+  .site-settings { border: 1px solid #efe6d8; border-radius: 4px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem; }
+  .setup-note { font-size: 0.85rem; color: #6f5d4f; margin: 0 0 0.75rem; }
   .account-actions { display: inline-flex; gap: 0.35rem; }
   .account-mail { border: 0; background: transparent; cursor: pointer; }
   .account-note { font-size: 0.75rem; opacity: 0.75; margin: 0.25rem 0 0; }

@@ -48,10 +48,10 @@ v1 — Schmarrn "known to work"
 [x] Clean URLs: front controller routes + `.htaccess` rewrite rules; 404/fallback (root index.php dispatches /api/* vs public; php -S router mode; smoke-tested)
 [x] Save-time render: dashboard client renders `parseMdms()` HTML → PHP stores + cache dir per-page hash files; site-mtime sentinel invalidation (publish route takes {html}; stale/missing → client fallback shell via committed api/assets/render.esm.js)
 [~] Public theme rendering (classical style + full-page slide style), artist reference theme installable via theme contract (manifest, assets, settings) — bakery classical + slide templates live (per-page `style:` frontmatter flag, theme `defaultStyle`, slide.html→page.html fallback); artist reference theme + install flow still open
-[~] Global brand settings (logo, claim, name) referenced across pages — Site\load/save + template placeholders done; dashboard settings UI still open
+[~] Global brand settings (logo, claim, name) referenced across pages — Site\load/save + template placeholders done; admin "Site settings" panel in dashboard (GET/PUT /api/site, admin-only, theme/home validated); logo upload flow still open
 [x] Read-only public JSON API per page (title, body HTML, children, files), CORS scoped — GET /api/public/{type}/{slug}; stale cache → bodyHtml null (consumer re-renders from raw); CORS: public routes answer `*` without credentials, dashboard routes keep reflected-origin + credentials
 [x] SEO/link-preview basics (og tags, titles)
-[ ] First-visit setup wizard (admin account, site name, theme)
+[x] First-visit setup wizard (admin account, site name, theme) — GET/POST /api/setup(+status), dashboard wizard on boot when no accounts exist, auto-login on found; template account store now ships EMPTY (no known credentials in the wild — the wizard is the door), accounts.local.php wins when present
 
 ## p4 dashboard chrome & design system
 [~] Design workbench FIRST (user-ordered 2026-10-28): `/design` publicly served (Serve\design → api/assets/design.html, static, no login) — all UI primitives (color tokens incl. proposed neons, type scale, buttons, forms, badges, feedback, cards, overlay bits) then composed patterns (header, hero, text/card-grid/form sections, footer). User guides the system's evolution from this page; tokens in ONE :root block. NEXT: iterate on user feedback, then port the settled system to the dashboard (Tailwind) + themes.

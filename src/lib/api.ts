@@ -172,6 +172,59 @@ export function session(): Promise<SessionInfo> {
   );
 }
 
+// ——— first-visit setup ———
+
+export interface SetupStatus {
+  readonly needed: boolean;
+  readonly themes: readonly string[];
+}
+
+export function setupStatus(): Promise<SetupStatus> {
+  return fetch('/api/setup/status').then((r) => json<SetupStatus>(r));
+}
+
+/** Bootstrap the bakery: first admin + brand settings, auto-login on success. */
+export function runSetup(payload: {
+  user: string;
+  password: string;
+  siteName: string;
+  claim?: string;
+  theme?: string;
+}): Promise<SessionInfo> {
+  return fetch('/api/setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).then((r) =>
+    json<SessionInfo>(r).then((s) => {
+      csrf = s.csrf;
+      return s;
+    })
+  );
+}
+
+// ——— brand settings (admin) ———
+
+export interface SiteSettings {
+  readonly name: string;
+  readonly claim: string;
+  readonly logo: string;
+  readonly theme: string;
+  readonly home: string;
+}
+
+export function getSiteSettings(): Promise<SiteSettings> {
+  return fetch('/api/site').then((r) => json<SiteSettings>(r));
+}
+
+export function saveSiteSettings(settings: SiteSettings): Promise<void> {
+  return fetch('/api/site', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify(settings)
+  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
+}
+
 // ——— account management (admin) ———
 
 export function listAccounts(): Promise<readonly AccountRef[]> {
