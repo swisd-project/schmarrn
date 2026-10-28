@@ -83,21 +83,50 @@ function page(string $type, string $slug, array $site): never
     exit;
 }
 
-// ——— theme contract: manifest + page.html + assets/, placeholders filled by str_replace ———
+// ——— theme contract: manifest + page.html/slide.html + assets/, placeholders filled
+// ——— by str_replace. Style comes from the page's frontmatter, default from the theme.
 
-/** The active theme: template + base URL. A broken theme falls back to the house template. */
-function theme(array $site): array
+/** Validated theme directory — a rogue theme name in settings falls back to bakery. */
+function themeDir(array $site): string
 {
     $name = $site['theme'];
     if (preg_match(IDENTIFIER, $name) !== 1) {
         $name = 'bakery';
     }
-    $dir = dirname(__DIR__) . '/themes/' . $name;
-    $template = is_file($dir . '/page.html') ? (string)file_get_contents($dir . '/page.html') : null;
-    if ($template === null) {
-        return ['name' => $name, 'base' => '/themes/' . $name . '/', 'template' => houseTemplate()];
+    return dirname(__DIR__) . '/themes/' . $name;
+}
+
+/** The theme manifest, or [] when absent/broken — never a fatal for decoration data. */
+function manifest(array $site): array
+{
+    $file = themeDir($site) . '/theme.json';
+    $manifest = is_file($file) ? json_decode((string)file_get_contents($file), true) : null;
+    return is_array($manifest) ? $manifest : [];
+}
+
+/** Page style: frontmatter byte-peek wins, else the theme's declared default. */
+function styleOf(string $type, string $slug, array $site): string
+{
+    $raw = \Store\read($type, $slug);
+    if ($raw !== null && preg_match('/^style:\s*["\']?(slide|classical)["\']?\s*$/m', $raw, $m) === 1) {
+        return $m[1];
     }
-    return ['name' => $name, 'base' => '/themes/' . $name . '/', 'template' => $template];
+    return (manifest($site)['defaultStyle'] ?? null) === 'slide' ? 'slide' : 'classical';
+}
+
+/** Template for a style; a theme without slide.html falls back to its classical floor. */
+function themeTemplate(array $site, string $style): array
+{
+    $dir = themeDir($site);
+    $base = '/themes/' . basename($dir) . '/';
+    $candidates = $style === 'slide' ? ['slide.html', 'page.html'] : ['page.html'];
+    foreach ($candidates as $candidate) {
+        $file = $dir . '/' . $candidate;
+        if (is_file($file)) {
+            return ['base' => $base, 'template' => (string)file_get_contents($file)];
+        }
+    }
+    return ['base' => $base, 'template' => houseTemplate()];
 }
 
 /** Last-resort template when the configured theme is missing or broken. */
@@ -188,7 +217,7 @@ function seoHead(string $pageTitle, string $siteName, string $path): string
 /** The fallback shell: themed page whose body re-renders client-side from the raw .md. */
 function shell(array $site, string $type, string $slug): string
 {
-    $theme = theme($site);
+    $theme = themeTemplate($site, styleOf($type, $slug, $site));
     $title = titleOf($type, $slug, $slug);
     $body = '<div class="sm-fallback" data-schmarrn-root data-type="' . htmlspecialchars($type, ENT_QUOTES)
         . '" data-slug="' . htmlspecialchars($slug, ENT_QUOTES) . '"></div>' . "\n"
@@ -201,7 +230,7 @@ function notFound(array $site): never
 {
     http_response_code(404);
     header('Content-Type: text/html; charset=utf-8');
-    $theme = theme($site);
+    $theme = themeTemplate($site, 'classical');
     $body = '<article class="sm-notfound"><h1>404</h1>'
         . '<p>This page has left the display case.</p>'
         . '<p><a href="/">Back to the front</a></p></article>';

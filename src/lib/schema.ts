@@ -14,7 +14,9 @@ export const PageFrontmatterSchema = z.object({
   published: z.boolean().default(true),
   draft: z.boolean().default(false),
   date: z.coerce.date().optional(),
-  tags: z.array(z.string().min(1)).default([])
+  tags: z.array(z.string().min(1)).default([]),
+  /** Serving style: full-screen slide (v1 standard) or classical with menu. Absent = theme default. */
+  style: z.enum(['slide', 'classical']).optional()
 });
 
 export type PageFrontmatter = z.infer<typeof PageFrontmatterSchema>;

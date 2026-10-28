@@ -90,6 +90,38 @@ main hr { border: none; border-top: 2px dashed var(--line); margin: 2.5rem 0; }
 /* Client-side fallback shell target — brief blank while the browser bakes. */
 .sm-fallback:empty { min-height: 40vh; }
 
+/* ——— slide style: the full-screen page standard ——— */
+body.slide {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: linear-gradient(160deg, var(--batter) 0%, var(--crust) 55%, var(--blossom) 130%);
+}
+
+.slide-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 52rem;
+  width: 100%;
+  margin: 0 auto;
+  padding: 3rem 2rem;
+}
+
+.slide-stage h1 { font-size: clamp(2.2rem, 6vw, 4rem); }
+.slide-stage h2 { font-size: clamp(1.6rem, 4vw, 2.4rem); }
+.slide-stage p  { font-size: clamp(1.05rem, 2vw, 1.3rem); }
+
+.slide-foot {
+  display: flex;
+  justify-content: space-between;
+  padding: 1rem 2rem;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  border-top: 2px dashed var(--line);
+}
+
 .sm-notfound { text-align: center; padding: 3rem 0; }
 .sm-notfound h1 { font-size: 4rem; margin: 0; color: var(--jam); }
 

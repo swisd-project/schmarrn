@@ -3,6 +3,8 @@
   "title": "Bakery",
   "version": "0.1.0",
   "style": "classical",
+  "defaultStyle": "classical",
+  "styles": ["classical", "slide"],
   "description": "The house loaf — warm bakery default theme.",
   "placeholders": [
     "siteName",
