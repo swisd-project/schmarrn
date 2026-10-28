@@ -21,9 +21,11 @@
     releaseLock,
     listMedia,
     uploadMedia,
+    renamePage,
     ConflictError
   } from '$lib/api';
   import { renderMdms, frontmatterError } from '$lib/render';
+  import { parseMdms } from '@swisd-project/mdms';
   import { splitFrontmatter, splitBlocks, joinPage, directiveInner, attr, type Block } from '$lib/blocks';
   import type { SelectedPage } from '$lib/types';
   import type { MediaRef } from '$lib/api';
@@ -33,9 +35,11 @@
     published?: boolean;
     currentUserName?: string;
     onsaved?: () => void;
+    /** Fired after the settings form renamed the page — the parent re-points its selection. */
+    onrenamed?: (slug: string) => void;
   }
 
-  let { page, published = false, currentUserName = '', onsaved }: Props = $props();
+  let { page, published = false, currentUserName = '', onsaved, onrenamed }: Props = $props();
 
   let raw = $state<string>('');
   let loadedFor = $state<string>('');
@@ -296,7 +300,16 @@
     | { kind: 'image'; index: number; isNew: boolean; file: string; caption: string; inner: string }
     | { kind: 'video'; index: number; isNew: boolean; url: string; file: string }
     | { kind: 'embed'; index: number; isNew: boolean; url: string }
-    | { kind: 'settings'; value: string };
+    | {
+        kind: 'settings';
+        title: string;
+        slug: string;
+        style: string;
+        date: string;
+        tagsText: string;
+        draftFlag: boolean;
+        publishedFlag: boolean;
+      };
 
   let modal = $state<Modal | null>(null);
   let modalError = $state('');
@@ -348,7 +361,99 @@
 
   function openSettings() {
     modalError = '';
-    modal = { kind: 'settings', value: canvas?.split.frontmatter ?? '' };
+    const fm = canvas?.split.frontmatter ?? '';
+    // Best-effort parse; a broken frontmatter falls back to regex peeks + defaults —
+    // saving the form then REBUILDS valid YAML, which is the escape hatch out of
+    // a validation dead end.
+    let data: Record<string, unknown> = {};
+    try {
+      parseMdms(`${fm}\n`, {
+        validateFrontmatter: (d) => {
+          data = d as Record<string, unknown>;
+          return data;
+        }
+      });
+    } catch {
+      data = {};
+    }
+    const peek = (key: string): string =>
+      new RegExp(`^\\s*${key}:\\s*(.+)$`, 'm').exec(fm)?.[1]?.trim() ?? '';
+    const unquote = (value: string): string =>
+      value.length >= 2 && (value.startsWith('"') || value.startsWith("'")) && value.endsWith(value[0])
+        ? value.slice(1, -1)
+        : value;
+    const title =
+      typeof data.title === 'string' && data.title !== '' ? data.title : unquote(peek('title')) || page.slug;
+    const slugCandidate = typeof data.slug === 'string' ? data.slug : '';
+    const slug = /^[a-z0-9]+(-[a-z0-9]+)*$/.test(slugCandidate) ? slugCandidate : page.slug;
+    const styleCandidate = data.style === 'slide' || data.style === 'classical' ? data.style : peek('style');
+    const style = styleCandidate === 'slide' || styleCandidate === 'classical' ? styleCandidate : '';
+    const datePeek = peek('date').replace(/["']/g, '');
+    const date =
+      data.date instanceof Date
+        ? data.date.toISOString().slice(0, 10)
+        : /^\d{4}-\d{2}-\d{2}$/.test(datePeek)
+          ? datePeek
+          : new Date().toISOString().slice(0, 10);
+    const tagsText = Array.isArray(data.tags) ? data.tags.filter((t) => typeof t === 'string').join(', ') : '';
+    const draftFlag = /^\s*draft:\s*true\b/m.test(fm);
+    const publishedFlag = /^\s*published:\s*false\b/m.test(fm) ? false : true;
+    modal = { kind: 'settings', title, slug, style, date, tagsText, draftFlag, publishedFlag };
+  }
+
+  /** Canonical frontmatter from the settings form — valid YAML by construction. */
+  function buildFrontmatter(m: Extract<Modal, { kind: 'settings' }>): string {
+    const tags = m.tagsText.split(',').map((t) => t.trim()).filter(Boolean);
+    const lines = [
+      '---',
+      `title: ${JSON.stringify(m.title.trim())}`,
+      `slug: ${m.slug.trim()}`,
+      `published: ${m.publishedFlag}`,
+      `draft: ${m.draftFlag}`,
+      `date: ${m.date !== '' ? m.date : new Date().toISOString().slice(0, 10)}`,
+      `tags: [${tags.map((t) => JSON.stringify(t)).join(', ')}]`
+    ];
+    if (m.style !== '') lines.push(`style: ${m.style}`);
+    lines.push('---');
+    return lines.join('\n');
+  }
+
+  /** Settings save: rebuild the frontmatter from the form; a changed slug renames the page. */
+  async function saveSettings(event: SubmitEvent) {
+    event.preventDefault();
+    if (modal === null || modal.kind !== 'settings') return;
+    const m = modal;
+    const slug = m.slug.trim();
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) {
+      modalError = 'Slug: lowercase letters, digits and hyphens only.';
+      return;
+    }
+    if (m.title.trim() === '') {
+      modalError = 'The title cannot be empty.';
+      return;
+    }
+    const body = splitFrontmatter(raw).body;
+    const next = joinPage({ frontmatter: buildFrontmatter(m), body: '' }, splitBlocks(body));
+    modalError = '';
+    try {
+      if (slug !== page.slug) {
+        // Flush the rebuilt document to the sidecar BEFORE the directory moves,
+        // then rename; the parent re-points the selection and the editor remounts.
+        baseHash = await writeDraft(page.type, page.slug, next, baseHash);
+        await renamePage(page.type, page.slug, slug);
+        raw = next;
+        saveState = 'saved';
+        hasDraftCopy = true;
+        closeModal();
+        onsaved?.();
+        onrenamed?.(slug);
+      } else {
+        queueAutosave(next);
+        closeModal();
+      }
+    } catch (e) {
+      modalError = e instanceof Error ? e.message : String(e);
+    }
   }
 
   function closeModal() {
@@ -360,11 +465,6 @@
     event.preventDefault();
     const m = modal;
     if (m === null) return;
-    if (m.kind === 'settings') {
-      withBlocks((bs) => bs, m.value);
-      closeModal();
-      return;
-    }
     if (m.kind === 'text') {
       if (m.isNew) insertBlock(m.index, { kind: 'text', source: m.value });
       else saveBlockSource(m.index, m.value);
@@ -397,7 +497,8 @@
       closeModal();
       return;
     }
-    // embed
+    // embed — the last branch; settings went through saveSettings instead
+    if (m.kind !== 'embed') return;
     if (!/^https?:\/\//i.test(m.url.trim())) {
       modalError = 'Embeds need an http(s) URL.';
       return;
@@ -468,7 +569,7 @@
       </span>
     {/if}
     {#if schemaWarning}
-      <span class="v-error" role="alert">{schemaWarning}</span>
+      <span class="v-error" role="alert">{schemaWarning} — open ⚙ Page settings and save the form to rebuild the frontmatter.</span>
     {/if}
     {#if error}
       <span class="v-error" role="alert">{error}</span>
@@ -522,7 +623,23 @@
         {@html canvas.html[i].html}
       </div>
     {:else}
-      <p class="empty">Empty page. Use the floating menu's Add row once something is selected — or start with Page settings.</p>
+      <div class="starter">
+        <p class="empty">
+          {#if schemaWarning}
+            This page's frontmatter is broken — that's why it looks empty. Open
+            <strong>⚙ Page settings</strong> and save the form: it rebuilds valid frontmatter from
+            the fields, and the error clears. Or start adding content right here:
+          {:else}
+            Empty page — start with a block:
+          {/if}
+        </p>
+        <div class="menu-row add starter-row">
+          <button onclick={addText}>Text</button>
+          <button onclick={() => addModule('image')}>Image</button>
+          <button onclick={() => addModule('video')}>Video</button>
+          <button onclick={() => addModule('embed')}>Embed</button>
+        </div>
+      </div>
     {/each}
 
     {#if canvas !== null && selected !== null && menuPos !== null && conflictHash === ''}
@@ -620,8 +737,35 @@
           <input bind:value={modal.url} placeholder="https://www.youtube.com/embed/…" />
         </label>
       {:else}
-        <textarea bind:value={modal.value} rows="8" spellcheck="false"></textarea>
-        <p class="hint">YAML frontmatter — title, draft flag, per-type fields.</p>
+        <label class="field">
+          <span>Title</span>
+          <input bind:value={modal.title} required placeholder="Page title" />
+        </label>
+        <label class="field">
+          <span>Slug (URL)</span>
+          <input bind:value={modal.slug} required pattern="[a-z0-9]+(-[a-z0-9]+)*"
+            title="lowercase letters, digits, hyphens" />
+          {#if modal.slug.trim() !== page.slug}
+            <span class="hint warn-hint">Saving renames the page to <code>{modal.slug.trim()}</code>.</span>
+          {/if}
+        </label>
+        <label class="field">
+          <span>Serve as</span>
+          <select bind:value={modal.style}>
+            <option value="">Theme default</option>
+            <option value="slide">Slide — full screen</option>
+            <option value="classical">Classical — with menu</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Date</span>
+          <input type="date" bind:value={modal.date} />
+        </label>
+        <label class="field">
+          <span>Tags (comma-separated)</span>
+          <input bind:value={modal.tagsText} placeholder="studio, 2026" />
+        </label>
+        <p class="hint">Saving rebuilds the frontmatter from these fields — a broken one gets fixed in the same breath. Visibility stays with the Publish / Unpublish buttons.</p>
       {/if}
 
       {#if modalError}<p class="error" role="alert">{modalError}</p>{/if}
@@ -674,6 +818,14 @@
   .block :global(iframe) { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 8px; }
   .block-warning { color: #b3004c; font-size: 0.8rem; }
   .empty { opacity: 0.55; font-style: italic; }
+  .starter { border: 1px dashed #e8d9c5; border-radius: 8px; padding: 1rem; }
+  .starter .empty { margin: 0 0 0.6rem; }
+  .starter-row button {
+    font-size: 0.8rem; border: 1px solid #e8d9c5; background: #fff;
+    border-radius: 6px; padding: 0.25rem 0.6rem; cursor: pointer;
+  }
+  .starter-row button:hover { background: #fff4e6; }
+  .warn-hint { color: #7a4a00; }
 
   .menu {
     position: absolute; z-index: 20;

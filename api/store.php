@@ -237,13 +237,16 @@ function move(string $type, string $slug, string $newSlug): void
 {
     assertPageExists($type, $slug);
     assertIdentifier($newSlug, 'new slug');
+    if ($newSlug === $slug) {
+        return; // renaming to the same name is a no-op, not a crime
+    }
     $from = pageDir($type, $slug);
     $to = pageDir($type, $newSlug);
     if (is_dir($to)) {
-        \Router\refuse(409, "Target exists: {$type}/{$newSlug}");
+        \Router\refuse(409, "Another page already uses the name \"{$newSlug}\" — pick a different slug.");
     }
     if (!@\rename($from, $to)) {
-        \Router\refuse(500, 'Rename failed.');
+        \Router\refuse(500, 'Rename failed on the server — the page is untouched.');
     }
 }
 

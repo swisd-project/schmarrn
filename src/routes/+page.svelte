@@ -387,11 +387,20 @@
               {#each pages as page (page.slug)}
                 <li>
                   {#if renaming?.type === type && renaming?.slug === page.slug}
+                    {@const to = renaming.value.trim().toLowerCase()}
+                    {@const unchanged = to === renaming?.slug}
+                    {@const taken = (index?.[type] ?? []).some((p) => p.slug === to && p.slug !== renaming?.slug)}
                     <form class="rename" onsubmit={commitRename}>
                       <input bind:value={renaming.value} pattern="[a-z0-9]+(-[a-z0-9]+)*" required />
-                      <button type="submit">✓</button>
+                      <button type="submit" disabled={unchanged || taken} title={unchanged ? 'Name unchanged' : taken ? 'Already taken' : 'Rename'}>✓</button>
                       <button type="button" onclick={() => (renaming = null)}>×</button>
-                      {#if renameError}<span class="rename-error">{renameError}</span>{/if}
+                      {#if unchanged}
+                        <span class="rename-hint">Same name — change it or close.</span>
+                      {:else if taken}
+                        <span class="rename-error">Another page already uses “{to}”.</span>
+                      {:else if renameError}
+                        <span class="rename-error">{renameError}</span>
+                      {/if}
                     </form>
                   {:else}
                     <button
@@ -501,6 +510,10 @@
                 published={selectedPublished}
                 currentUserName={user}
                 onsaved={refreshIndex}
+                onrenamed={(slug) => {
+                  if (selected) selected = { ...selected, slug };
+                  refreshIndex();
+                }}
               />
             {/key}
           {/if}
@@ -619,6 +632,7 @@
   .rename { display: flex; gap: 0.2rem; width: 100%; flex-wrap: wrap; }
   .rename input { width: 100%; font-size: 0.8rem; padding: 0.15rem 0.3rem; border: 1px solid #d8c7b2; border-radius: 4px; }
   .rename-error { flex-basis: 100%; color: #b3004c; font-size: 0.7rem; }
+  .rename-hint { flex-basis: 100%; color: #6f5d4f; font-size: 0.7rem; }
   .overlay {
     position: fixed; inset: 0; background: rgba(40, 25, 15, 0.45);
     display: grid; place-items: center; z-index: 50;
