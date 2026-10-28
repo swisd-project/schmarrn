@@ -106,6 +106,13 @@ textarea.sm-input { resize:vertical; min-height:8rem; font-family:ui-monospace,m
 .sm-alert-err { background:rgba(194,58,43,.12); color:var(--color-error); }
 .sm-alert-ok { background:rgba(77,143,95,.14); color:var(--color-ok); }
 .sm-alert-warn { background:rgba(201,138,27,.14); color:var(--color-warn); }
+.sm-edit-starter {
+  min-height: 9rem; display: grid; place-items: center;
+  border: 2px dashed var(--color-line); border-radius: 4px;
+  color: var(--color-ink-soft); font-style: italic;
+  transition: border-color var(--lift), color var(--lift);
+}
+.sm-edit-starter:hover { border-color: var(--color-neon-blue); color: var(--color-ink); }
 .sm-float {
   position:fixed; z-index:9997; display:flex; flex-direction:column; gap:.25rem;
   background:var(--color-ink); color:#fff; padding:.35rem; border-radius:4px;
@@ -192,8 +199,13 @@ async function boot(root: HTMLElement): Promise<void> {
     blocks = splitBlocks(split.body);
     root.innerHTML = '';
     if (blocks.length === 0) {
-      const starter = el('div', { class: 'sm-edit-starter' }, [
-        el('p', { style: 'font-style:italic;opacity:.6' }, ['Empty page — add a block from the burger menu.'])
+      // The empty page is itself the target: click it and the insert menu appears.
+      const starter = el('div', {
+        'data-sm-block': '1',
+        'data-sm-empty': '1',
+        class: 'sm-edit-starter'
+      }, [
+        el('p', {}, ['Empty page — click here to add your first block.'])
       ]);
       root.append(starter);
       return;
@@ -289,7 +301,13 @@ async function boot(root: HTMLElement): Promise<void> {
       const holder = (e.target as HTMLElement).closest<HTMLElement>('[data-sm-block]');
       if (holder === null) return;
       e.stopPropagation();
-      select([...root.children].indexOf(holder), e as MouseEvent);
+      const click = e as MouseEvent;
+      if (holder.dataset.smEmpty !== undefined) {
+        // The empty page: no block to select — the menu is insert-only, at index 0.
+        showFloatMenu(click.clientX, click.clientY, null, true);
+        return;
+      }
+      select([...root.children].indexOf(holder), click);
     });
   }
 
@@ -300,7 +318,7 @@ async function boot(root: HTMLElement): Promise<void> {
       if (i === index) child.setAttribute('data-sm-selected', '1');
       else child.removeAttribute('data-sm-selected');
     });
-    showFloatMenu(click.clientX, click.clientY);
+    showFloatMenu(click.clientX, click.clientY, index);
   }
 
   function deselect(): void {
@@ -310,27 +328,28 @@ async function boot(root: HTMLElement): Promise<void> {
     floatMenu = null;
   }
 
-  function showFloatMenu(x: number, y: number): void {
+  function showFloatMenu(x: number, y: number, index: number | null, isEmpty = false): void {
     floatMenu?.remove();
-    if (selected === null) return;
-    const index = selected;
-    const block = blocks[index];
-    const isModule = block.kind === 'module';
+    const insertAt = isEmpty ? 0 : (index as number) + 1;
     const menu = el('div', { class: 'sm-float' });
-    const row = el('div', { class: 'sm-float-row' }, [
-      el('button', { onclick: () => (isModule ? openModuleModal(index) : openTextModal(index)) }, [isModule ? 'Edit module' : 'Edit text']),
-      el('button', { title: 'Move up', disabled: index === 0, onclick: () => void move(index, -1) }, ['↑']),
-      el('button', { title: 'Move down', disabled: index === blocks.length - 1, onclick: () => void move(index, 1) }, ['↓']),
-      el('button', { class: 'sm-danger', onclick: () => void remove(index) }, ['Delete'])
+    if (!isEmpty && index !== null) {
+      const block = blocks[index];
+      const isModule = block.kind === 'module';
+      menu.append(el('div', { class: 'sm-float-row' }, [
+        el('button', { onclick: () => (isModule ? openModuleModal(index) : openTextModal(index)) }, [isModule ? 'Edit module' : 'Edit text']),
+        el('button', { title: 'Move up', disabled: index === 0, onclick: () => void move(index, -1) }, ['↑']),
+        el('button', { title: 'Move down', disabled: index === blocks.length - 1, onclick: () => void move(index, 1) }, ['↓']),
+        el('button', { class: 'sm-danger', onclick: () => void remove(index) }, ['Delete'])
+      ]));
+    }
+    const add = el('div', { class: `sm-float-row${isEmpty ? '' : ' sm-float-add'}` }, [
+      el('span', { style: 'font-size:11px;opacity:.7;align-self:center' }, [isEmpty ? 'Insert:' : 'Add:']),
+      el('button', { onclick: () => openTextModal(insertAt, true) }, ['Text']),
+      el('button', { onclick: () => openModuleModal(insertAt, 'image', true) }, ['Image']),
+      el('button', { onclick: () => openModuleModal(insertAt, 'video', true) }, ['Video']),
+      el('button', { onclick: () => openModuleModal(insertAt, 'embed', true) }, ['Embed'])
     ]);
-    const add = el('div', { class: 'sm-float-row sm-float-add' }, [
-      el('span', { style: 'font-size:11px;opacity:.7;align-self:center' }, ['Add:']),
-      el('button', { onclick: () => openTextModal(index + 1, true) }, ['Text']),
-      el('button', { onclick: () => openModuleModal(index + 1, 'image', true) }, ['Image']),
-      el('button', { onclick: () => openModuleModal(index + 1, 'video', true) }, ['Video']),
-      el('button', { onclick: () => openModuleModal(index + 1, 'embed', true) }, ['Embed'])
-    ]);
-    menu.append(row, add);
+    menu.append(add);
     // Keep the menu on-screen.
     const left = Math.min(x, window.innerWidth - 240);
     const top = Math.min(y + 8, window.innerHeight - 120);
