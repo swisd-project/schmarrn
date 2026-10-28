@@ -465,6 +465,10 @@
     event.preventDefault();
     const m = modal;
     if (m === null) return;
+    if (m.kind === 'settings') {
+      void saveSettings(event);
+      return;
+    }
     if (m.kind === 'text') {
       if (m.isNew) insertBlock(m.index, { kind: 'text', source: m.value });
       else saveBlockSource(m.index, m.value);
