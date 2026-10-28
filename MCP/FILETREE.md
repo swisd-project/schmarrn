@@ -31,12 +31,12 @@
 │   │   ├── theme.json
 │   │   ├── page.html             # {{placeholders}} incl. {{navHtml}} — str_replace only
 │   │   ├── slide.html
-│   │   └── assets/bakery.css
+│   │   └── assets/{bakery.css,deck.js}     # deck.js: measured slide heights + gliding anchors (helper script, slide.html includes it)
 │   └── atelier/                  # artist presentation theme (slide-first, depth system)
 │       ├── theme.json
 │       ├── page.html
 │       ├── slide.html
-│       └── assets/atelier.css
+│       └── assets/{atelier.css,deck.js}   # same helper script, same law
 ├── scripts/
 │   ├── build-fallback.mjs        # esbuild → api/assets/render.esm.js (committed)
 │   ├── build-edit.mjs            # esbuild → api/assets/edit.esm.js (committed live-page editor)
@@ -73,7 +73,7 @@
 │   ├── lib/
 │   │   ├── api.ts                # typed fetcher for /api (dashboard-facing surface only — the live editor fetches /api directly)
 │   │   ├── blocks.ts             # block model: splitBlocks/joinPage (exact source spans)
-│   │   ├── modules.ts            # the module wall: directive allowlist → hast — image (+fillable empty slot), video, embed, slide (vertical deck: anchorId() + per-render usedIds registry, titles → anchors for in-page links), note (tip/warn), details, more (+fold); unknown → p.sm-unknown-module, hostile attrs dead at the stamper
+│   │   ├── modules.ts            # the module wall: directive allowlist → hast — image (+fillable empty slot), video, embed, slide (vertical deck: anchorId() + per-render usedIds registry, titles → anchors; themes ship assets/deck.js for measured heights + gliding anchor links), note (tip/warn), details, more (+fold); unknown → p.sm-unknown-module, hostile attrs dead at the stamper
 │   │   ├── render.ts             # THE one render pipeline (fallback + editor share it)
 │   │   ├── schema.ts             # Zod: PageFrontmatter (blog left for plugin-land)
 │   │   └── app.css               # tokens: crust/batter/raisin/jam

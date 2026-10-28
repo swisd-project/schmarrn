@@ -167,21 +167,23 @@ body.slide {
   font-style: italic;
 }
 
-/* ——— the deck: :::slide containers paginate the stage (scroll-snap, no JS) ——— */
+/* ——— the deck: :::slide containers paginate the stage — CSS snaps, deck.js glides the anchors ——— */
 .slide-stage:has(> .sm-slide) {
   flex-direction: column;
+  justify-content: flex-start; /* centered+overflow = sliced tops; never center a scroller */
   align-items: stretch;
   overflow-y: auto;
   overflow-x: hidden;
   scroll-snap-type: y mandatory;
-  scroll-behavior: smooth;
   max-width: none;
   padding: 0;
   margin: 0;
+  scrollbar-width: none; /* the deck is the scrollbar */
 }
+.slide-stage:has(> .sm-slide)::-webkit-scrollbar { display: none; }
 .slide-stage:has(> .sm-slide) > * {
   flex: 0 0 auto;
-  min-height: 100%;
+  min-height: var(--sm-slide-h, 100%); /* deck.js measures; CSS is the fallback */
   scroll-snap-align: start;
 }
 .sm-slide {
