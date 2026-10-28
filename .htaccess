@@ -12,10 +12,10 @@ RewriteEngine On
 # NEVER wears a login face — this is the only door.
 RewriteRule ^_(/|$) - [L]
 
-# Real files ONLY in the public static whitelist (themes, api/assets, dashboard/ —
-# and plugin assets). Plugin CODE is never whitelisted: a direct hit on
+# Real files ONLY in the public static whitelist (themes, api/assets — and plugin
+# assets). Plugin CODE is never whitelisted: a direct hit on
 # plugins/<name>/plugin.php must not execute. The front controller itself passes too.
-RewriteCond %{REQUEST_URI} ^/?(themes|api/assets|dashboard)/ [OR]
+RewriteCond %{REQUEST_URI} ^/?(themes|api/assets)/ [OR]
 RewriteCond %{REQUEST_URI} ^/?plugins/[a-z0-9-]+/assets/ [OR]
 RewriteCond %{REQUEST_URI} ^/?index\.php$
 RewriteCond %{REQUEST_FILENAME} -f

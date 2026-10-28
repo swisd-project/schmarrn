@@ -452,31 +452,6 @@ try {
             break;
 
         // ——— edit locks: heartbeat in warm, silence and polite exit free ———
-        case $method === 'PUT' && preg_match('#^lock/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
-            if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
-            }
-            Auth\assertCsrf();
-            [, $type, $slug] = explode('/', $path);
-            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
-            Lock\acquire($type, $slug, Auth\user(), ($body['force'] ?? null) === true);
-            echo json_encode(Lock\peek($type, $slug));
-            break;
-        case $method === 'GET' && preg_match('#^lock/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
-            [, $type, $slug] = explode('/', $path);
-            echo json_encode(Lock\peek($type, $slug));
-            break;
-        case $method === 'DELETE' && preg_match('#^lock/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
-            if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
-            }
-            Auth\assertCsrf();
-            [, $type, $slug] = explode('/', $path);
-            Lock\release($type, $slug, Auth\user());
-            echo json_encode(['ok' => true]);
-            break;
-
-
         // ——— page lifecycle: delete + rename (lock-gated, CSRF-gated) ———
         case $method === 'DELETE' && preg_match('#^page/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             if (!Auth\check()) {

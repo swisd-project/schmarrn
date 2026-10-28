@@ -43,7 +43,7 @@
 │   └── (*.mts)                   # dev probes
 ├── api/                          # PHP core — front controller + libs, no framework
 │   ├── .htaccess                 # legacy (root .htaccess is the law now)
-│   ├── index.php                 # JSON routes: login/session, pages, drafts, publish(+html), pagetypes, public API, media, locks, plugins
+│   ├── index.php                 # JSON routes: login/session, pages, drafts, publish(+html), pagetypes, public API, media, plugins
 │   ├── serve.php                 # public serving engine: dispatch, themes, cached HTML, fallback shell, SEO head, plugin fills, editor injection; styleOf: page frontmatter → GLOBAL site style → theme default
 │   ├── site.php                  # brand settings load/save (template < site.local.php) + site assets (.assets/); `style` = GLOBAL template ('' | classical | slide, whitelist-validated)
 │   ├── plugins.php               # p6 capability contract: scan/validate/load/dispatch, state in config/plugins.local.php
@@ -51,7 +51,7 @@
 │   ├── auth.php                  # Argon2id password, session, 24h
 │   ├── accounts.php              # file-backed account store + invites
 │   ├── mail.php                  # SMTP via vendored PHPMailer
-│   ├── lock.php                  # edit locks
+│   ├── lock.php                  # write-path lock gates (acquire + assertFreeOrMine; TTL frees cold locks; HTTP lock endpoints retired with the canvas)
 │   ├── store.php                 # content store: list/read/write (atomic), slug discipline
 │   ├── cache.php                 # raw cache + rendered-HTML cache (storeHtml/htmlStale), mtime sentinels
 │   ├── assets/
@@ -69,10 +69,9 @@
 ├── src/
 │   ├── app.html
 │   ├── app.d.ts
-│   ├── hooks.server.ts
 │   ├── package.json → moved to root (drag artifact, do not recreate)
 │   ├── lib/
-│   │   ├── api.ts                # typed fetcher for /api
+│   │   ├── api.ts                # typed fetcher for /api (dashboard-facing surface only — the live editor fetches /api directly)
 │   │   ├── blocks.ts             # block model: splitBlocks/joinPage (exact source spans)
 │   │   ├── modules.ts            # the module wall: directive allowlist → hast (incl. empty-slot placeholder)
 │   │   ├── render.ts             # THE one render pipeline (fallback + editor share it)

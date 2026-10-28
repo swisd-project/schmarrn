@@ -2,8 +2,8 @@
  * 1. Relative path: src/lib/api.ts
  * 2. Description: Typed fetcher for the PHP /api core. Zero stringly-typed URLs.
  * 3. Expects: The PHP front controller to be reachable at /api (dev: Vite proxy to :8080).
- * 4. Provides: listPages, readPage, writePage, login, logout, session, account CRUD,
- *              CSRF token relay (header on every mutating call).
+ * 4. Provides: pageCount, createPage, deletePage, renamePage, login, logout, session,
+ *              site settings, accounts, plugins, media sweep, CSRF token relay.
  * 5. SPDX-License-Identifier: MPL-2.0
  * 6. Copyright (c) 2026 Homahuki GmbH
  */
@@ -44,86 +44,10 @@ export function pageCount(): Promise<PageIndex> {
   return fetch('/api/pages').then((r) => json<PageIndex>(r));
 }
 
-export async function readPage(type: string, slug: string): Promise<string> {
-  const res = await fetch(`/api/page/${type}/${slug}`);
-  if (!res.ok) throw new Error(`API ${res.status}`);
-  return res.text();
-}
-
-export function writePage(type: string, slug: string, raw: string): Promise<void> {
-  return updatePage('PUT', type, slug, raw);
-}
-
-// ——— editorial copies + publishing ———
-
-/** Raised when a guarded draft save hits a newer server copy (409). */
-export class ConflictError extends Error {
-  /** Fingerprint of the server's current copy — empty when unknown. */
-  readonly serverHash: string;
-  constructor(serverHash: string) {
-    super('Draft changed elsewhere since you started editing.');
-    this.name = 'ConflictError';
-    this.serverHash = serverHash;
-  }
-}
-
-export async function readDraft(type: string, slug: string): Promise<{ raw: string; hasDraft: boolean; hash: string }> {
-  const res = await fetch(`/api/draft/${type}/${slug}`);
-  if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `API ${res.status}`);
-  }
-  const raw = await res.text();
-  return { raw, hasDraft: res.headers.get('X-Has-Draft') === '1', hash: res.headers.get('X-Content-Hash') ?? '' };
-}
-
-/** Guarded autosave. With baseHash set, a stale save throws ConflictError instead
- *  of clobbering — the flaky-internet guardrail. Omit baseHash to force-overwrite. */
-export async function writeDraft(type: string, slug: string, raw: string, baseHash?: string): Promise<string> {
-  const res = await fetch(`/api/draft/${type}/${slug}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'text/markdown',
-      'X-CSRF-Token': csrfToken(),
-      ...(baseHash ? { 'X-Base-Hash': baseHash } : {})
-    },
-    body: raw
-  });
-  if (res.status === 409) {
-    throw new ConflictError(res.headers.get('X-Current-Hash') ?? '');
-  }
-  const body = await json<{ ok: boolean; hash: string }>(res);
-  return body.hash;
-}
-
-export function publishPage(type: string, slug: string, html?: string): Promise<void> {
-  // With html: the browser-rendered body rides along (GOSPEL serving law — PHP
-  // never parses Markdown). Without: publish only, fallback shell covers serving.
-  const hasHtml = typeof html === 'string';
-  return fetch(`/api/draft/${type}/${slug}/publish`, {
-    method: 'POST',
-    headers: {
-      'X-CSRF-Token': csrfToken(),
-      ...(hasHtml ? { 'Content-Type': 'application/json' } : {})
-    },
-    ...(hasHtml ? { body: JSON.stringify({ html }) } : {})
-  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
-}
-
-export function unpublishPage(type: string, slug: string): Promise<void> {
-  return fetch(`/api/draft/${type}/${slug}/unpublish`, {
-    method: 'POST',
-    headers: { 'X-CSRF-Token': csrfToken() }
-  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
-}
-
-async function updatePage(method: 'PUT' | 'POST', type: string, slug: string, raw: string): Promise<never | void> {
-  await fetch(`/api/page/${type}/${slug}`, {
-    method,
-    headers: { 'Content-Type': 'text/markdown', 'X-CSRF-Token': csrfToken() },
-    body: raw
-  }).then((r) => json<{ ok: boolean }>(r));
-}
+// ——— editorial flow ———
+// (The live editor speaks to /api/draft + /api/draft/<t>/<s>/publish directly —
+// raw fetch with the X-Base-Hash conflict guard. The dashboard only creates,
+// deletes and renames; the guarded draft save lives in src/public/edit.ts.)
 
 export function login(user: string, password: string): Promise<SessionInfo> {
   return fetch('/api/login', {
@@ -144,7 +68,11 @@ export function logout(): Promise<void> {
 }
 
 export function createPage(type: string, slug: string, raw: string): Promise<void> {
-  return updatePage('POST', type, slug, raw);
+  return fetch(`/api/page/${type}/${slug}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/markdown', 'X-CSRF-Token': csrfToken() },
+    body: raw
+  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
 }
 
 export function deletePage(type: string, slug: string): Promise<void> {
@@ -278,17 +206,6 @@ export function addAccount(
   }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
 }
 
-export function patchAccount(
-  user: string,
-  patch: { password?: string; role?: 'admin' | 'editor'; email?: string }
-): Promise<void> {
-  return fetch(`/api/account/${encodeURIComponent(user)}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
-    body: JSON.stringify(patch)
-  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
-}
-
 /** Mail (re)issued credentials to the account's email. 503 when SMTP unconfigured. */
 export function inviteAccount(user: string): Promise<void> {
   return fetch(`/api/account/${encodeURIComponent(user)}/invite`, {
@@ -297,78 +214,14 @@ export function inviteAccount(user: string): Promise<void> {
   }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
 }
 
-export interface ResetDoors {
-  requestToken(user: string): Promise<{ ok: boolean; message: string }>;
-  confirmReset(user: string, token: string, password: string): Promise<void>;
-}
-
-export function requestResetToken(user: string): Promise<{ ok: boolean; message: string }> {
-  return fetch('/api/reset-request', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user })
-  }).then((r) => json<{ ok: boolean; message: string }>(r));
-}
-
-export function confirmReset(user: string, token: string, password: string): Promise<void> {
-  return fetch('/api/reset-confirm', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user, token, password })
-  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
-}
-
-export function changeOwnPassword(current: string, password: string): Promise<void> {
-  return fetch('/api/me/password', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
-    body: JSON.stringify({ current, password })
-  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
-}
-
-// ——— edit locks ———
-
-export interface LockStatus {
-  readonly holder: string | null;
-  readonly expiresIn: number;
-}
-
-export function peekLock(type: string, slug: string): Promise<LockStatus> {
-  return fetch(`/api/lock/${type}/${slug}`).then((r) => json<LockStatus>(r));
-}
-
-export function acquireLock(type: string, slug: string, force = false): Promise<LockStatus> {
-  return fetch(`/api/lock/${type}/${slug}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
-    body: JSON.stringify({ force })
-  }).then(
-    (r) =>
-      json<LockStatus>(r),
-    (e) => {
-      throw e;
-    }
-  );
-}
-
-export function releaseLock(type: string, slug: string): Promise<void> {
-  return fetch(`/api/lock/${type}/${slug}`, {
-    method: 'DELETE',
-    headers: { 'X-CSRF-Token': csrfToken() }
-  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
-}
+// (The reset/password endpoints — /api/reset-request, /api/reset-confirm,
+// /api/me/password, PUT /api/account/<u> — stay live in the PHP core as the
+// self-service feature; their dashboard UI doesn't exist yet. Typed wrappers
+// return when that UI does.)
 
 // ——— page media ———
-
-export interface MediaRef {
-  readonly name: string;
-  readonly size: number;
-  readonly mtime: number;
-}
-
-export function listMedia(type: string, slug: string): Promise<readonly MediaRef[]> {
-  return fetch(`/api/media/${type}/${slug}`).then((r) => json<readonly MediaRef[]>(r));
-}
+// (The live editor talks to /api/media directly; these wrappers exist for the
+// dashboard's site-wide media sweep.)
 
 /** One file somewhere on the site — the overlay's media tab sweeps these. */
 export interface SiteMediaRef {
@@ -393,19 +246,6 @@ export function uploadSiteAsset(file: File): Promise<{ name: string; url: string
     body
   }).then((r) => json<{ name: string; url: string }>(r));
 }
-
-export function uploadMedia(type: string, slug: string, file: File): Promise<MediaRef> {
-  const form = new FormData();
-  form.append('file', file);
-  return fetch(`/api/media/${type}/${slug}`, {
-    method: 'POST',
-    headers: { 'X-CSRF-Token': csrfToken() },
-    body: form
-  }).then((r) => json<MediaRef>(r));
-}
-
-export const mediaUrlOf = (type: string, slug: string, name: string): string =>
-  `/api/media/${type}/${slug}/${encodeURIComponent(name)}`;
 
 export function removeAccount(user: string): Promise<void> {
   return fetch(`/api/account/${encodeURIComponent(user)}`, {

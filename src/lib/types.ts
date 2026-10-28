@@ -1,6 +1,6 @@
 /*
  * 1. Relative path: src/lib/types.ts
- * 2. Description: Shared dashboard types — page refs, editor state.
+ * 2. Description: Shared dashboard types — page refs and account refs.
  * 3. Expects: API payloads as produced by api/lib/api.ts.
  * 4. Provides: Strict types; no any, not today, not for you.
  * 5. SPDX-License-Identifier: MPL-2.0

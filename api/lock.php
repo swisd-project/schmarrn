@@ -5,7 +5,9 @@
  * 2. Description: Coarse per-page edit lock — one editor at a time, no distributed math.
  *                 Lock lives in the file cache; TTL heartbeat keeps it warm, silence frees it.
  * 3. Expects: Writable api/cache/ dir.
- * 4. Provides: peek(), acquire(), assertFreeOrMine(), release().
+ * 4. Provides: acquire(), assertFreeOrMine() — the write-path gates. (The HTTP
+ *              lock endpoints retired with the canvas editor; cold locks free
+ *              themselves via the TTL check in record().)
  * 5. SPDX-License-Identifier: MPL-2.0
  * 6. Copyright (c) 2026 Homahuki GmbH
  */
@@ -35,15 +37,6 @@ function record(string $type, string $slug): ?array
     return $record;
 }
 
-/** {holder: string|null, expiresIn: int} */
-function peek(string $type, string $slug): array
-{
-    $record = record($type, $slug);
-    return $record === null
-        ? ['holder' => null, 'expiresIn' => 0]
-        : ['holder' => (string)$record['user'], 'expiresIn' => (int)$record['exp'] - time()];
-}
-
 /** Warm (or take) the lock. Refuses with who the tea belongs to when held and not owned. */
 function acquire(string $type, string $slug, string $user, bool $force = false): void
 {
@@ -71,14 +64,5 @@ function assertFreeOrMine(string $type, string $slug, string $user): void
     $record = record($type, $slug);
     if ($record !== null && $record['user'] !== $user) {
         \Router\refuse(409, "Page locked by {$record['user']}. Take over or wait.");
-    }
-}
-
-function release(string $type, string $slug, string $user): void
-{
-    $file = fileFor($type, $slug);
-    $record = is_file($file) ? json_decode((string)file_get_contents($file), true) : null;
-    if (is_array($record) && ($record['user'] ?? '') === $user) {
-        @unlink($file);
     }
 }
