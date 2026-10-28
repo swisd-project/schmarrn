@@ -1,7 +1,7 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
   // a burger opens the full-screen overlay (Pages / Site / Accounts / Media).
-  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia } from '$lib/api';
+  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia, uploadSiteAsset } from '$lib/api';
   import { schemaFor, withDraftFlag } from '$lib/schema';
   import { splitFrontmatter } from '$lib/blocks';
   import { parseMdms } from '@swisd-project/mdms';
@@ -94,6 +94,26 @@
     try {
       await saveSiteSettings(siteSettings);
       siteNote = 'Saved. The public face updates on the next serve.';
+    } catch (e) {
+      siteError = e instanceof Error ? e.message : String(e);
+    } finally {
+      siteBusy = false;
+    }
+  }
+
+  /** Logo upload: straight into site assets, the URL lands in the form (save still explicit). */
+  async function onLogoPick(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || siteSettings === null) return;
+    siteBusy = true;
+    siteError = '';
+    siteNote = '';
+    try {
+      const stored = await uploadSiteAsset(file);
+      siteSettings = { ...siteSettings, logo: stored.url };
+      siteNote = `Logo uploaded as ${stored.name} — save to put it on the public face.`;
     } catch (e) {
       siteError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -549,7 +569,14 @@
             <h4 class="mg-h">Site settings</h4>
             <label class="field"><span>Site name</span><input class="input" bind:value={siteSettings.name} required /></label>
             <label class="field"><span>Claim</span><input class="input" bind:value={siteSettings.claim} /></label>
-            <label class="field"><span>Logo (URL or /path)</span><input class="input" bind:value={siteSettings.logo} /></label>
+            <label class="field">
+              <span>Logo</span>
+              <input class="input" bind:value={siteSettings.logo} placeholder="URL, /path, or upload below" />
+              <label class="btn btn-secondary self-start cursor-pointer">
+                <input class="hidden" type="file" accept="image/*" onchange={onLogoPick} disabled={siteBusy} />
+                {siteBusy ? 'Uploading…' : 'Upload logo…'}
+              </label>
+            </label>
             <label class="field"><span>Theme</span>
               <select class="input" bind:value={siteSettings.theme}>
                 {#each setupThemes as theme (theme)}

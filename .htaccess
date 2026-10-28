@@ -1,22 +1,26 @@
 # Schmarrn front controller rules.
 # The root index.php dispatches: /api/* to the JSON core, everything else to the
-# public serving engine. Real public files pass through untouched.
+# public serving engine. Law: ONLY whitelisted static dirs are servable as real
+# files — every other real file or dir on disk is forbidden (no source, content,
+# draft, config or governance leaks, whatever the host layout).
 
 RewriteEngine On
 
-# Sensitive paths: forbidden before anything else gets a word in.
-RewriteRule ^(content|api/config|api/cache)(/|$) - [F]
+# Real files ONLY in the public static whitelist (themes, api/assets, dashboard/ —
+# the built SPA's home on the host). The front controller itself passes too.
+RewriteCond %{REQUEST_URI} ^/?(themes|api/assets|dashboard)/ [OR]
+RewriteCond %{REQUEST_URI} ^/?index\.php$
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
 
-# Real files/dirs pass through (themes, api/assets, the front controllers themselves).
+# Any other real file or directory: forbidden. No enumerating leaks — the
+# whitelist decides, nothing else on disk exists for the visitor.
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
-RewriteRule ^ - [L]
+RewriteRule ^ - [F]
 
 # /api/* → the JSON core via the root front controller.
 RewriteRule ^api(/|$) index.php [L]
-
-# Any other api internals (direct .php hits) → forbidden.
-RewriteRule ^api/ - [F]
 
 # Everything else → the public site.
 RewriteRule ^ index.php [L]

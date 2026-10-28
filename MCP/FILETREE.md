@@ -70,9 +70,11 @@
 │   ├── routes/
 │   │   ├── +layout.svelte        # imports ../lib/app.css (relative — $lib evasion, see GUIDE)
 │   │   ├── +layout.ts            # prerender = true
-│   │   └── +page.svelte          # login wall + page tree (runes)
-│   └── content/
-│       └── pages/ha-for-you/index.md
+│   │   └── +page.svelte          # login/setup + burger overlay (Pages/Site/Accounts/Media) + editor stage (runes, Tailwind)
+│   └── content/                  # install-local user data — GITIGNORED, never committed
+│       ├── pages/                # content types (dirs = types, subdirs = slugs)
+│       │   └── <slug>/index.md   # + .draft.md sidecar + page-local media files
+│       └── .assets/              # site-level uploads (logo) — dot-dir, invisible to listAll
 ├── MCP/
 │   ├── GOSPEL.md                 # the law
 │   ├── BACKLOG.md                # the ledger

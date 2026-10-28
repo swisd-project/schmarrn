@@ -349,6 +349,17 @@ export function listAllMedia(): Promise<readonly SiteMediaRef[]> {
   return fetch('/api/media').then((r) => json<readonly SiteMediaRef[]>(r));
 }
 
+/** Upload a site-level asset (the logo) — admin, CSRF-gated. Returns its public URL. */
+export function uploadSiteAsset(file: File): Promise<{ name: string; url: string }> {
+  const body = new FormData();
+  body.append('file', file);
+  return fetch('/api/site-assets', {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': csrfToken() },
+    body
+  }).then((r) => json<{ name: string; url: string }>(r));
+}
+
 export function uploadMedia(type: string, slug: string, file: File): Promise<MediaRef> {
   const form = new FormData();
   form.append('file', file);

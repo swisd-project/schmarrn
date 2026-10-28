@@ -250,6 +250,39 @@ try {
             echo json_encode(['ok' => true]);
             break;
 
+        // ——— site assets: the logo's upload door (admin) + public serving ———
+        case $method === 'POST' && $path === 'site-assets':
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only.');
+            }
+            Auth\assertCsrf();
+            $upload = $_FILES['file'] ?? null;
+            if (!is_array($upload) || ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+                || !is_string($upload['tmp_name']) || !is_string($upload['name'])) {
+                Router\refuse(400, 'No file uploaded.');
+            }
+            $stored = Site\assetStore($upload['name'], $upload['tmp_name']);
+            http_response_code(201);
+            echo json_encode($stored, JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'GET' && preg_match('#^site-assets/[A-Za-z0-9._-]+$#', $path) === 1:
+            // Public: the logo is the public face.
+            $assetName = substr($path, strlen('site-assets/'));
+            $assetPath = Site\assetPath((string)$assetName);
+            if ($assetPath === null) {
+                Router\refuse(404, 'No such asset.');
+            }
+            header('Content-Type: ' . \Store\mediaMime((string)$assetName));
+            header('Content-Length: ' . (string)filesize($assetPath));
+            header('Cache-Control: public, max-age=86400');
+            header('X-Content-Type-Options: nosniff');
+            readfile($assetPath);
+            exit;
+
         // ——— account management: admin-only, CSRF-gated ———
         case $method === 'GET' && $path === 'accounts':
             if (!Auth\check()) {

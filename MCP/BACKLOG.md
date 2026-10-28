@@ -48,7 +48,8 @@ v1 — Schmarrn "known to work"
 [x] Clean URLs: front controller routes + `.htaccess` rewrite rules; 404/fallback (root index.php dispatches /api/* vs public; php -S router mode; smoke-tested)
 [x] Save-time render: dashboard client renders `parseMdms()` HTML → PHP stores + cache dir per-page hash files; site-mtime sentinel invalidation (publish route takes {html}; stale/missing → client fallback shell via committed api/assets/render.esm.js)
 [x] Public theme rendering (classical style + full-page slide style), artist reference theme installable via theme contract (manifest, assets, settings) — bakery classical + slide; atelier artist theme (slide-first, settled depth system at portfolio scale); {{navHtml}} placeholder added to the contract (published pages, aria-current); theme switch proven live via PUT /api/site. Logo upload flow still open.
-[~] Global brand settings (logo, claim, name) referenced across pages — Site\load/save + template placeholders done; admin "Site settings" panel in dashboard (GET/PUT /api/site, admin-only, theme/home validated); logo upload flow still open
+[x] SPA fallback `dashboard.html` (was already done in svelte.config — row was stale; build emits prerendered index.html + dashboard.html fallback)
+[~] Global brand settings — logo upload flow DONE: POST /api/site-assets (admin+CSRF, extension allowlist, immutable prefixed names) into src/content/.assets/ (dot-dir, invisible to the page tree), public GET /api/site-assets/<name> (mime+nosniff+cache, traversal refused); Site tab gains "Upload logo…" which fills the logo field (save still explicit). Remaining: none known.
 [x] Read-only public JSON API per page (title, body HTML, children, files), CORS scoped — GET /api/public/{type}/{slug}; stale cache → bodyHtml null (consumer re-renders from raw); CORS: public routes answer `*` without credentials, dashboard routes keep reflected-origin + credentials
 [x] SEO/link-preview basics (og tags, titles)
 [x] First-visit setup wizard (admin account, site name, theme) — GET/POST /api/setup(+status), dashboard wizard on boot when no accounts exist, auto-login on found; template account store now ships EMPTY (no known credentials in the wild — the wizard is the door), accounts.local.php wins when present
@@ -59,7 +60,7 @@ v1 — Schmarrn "known to work"
 [x] Tailwind in (v4, @tailwindcss/vite, CSS-first @theme); design tokens ported verbatim from the workbench into src/lib/app.css (surfaces, accents, neons, ink, feedback, light/shadow vocabulary, type scale, square radii, motion) + system component classes (btn×3 intents, input press-dent, mg, card, badge, tag, alert, modal-card, float-menu, burger); dashboard + editor chrome restyled on it
 [x] Burger menu → full-screen overlay (tabs: Pages / Site / Accounts / Media — Site+Accounts admin-only; selection leaves the overlay; Escape closes); media tab lazy-loads GET /api/media (new: global sweep over all pages' files, click copies the URL)
 [x] Micro-animations subtle + prefers-reduced-motion respect; no ornament (the settled system's law — square corners, depth by light — supersedes this row's original "round elements" wording)
-[ ] SPA fallback renamed to `dashboard.html` (adapter root-overwrite warning)
+[ ] SPA fallback renamed to `dashboard.html` (adapter root-overwrite warning) — ALREADY DONE in svelte.config (fallback: 'dashboard.html', build emits both index.html prerender + dashboard.html fallback); row closed as stale
 
 ## p5 v1 ship-out
 [ ] Full smoke test on a real FTP host (PHP 8.4+, .htaccess honored, writable cache)

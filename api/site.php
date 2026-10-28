@@ -68,3 +68,44 @@ function save(array $settings): void
         opcache_invalidate(configFile(), true);
     }
 }
+
+// ——— site-level assets (the logo's home): src/content/.assets/ — a dot-dir,
+// ——— invisible to the page tree (listAll skips dot-dirs), install-local, writable.
+
+function assetsDir(): string
+{
+    return \Store\root() . '/.assets';
+}
+
+/** Immutable by law: an existing filename is never overwritten — the upload gets a fresh prefix. */
+function assetStore(string $originalName, string $tmpPath): array
+{
+    $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+    if (!in_array($ext, \Store\MEDIA_EXTENSIONS, true)) {
+        \Router\refuse(400, "Unsupported asset type: .{$ext}");
+    }
+    if (!is_dir(assetsDir()) && !@mkdir(assetsDir(), 0775, true)) {
+        \Router\refuse(500, 'Cannot create the asset directory.');
+    }
+    $prefix = bin2hex(random_bytes(4));
+    $base = strtolower(pathinfo($originalName, PATHINFO_FILENAME));
+    $base = preg_replace('/[^a-z0-9_-]+/', '-', $base) ?: 'asset';
+    $base = trim(substr($base, 0, 40), '-') ?: 'asset';
+    $name = "{$prefix}-{$base}.{$ext}";
+    $target = assetsDir() . '/' . $name;
+    if (!@rename($tmpPath, $target) && !@copy($tmpPath, $target)) {
+        \Router\refuse(500, 'Asset storage failed.');
+    }
+    @chmod($target, 0664);
+    return ['name' => $name, 'url' => '/api/site-assets/' . rawurlencode($name)];
+}
+
+/** The real path of a stored asset, or null when the name is foreign. */
+function assetPath(string $name): ?string
+{
+    if (preg_match('/^[A-Za-z0-9._-]+$/', $name) !== 1 || str_starts_with($name, '.')) {
+        return null;
+    }
+    $path = assetsDir() . '/' . $name;
+    return is_file($path) ? $path : null;
+}
