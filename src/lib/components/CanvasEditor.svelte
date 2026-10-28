@@ -197,7 +197,16 @@
         autosaveTimer = null;
       }
       baseHash = await writeDraft(page.type, page.slug, raw, baseHash);
-      await publishPage(page.type, page.slug);
+      // The browser renders (GOSPEL serving law): ship the rendered body with the
+      // publish call so PHP only has to store it. Render blow-up? Publish anyway —
+      // the fallback shell re-renders client-side from the raw .md.
+      let html: string | undefined;
+      try {
+        html = renderMdms(raw, { type: page.type, slug: page.slug }).fullHtml;
+      } catch {
+        html = undefined;
+      }
+      await publishPage(page.type, page.slug, html);
       hasDraftCopy = false;
       saveState = 'saved';
       loadedFor = currentKey; // published copy === editorial copy now

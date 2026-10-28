@@ -96,10 +96,17 @@ export async function writeDraft(type: string, slug: string, raw: string, baseHa
   return body.hash;
 }
 
-export function publishPage(type: string, slug: string): Promise<void> {
+export function publishPage(type: string, slug: string, html?: string): Promise<void> {
+  // With html: the browser-rendered body rides along (GOSPEL serving law — PHP
+  // never parses Markdown). Without: publish only, fallback shell covers serving.
+  const hasHtml = typeof html === 'string';
   return fetch(`/api/draft/${type}/${slug}/publish`, {
     method: 'POST',
-    headers: { 'X-CSRF-Token': csrfToken() }
+    headers: {
+      'X-CSRF-Token': csrfToken(),
+      ...(hasHtml ? { 'Content-Type': 'application/json' } : {})
+    },
+    ...(hasHtml ? { body: JSON.stringify({ html }) } : {})
   }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
 }
 

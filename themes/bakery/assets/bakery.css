@@ -1,0 +1,102 @@
+/* Bakery — the house theme. Warm hipster bakery tokens: peach paper, vanilla
+   batter, cherry blossom, baby blue, one jam-red accent. Nothing fancy; the
+   content is the pastry. */
+
+:root {
+  --crust: #f6e7d7;
+  --batter: #fff8ef;
+  --blossom: #f2b8c6;
+  --sky: #bcd9ea;
+  --jam: #e2543e;
+  --ink: #3a2e26;
+  --ink-soft: #6f5d4f;
+  --line: #e5d5c0;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--batter);
+  color: var(--ink);
+  font-family: Georgia, 'Times New Roman', serif;
+  line-height: 1.65;
+}
+
+.site-head {
+  background: var(--crust);
+  border-bottom: 3px solid var(--blossom);
+  padding: 1.25rem 1.5rem;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.brand .logo { height: 2.4rem; width: auto; }
+
+.site-name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.claim {
+  margin: 0.35rem 0 0;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+main {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 3rem;
+}
+
+main h1, main h2, main h3 { line-height: 1.25; color: var(--ink); }
+main a { color: var(--jam); }
+main img, main video { max-width: 100%; height: auto; border-radius: 6px; }
+main blockquote {
+  margin: 1.5rem 0;
+  padding: 0.5rem 1.25rem;
+  border-left: 4px solid var(--blossom);
+  background: var(--crust);
+  color: var(--ink-soft);
+}
+main code {
+  background: var(--crust);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+main pre { overflow-x: auto; }
+main pre code { background: none; padding: 0; }
+main hr { border: none; border-top: 2px dashed var(--line); margin: 2.5rem 0; }
+
+/* Modules that arrived unknown or failed validation — inert, visible, honest. */
+.sm-unknown-module {
+  border: 2px dashed var(--blossom);
+  background: var(--crust);
+  color: var(--ink-soft);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+/* Client-side fallback shell target — brief blank while the browser bakes. */
+.sm-fallback:empty { min-height: 40vh; }
+
+.sm-notfound { text-align: center; padding: 3rem 0; }
+.sm-notfound h1 { font-size: 4rem; margin: 0; color: var(--jam); }
+
+.site-foot {
+  border-top: 2px dashed var(--line);
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 1.25rem;
+}

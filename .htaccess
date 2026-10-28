@@ -1,0 +1,22 @@
+# Schmarrn front controller rules.
+# The root index.php dispatches: /api/* to the JSON core, everything else to the
+# public serving engine. Real public files pass through untouched.
+
+RewriteEngine On
+
+# Sensitive paths: forbidden before anything else gets a word in.
+RewriteRule ^(content|api/config|api/cache)(/|$) - [F]
+
+# Real files/dirs pass through (themes, api/assets, the front controllers themselves).
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# /api/* → the JSON core via the root front controller.
+RewriteRule ^api(/|$) index.php [L]
+
+# Any other api internals (direct .php hits) → forbidden.
+RewriteRule ^api/ - [F]
+
+# Everything else → the public site.
+RewriteRule ^ index.php [L]

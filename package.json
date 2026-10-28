@@ -4,10 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n api,app -c blue,green \"php -S localhost:8080 -t api\" \"vite dev\"",
+    "dev": "concurrently -k -n api,app -c blue,green \"php -S localhost:8080 index.php\" \"vite dev\"",
     "dev:app": "vite dev",
-    "dev:api": "php -S localhost:8080 -t api",
+    "dev:api": "php -S localhost:8080 index.php",
     "build": "vite build",
+    "build:fallback": "node scripts/build-fallback.mjs",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
@@ -16,6 +17,7 @@
     "@sveltejs/kit": "^2.22.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "concurrently": "^10.0.6",
+    "esbuild": "^0.28.2",
     "svelte": "^5.28.0",
     "svelte-check": "^4.1.0",
     "tsx": "^4.23.15",

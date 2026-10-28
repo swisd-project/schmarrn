@@ -387,8 +387,16 @@ try {
             [, $type, $slug, $verb] = explode('/', $path);
             Lock\assertFreeOrMine($type, $slug, Auth\user());
             if (is_string($verb) && $verb === 'publish') {
+                // The browser renders (GOSPEL: no Markdown parsing in PHP) — the
+                // rendered body rides along in the JSON body and goes straight
+                // into the HTML cache. No HTML? The fallback shell covers it.
+                $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+                $html = is_string($body['html'] ?? null) ? $body['html'] : '';
                 Store\publish($type, $slug);
-                Cache\drop($type, $slug);
+                Cache\drop($type, $slug); // raw + HTML caches (drop() sweeps both)
+                if ($html !== '') {
+                    Cache\storeHtml($type, $slug, $html);
+                }
                 Lock\acquire($type, $slug, Auth\user());
                 echo json_encode(['ok' => true, 'published' => true]);
             } else {

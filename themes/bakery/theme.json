@@ -1,0 +1,19 @@
+{
+  "name": "bakery",
+  "title": "Bakery",
+  "version": "0.1.0",
+  "style": "classical",
+  "description": "The house loaf — warm bakery default theme.",
+  "placeholders": [
+    "siteName",
+    "claim",
+    "claimHtml",
+    "logoUrl",
+    "logoHtml",
+    "pageTitle",
+    "bodyHtml",
+    "seoHead",
+    "themeBase",
+    "year"
+  ]
+}

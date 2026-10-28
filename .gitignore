@@ -9,6 +9,7 @@ dist/
 api/cache/
 api/config/auth.local.php
 api/config/accounts.local.php
+api/config/site.local.php
 
 # OS junk
 .DS_Store

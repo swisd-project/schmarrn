@@ -71,4 +71,74 @@ function drop(string $type, string $slug): void
     foreach (files($type, $slug) as $file) {
         @unlink($file);
     }
+    dropHtml($type, $slug);
+}
+
+// ——— rendered-HTML cache: the editor's browser renders at save time (GOSPEL: no
+// ——— Markdown parsing in PHP); PHP only stores, staleness-checks and serves.
+
+function htmlDir(): string
+{
+    return dir() . '/html';
+}
+
+function htmlFiles(string $type, string $slug): array
+{
+    return [
+        'body' => htmlDir() . "/{$type}-{$slug}.html",
+        'meta' => htmlDir() . "/{$type}-{$slug}.meta",
+    ];
+}
+
+/** Store the browser-rendered body HTML. Atomic, with the source mtime as sentinel. */
+function storeHtml(string $type, string $slug, string $html): void
+{
+    \Store\assertIdentifier($type, 'type');
+    \Store\assertIdentifier($slug, 'slug');
+    $sourceMtime = @filemtime(\Store\pageDir($type, $slug) . '/index.md');
+    if ($sourceMtime === false) {
+        return;
+    }
+    if (!is_dir(htmlDir())) {
+        @mkdir(htmlDir(), 0775, true);
+    }
+    ["body" => $body, "meta" => $meta] = htmlFiles($type, $slug);
+    $tmp = $body . '.' . bin2hex(random_bytes(4)) . '.tmp';
+    if (file_put_contents($tmp, $html) === false || !\rename($tmp, $body)) {
+        @unlink($tmp);
+        return;
+    }
+    file_put_contents($meta, (string)$sourceMtime);
+}
+
+/** The cached body HTML, or null when absent. */
+function html(string $type, string $slug): ?string
+{
+    ["body" => $body, "meta" => $meta] = htmlFiles($type, $slug);
+    if (!is_file($body) || !is_file($meta)) {
+        return null;
+    }
+    $contents = file_get_contents($body);
+    return $contents === false ? null : $contents;
+}
+
+/** True when the source .md is newer than the stored render (FTP edits land here). */
+function htmlStale(string $type, string $slug): bool
+{
+    ["body" => $body, "meta" => $meta] = htmlFiles($type, $slug);
+    if (!is_file($body) || !is_file($meta)) {
+        return true;
+    }
+    $sourceMtime = @filemtime(\Store\pageDir($type, $slug) . '/index.md');
+    if ($sourceMtime === false) {
+        return true;
+    }
+    return (int)file_get_contents($meta) !== $sourceMtime;
+}
+
+function dropHtml(string $type, string $slug): void
+{
+    foreach (htmlFiles($type, $slug) as $file) {
+        @unlink($file);
+    }
 }

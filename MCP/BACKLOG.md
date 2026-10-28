@@ -45,12 +45,12 @@ v1 — Schmarrn "known to work"
 [o] Site menu editing (classical style) (deferred to p3 — needs the classical theme to exist first)
 
 ## p3 serving & public site
-[ ] Clean URLs: front controller routes + `.htaccess` rewrite rules; 404/fallback
-[ ] Save-time render: dashboard client renders `parseMdms()` HTML → PHP stores + cache dir per-page hash files; site-mtime sentinel invalidation
-[ ] Public theme rendering (classical style + full-page slide style), artist reference theme installable via theme contract (manifest, assets, settings)
-[ ] Global brand settings (logo, claim, name) referenced across pages
+[x] Clean URLs: front controller routes + `.htaccess` rewrite rules; 404/fallback (root index.php dispatches /api/* vs public; php -S router mode; smoke-tested)
+[x] Save-time render: dashboard client renders `parseMdms()` HTML → PHP stores + cache dir per-page hash files; site-mtime sentinel invalidation (publish route takes {html}; stale/missing → client fallback shell via committed api/assets/render.esm.js)
+[~] Public theme rendering (classical style + full-page slide style), artist reference theme installable via theme contract (manifest, assets, settings) — bakery classical theme live (theme.json/page.html/placeholders); slide style + artist theme + install flow still open
+[~] Global brand settings (logo, claim, name) referenced across pages — Site\load/save + template placeholders done; dashboard settings UI still open
 [ ] Read-only public JSON API per page (title, body HTML, children, files), CORS scoped
-[ ] SEO/link-preview basics (og tags, titles)
+[x] SEO/link-preview basics (og tags, titles)
 [ ] First-visit setup wizard (admin account, site name, theme)
 
 ## p4 dashboard chrome & design system
