@@ -1,6 +1,6 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen, phase 1.
-  import { session, login, logout, pageCount, createPage, listAccounts, addAccount, removeAccount, inviteAccount } from '$lib/api';
+  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount } from '$lib/api';
   import { seedPage } from '$lib/schema';
   import PageEditor from '$lib/components/PageEditor.svelte';
   import type { PageIndex, SelectedPage, AccountRef } from '$lib/types';
@@ -144,6 +144,60 @@
       creating = false;
     }
   }
+
+  // ——— upload .md → new page (route a); the tree button (route b) stays below ———
+  let uploadError = $state('');
+
+  async function uploadMd(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    uploadError = '';
+    const base = file.name.replace(/\.(md|markdown)$/i, '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+    const slug = base || `uploaded-${Date.now()}`;
+    const type = 'pages';
+    try {
+      await createPage(type, slug, await file.text());
+      refreshIndex();
+      select(type, slug);
+    } catch (e) {
+      uploadError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  // ——— delete + rename per page ———
+  let renaming = $state<{ type: string; slug: string; value: string } | null>(null);
+
+  async function removePage(type: string, slug: string) {
+    if (!confirm(`Delete ${type}/${slug} for good? No undo, no tears.`)) return;
+    try {
+      await deletePage(type, slug);
+      if (selected?.type === type && selected?.slug === slug) selected = null;
+      refreshIndex();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  function startRename(type: string, slug: string) {
+    renaming = { type, slug, value: slug };
+  }
+
+  async function commitRename(event: SubmitEvent) {
+    event.preventDefault();
+    if (renaming === null) return;
+    const { type, slug, value } = renaming;
+    const to = value.trim().toLowerCase();
+    try {
+      const newSlug = await renamePage(type, slug, to);
+      renaming = null;
+      if (selected?.type === type && selected?.slug === slug) selected = { type, slug: newSlug };
+      refreshIndex();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
 </script>
 
 <main class="shell">
@@ -172,12 +226,24 @@
             <ul>
               {#each pages as page (page.slug)}
                 <li>
-                  <button
-                    class:active={selected?.type === type && selected?.slug === page.slug}
-                    onclick={() => select(type, page.slug)}
-                  >
-                    {page.slug}{#if page.draft}<span class="draft">draft</span>{/if}
-                  </button>
+                  {#if renaming?.type === type && renaming?.slug === page.slug}
+                    <form class="rename" onsubmit={commitRename}>
+                      <input bind:value={renaming.value} pattern="[a-z0-9]+(-[a-z0-9]+)*" required />
+                      <button type="submit">✓</button>
+                      <button type="button" onclick={() => (renaming = null)}>×</button>
+                    </form>
+                  {:else}
+                    <button
+                      class:active={selected?.type === type && selected?.slug === page.slug}
+                      onclick={() => select(type, page.slug)}
+                    >
+                      {page.slug}{#if page.draft}<span class="draft">draft</span>{/if}{#if page.hasDraft}<span class="draft">edits</span>{/if}
+                    </button>
+                    <span class="page-actions">
+                      <button class="mini" title="Rename" onclick={() => startRename(type, page.slug)}>✎</button>
+                      <button class="mini danger" title="Delete" onclick={() => removePage(type, page.slug)}>×</button>
+                    </span>
+                  {/if}
                 </li>
               {/each}
             </ul>
@@ -242,6 +308,12 @@
           <button type="submit" disabled={creating}>{creating ? 'Folding…' : 'New page'}</button>
           {#if createError}<p class="error">{createError}</p>{/if}
         </form>
+
+        <label class="upload-md">
+          <input type="file" accept=".md,.markdown,text/markdown" onchange={uploadMd} />
+          Upload .md → new page
+        </label>
+        {#if uploadError}<p class="error">{uploadError}</p>{/if}
       </nav>
 
       <section class="stage">
@@ -283,6 +355,17 @@
   .tree button:hover { background: #efe6d8; }
   .tree button.active { background: var(--raisin); color: var(--batter); }
   .draft { margin-left: 0.4rem; font-size: 0.65rem; text-transform: uppercase; opacity: 0.75; }
+  .tree li { display: flex; align-items: center; gap: 0.2rem; }
+  .tree li > button:first-child { flex: 1; }
+  .page-actions { display: inline-flex; }
+  .mini { border: 0; background: transparent; cursor: pointer; font-size: 0.75rem; opacity: 0.5; padding: 0 0.2rem; }
+  .mini:hover { opacity: 1; }
+  .mini.danger { color: #b3004c; }
+  .rename { display: flex; gap: 0.2rem; width: 100%; }
+  .rename input { width: 100%; font-size: 0.8rem; padding: 0.15rem 0.3rem; border: 1px solid #d8c7b2; border-radius: 4px; }
+  .upload-md { display: block; margin-top: 0.75rem; font-size: 0.8rem; opacity: 0.8; cursor: pointer; }
+  .upload-md input { display: none; }
+  .upload-md:hover { opacity: 1; }
   .newpage { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 1rem; }
   .newpage input { font-size: 0.8rem; padding: 0.3rem 0.5rem; border: 1px solid #d8c7b2; border-radius: 4px; }
   .empty { opacity: 0.5; font-style: italic; }

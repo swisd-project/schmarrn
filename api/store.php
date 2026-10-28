@@ -121,7 +121,7 @@ function writeDraft(string $type, string $slug, string $raw): void
         \Router\refuse(404, "Page not found: {$type}/{$slug}");
     }
     $tmp = $dir . '/.draft.' . bin2hex(random_bytes(6)) . '.tmp';
-    if (file_put_contents($tmp, $raw) === false || !rename($tmp, draftFile($type, $slug))) {
+    if (file_put_contents($tmp, $raw) === false || !\rename($tmp, draftFile($type, $slug))) {
         @unlink($tmp);
         \Router\refuse(500, 'Draft write failed.');
     }
@@ -143,7 +143,7 @@ function publish(string $type, string $slug): void
     assertPageExists($type, $slug);
     $draft = draftFile($type, $slug);
     $tmp = $draft . '.pub';
-    if (!copy($draft, $tmp) || !rename($tmp, pageDir($type, $slug) . '/index.md')) {
+    if (!copy($draft, $tmp) || !\rename($tmp, pageDir($type, $slug) . '/index.md')) {
         @unlink($tmp);
         \Router\refuse(500, 'Publish failed.');
     }
@@ -191,6 +191,44 @@ function assertPageExists(string $type, string $slug): void
 {
     if (read($type, $slug) === null) {
         \Router\refuse(404, "Page not found: {$type}/{$slug}");
+    }
+}
+
+// ——— page lifecycle beyond write: delete + rename ———
+
+/** Delete: the whole page dir goes. Contained, no symlinks games, cache dropped by caller. */
+function remove(string $type, string $slug): void
+{
+    assertPageExists($type, $slug);
+    $dir = pageDir($type, $slug);
+    foreach (scandir($dir) ?: [] as $entry) {
+        if (in_array($entry, ['.', '..'], true)) {
+            continue;
+        }
+        $path = $dir . '/' . $entry;
+        if (is_dir($path) && !is_link($path)) {
+            continue; // media lives flat; subdirs would be foreign — refuse silently via check below
+        }
+        @unlink($path);
+    }
+    if (!@rmdir($dir)) {
+        Router\refuse(500, "Cannot delete page dir: {$type}/{$slug}");
+    }
+}
+
+/** Rename: move the page dir to a new slug. Content untouched, both caches dropped by caller.
+ *  Named move() — a Store\rename() would shadow PHP's global rename() across the whole namespace. */
+function move(string $type, string $slug, string $newSlug): void
+{
+    assertPageExists($type, $slug);
+    assertIdentifier($newSlug, 'new slug');
+    $from = pageDir($type, $slug);
+    $to = pageDir($type, $newSlug);
+    if (is_dir($to)) {
+        Router\refuse(409, "Target exists: {$type}/{$newSlug}");
+    }
+    if (!@\rename($from, $to)) {
+        Router\refuse(500, 'Rename failed.');
     }
 }
 
@@ -254,7 +292,7 @@ function mediaStore(string $type, string $slug, string $originalName, string $tm
     // Same-second uploads collide otherwise — a dash of entropy keeps immutability honest.
     $name = date('Ymd-His') . '-' . bin2hex(random_bytes(3)) . '-' . $stem . '.' . $ext;
     $target = $dir . '/' . $name;
-    if (!move_uploaded_file($tmpPath, $target) && !@rename($tmpPath, $target)) {
+    if (!move_uploaded_file($tmpPath, $target) && !@\rename($tmpPath, $target)) {
         \Router\refuse(500, 'Media upload failed.');
     }
     return ['name' => $name, 'size' => filesize($target), 'mtime' => filemtime($target)];
@@ -288,7 +326,7 @@ function write(string $type, string $slug, string $raw): void
     }
 
     $tmp = $dir . '/.index.' . bin2hex(random_bytes(6)) . '.tmp';
-    if (file_put_contents($tmp, $raw) === false || !rename($tmp, $dir . '/index.md')) {
+    if (file_put_contents($tmp, $raw) === false || !\rename($tmp, $dir . '/index.md')) {
         @unlink($tmp);
         \Router\refuse(500, 'Write failed.');
     }

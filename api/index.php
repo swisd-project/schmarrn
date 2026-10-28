@@ -276,6 +276,33 @@ try {
             break;
 
 
+        // ——— page lifecycle: delete + rename (lock-gated, CSRF-gated) ———
+        case $method === 'DELETE' && preg_match('#^page/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            Auth\assertCsrf();
+            [, $type, $slug] = explode('/', $path);
+            Lock\assertFreeOrMine($type, $slug, Auth\user());
+            Store\remove($type, $slug);
+            Cache\drop($type, $slug);
+            echo json_encode(['ok' => true]);
+            break;
+        case $method === 'POST' && preg_match('#^page/[a-z0-9-]+/[a-z0-9-]+/rename$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            Auth\assertCsrf();
+            [, $type, $slug] = explode('/', $path);
+            Lock\assertFreeOrMine($type, $slug, Auth\user());
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $to = is_string($body['slug'] ?? null) ? $body['slug'] : '';
+            Store\move($type, $slug, $to);
+            Cache\drop($type, $slug);
+            Cache\drop($type, $to);
+            echo json_encode(['ok' => true, 'slug' => $to]);
+            break;
+
         // ——— page-local media: upload via modal, serve raw, immutable by law ———
         case $method === 'GET' && preg_match('#^media/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             if (!Auth\check()) {

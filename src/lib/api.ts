@@ -12,6 +12,7 @@ export interface PageRef {
   readonly slug: string;
   readonly updatedAt: number;
   readonly draft?: boolean;
+  readonly hasDraft?: boolean;
 }
 export type PageIndex = Readonly<Record<string, readonly PageRef[]>>;
 
@@ -115,6 +116,21 @@ export function logout(): Promise<void> {
 
 export function createPage(type: string, slug: string, raw: string): Promise<void> {
   return updatePage('POST', type, slug, raw);
+}
+
+export function deletePage(type: string, slug: string): Promise<void> {
+  return fetch(`/api/page/${type}/${slug}`, {
+    method: 'DELETE',
+    headers: { 'X-CSRF-Token': csrfToken() }
+  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
+}
+
+export function renamePage(type: string, slug: string, to: string): Promise<string> {
+  return fetch(`/api/page/${type}/${slug}/rename`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({ slug: to })
+  }).then((r) => json<{ ok: boolean; slug: string }>(r).then((b) => b.slug));
 }
 
 export function session(): Promise<SessionInfo> {
