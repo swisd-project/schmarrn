@@ -18,18 +18,29 @@ require __DIR__ . '/mail.php';
 require __DIR__ . '/lock.php';
 require __DIR__ . '/store.php';
 require __DIR__ . '/cache.php';
+require __DIR__ . '/serve.php'; // public JSON API reuses the serving engine's byte-peeks
+
+$path = Router\pathAfter('/api/');
+$isPublicApi = str_starts_with($path, 'public/');
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 
-// CORS: dashboard may run on a dev origin; credentials needed for the session.
+// CORS, scoped by audience: the dashboard may run on a dev origin and needs
+// credentials for the session; the read-only public API is anonymous data —
+// it answers to any origin and never to credentials.
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if ($origin !== '') {
-    header('Access-Control-Allow-Origin: ' . $origin);
-    header('Access-Control-Allow-Credentials: true');
-    header('Vary: Origin');
-    header('Access-Control-Allow-Methods: GET, PUT, POST, DELETE, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
+    if ($isPublicApi) {
+        header('Access-Control-Allow-Origin: *');
+        header('Access-Control-Allow-Methods: GET, OPTIONS');
+    } else {
+        header('Access-Control-Allow-Origin: ' . $origin);
+        header('Access-Control-Allow-Credentials: true');
+        header('Vary: Origin');
+        header('Access-Control-Allow-Methods: GET, PUT, POST, DELETE, OPTIONS');
+        header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
+    }
 }
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -38,7 +49,6 @@ if ($method === 'OPTIONS') {
     exit;
 }
 
-$path = Router\pathAfter('/api/');
 
 try {
     switch (true) {
@@ -426,6 +436,44 @@ try {
             header('Content-Type: text/markdown; charset=utf-8');
             Cache\store($type, $slug, $raw);
             echo $raw;
+            break;
+
+        // ——— public JSON API: read-only, per page — Schmarrn doubles as a
+        // ——— quick-deploy backend. Anonymous by design; CORS opens wide (GET only).
+        // Route: GET /api/public/{type}/{slug} — title, rendered body HTML (or null
+        // when the cache is stale/missing), sibling pages for menus, page-local files.
+        case $method === 'GET' && preg_match('#^public/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
+            [, $type, $slug] = explode('/', $path);
+            if (Store\read($type, $slug) === null || Store\isDraft($type, $slug)) {
+                Router\refuse(404, "Page not found: {$type}/{$slug}");
+            }
+            $bodyHtml = Cache\html($type, $slug);
+            if ($bodyHtml !== null && Cache\htmlStale($type, $slug)) {
+                $bodyHtml = null; // stale render is a lie — let the consumer re-render from raw
+            }
+            $children = [];
+            foreach (Store\listAll()[$type] ?? [] as $sibling) {
+                if (($sibling['slug'] ?? '') !== $slug && !($sibling['draft'] ?? false)) {
+                    $childSlug = (string)$sibling['slug'];
+                    $children[] = ['slug' => $childSlug, 'title' => Serve\titleOf($type, $childSlug, $childSlug)];
+                }
+            }
+            $files = [];
+            foreach (Store\mediaList($type, $slug) as $file) {
+                $files[] = [
+                    'name' => $file['name'],
+                    'size' => $file['size'],
+                    'url' => "/api/media/{$type}/{$slug}/" . rawurlencode((string)$file['name']),
+                ];
+            }
+            echo json_encode([
+                'type' => $type,
+                'slug' => $slug,
+                'title' => Serve\titleOf($type, $slug, $slug),
+                'bodyHtml' => $bodyHtml,
+                'children' => $children,
+                'files' => $files,
+            ], JSON_UNESCAPED_SLASHES);
             break;
 
         // Route: POST /api/page/{type}/{slug} — create (unfold) a fresh page; 409 if it exists.

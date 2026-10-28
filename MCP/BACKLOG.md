@@ -49,7 +49,7 @@ v1 — Schmarrn "known to work"
 [x] Save-time render: dashboard client renders `parseMdms()` HTML → PHP stores + cache dir per-page hash files; site-mtime sentinel invalidation (publish route takes {html}; stale/missing → client fallback shell via committed api/assets/render.esm.js)
 [~] Public theme rendering (classical style + full-page slide style), artist reference theme installable via theme contract (manifest, assets, settings) — bakery classical theme live (theme.json/page.html/placeholders); slide style + artist theme + install flow still open
 [~] Global brand settings (logo, claim, name) referenced across pages — Site\load/save + template placeholders done; dashboard settings UI still open
-[ ] Read-only public JSON API per page (title, body HTML, children, files), CORS scoped
+[x] Read-only public JSON API per page (title, body HTML, children, files), CORS scoped — GET /api/public/{type}/{slug}; stale cache → bodyHtml null (consumer re-renders from raw); CORS: public routes answer `*` without credentials, dashboard routes keep reflected-origin + credentials
 [x] SEO/link-preview basics (og tags, titles)
 [ ] First-visit setup wizard (admin account, site name, theme)
 

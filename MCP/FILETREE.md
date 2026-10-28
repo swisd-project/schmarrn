@@ -31,7 +31,7 @@
 │   └── (*.mts)                   # dev probes
 ├── api/                          # PHP core — front controller + libs, no framework
 │   ├── .htaccess                 # legacy (root .htaccess is the law now)
-│   ├── index.php                 # JSON routes: login/session, pages, drafts, publish(+html), media, locks
+│   ├── index.php                 # JSON routes: login/session, pages, drafts, publish(+html), public API, media, locks
 │   ├── serve.php                 # public serving engine: dispatch, themes, cached HTML, fallback shell, SEO head
 │   ├── site.php                  # brand settings load/save (template < site.local.php)
 │   ├── router.php
