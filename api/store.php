@@ -35,7 +35,7 @@ function pageDir(string $type, string $slug): string
 function assertIdentifier(string $value, string $what): void
 {
     if (preg_match('/^' . SLUG_PATTERN . '$/', $value) !== 1) {
-        Router\refuse(400, "Invalid {$what}: {$value}");
+        \Router\refuse(400, "Invalid {$what}: {$value}");
     }
 }
 
@@ -118,12 +118,12 @@ function writeDraft(string $type, string $slug, string $raw): void
     assertDistinctFilenameSlug($type, $slug, $raw);
     $dir = pageDir($type, $slug);
     if (!is_dir($dir)) {
-        Router\refuse(404, "Page not found: {$type}/{$slug}");
+        \Router\refuse(404, "Page not found: {$type}/{$slug}");
     }
     $tmp = $dir . '/.draft.' . bin2hex(random_bytes(6)) . '.tmp';
     if (file_put_contents($tmp, $raw) === false || !rename($tmp, draftFile($type, $slug))) {
         @unlink($tmp);
-        Router\refuse(500, 'Draft write failed.');
+        \Router\refuse(500, 'Draft write failed.');
     }
 }
 
@@ -138,14 +138,14 @@ function hasDraft(string $type, string $slug): bool
 function publish(string $type, string $slug): void
 {
     if (!hasDraft($type, $slug)) {
-        Router\refuse(400, 'Nothing to publish — no editorial draft on file.');
+        \Router\refuse(400, 'Nothing to publish — no editorial draft on file.');
     }
     assertPageExists($type, $slug);
     $draft = draftFile($type, $slug);
     $tmp = $draft . '.pub';
     if (!copy($draft, $tmp) || !rename($tmp, pageDir($type, $slug) . '/index.md')) {
         @unlink($tmp);
-        Router\refuse(500, 'Publish failed.');
+        \Router\refuse(500, 'Publish failed.');
     }
     @unlink($draft);
 }
@@ -155,7 +155,7 @@ function unpublish(string $type, string $slug): void
 {
     $raw = read($type, $slug);
     if ($raw === null) {
-        Router\refuse(404, "Page not found: {$type}/{$slug}");
+        \Router\refuse(404, "Page not found: {$type}/{$slug}");
     }
     writeDraft($type, $slug, $raw);            // editorial copy preserved verbatim
     write($type, $slug, flipDraftFlag($raw, true)); // published file hidden
@@ -182,7 +182,7 @@ function setPublishedFlag(string $type, string $slug, bool $on): void
 {
     $raw = read($type, $slug);
     if ($raw === null) {
-        Router\refuse(404, "Page not found: {$type}/{$slug}");
+        \Router\refuse(404, "Page not found: {$type}/{$slug}");
     }
     write($type, $slug, flipDraftFlag($raw, !$on));
 }
@@ -190,8 +190,90 @@ function setPublishedFlag(string $type, string $slug, bool $on): void
 function assertPageExists(string $type, string $slug): void
 {
     if (read($type, $slug) === null) {
-        Router\refuse(404, "Page not found: {$type}/{$slug}");
+        \Router\refuse(404, "Page not found: {$type}/{$slug}");
     }
+}
+
+// ——— page-local media: immutable uploads beside index.md, referenced by filename ———
+
+const MEDIA_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'mp4', 'webm', 'pdf', 'mp3', 'wav'];
+
+function mediaMime(string $file): string
+{
+    $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+    return match ($ext) {
+        'jpg', 'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'gif' => 'image/gif',
+        'webp' => 'image/webp',
+        'svg' => 'image/svg+xml',
+        'mp4' => 'video/mp4',
+        'webm' => 'video/webm',
+        'pdf' => 'application/pdf',
+        'mp3' => 'audio/mpeg',
+        'wav' => 'audio/wav',
+        default => 'application/octet-stream',
+    };
+}
+
+function mediaList(string $type, string $slug): array
+{
+    assertPageExists($type, $slug);
+    $dir = pageDir($type, $slug);
+    $files = [];
+    foreach (scandir($dir) ?: [] as $name) {
+        if (in_array($name, ['.', '..', 'index.md'], true) || str_starts_with($name, '.') || str_ends_with($name, '.tmp')) {
+            continue;
+        }
+        $path = $dir . '/' . $name;
+        if (!is_file($path)) {
+            continue;
+        }
+        $files[] = ['name' => $name, 'size' => filesize($path), 'mtime' => filemtime($path)];
+    }
+    usort($files, fn($a, $b) => strcmp((string)$a['name'], (string)$b['name']));
+    return $files;
+}
+
+/** Immutable by law: an existing filename is never overwritten — the upload gets a fresh prefix. */
+function mediaStore(string $type, string $slug, string $originalName, string $tmpPath): array
+{
+    assertPageExists($type, $slug);
+    $base = basename($originalName);
+    $base = preg_replace('/[^A-Za-z0-9._-]/', '-', $base) ?? 'file';
+    $base = trim($base, '-._');
+    $ext = strtolower(pathinfo($base, PATHINFO_EXTENSION));
+    if ($ext === '' || !in_array($ext, MEDIA_EXTENSIONS, true)) {
+        \Router\refuse(400, "Unsupported media type: .{$ext}");
+    }
+    $stem = pathinfo($base, PATHINFO_FILENAME);
+    if ($stem === '') {
+        $stem = 'file';
+    }
+    $dir = pageDir($type, $slug);
+    // Same-second uploads collide otherwise — a dash of entropy keeps immutability honest.
+    $name = date('Ymd-His') . '-' . bin2hex(random_bytes(3)) . '-' . $stem . '.' . $ext;
+    $target = $dir . '/' . $name;
+    if (!move_uploaded_file($tmpPath, $target) && !@rename($tmpPath, $target)) {
+        \Router\refuse(500, 'Media upload failed.');
+    }
+    return ['name' => $name, 'size' => filesize($target), 'mtime' => filemtime($target)];
+}
+
+/** Contained read: the file must literally live inside the page dir, no ../ games. */
+function mediaPath(string $type, string $slug, string $name): ?string
+{
+    assertIdentifier($type, 'type');
+    assertIdentifier($slug, 'slug');
+    if (preg_match('/^[A-Za-z0-9._-]+$/', $name) !== 1 || str_starts_with($name, '.')) {
+        return null;
+    }
+    $dir = realpath(pageDir($type, $slug));
+    $path = realpath($dir . '/' . $name);
+    if ($dir === false || $path === false || !str_starts_with($path, $dir . DIRECTORY_SEPARATOR)) {
+        return null;
+    }
+    return $path;
 }
 
 /** Atomic write: validation → temp file → rename. Never leaves a half-Shmarrn behind. */
@@ -202,20 +284,20 @@ function write(string $type, string $slug, string $raw): void
 
     $dir = pageDir($type, $slug);
     if (!is_dir($dir) && !mkdir($dir, 0775, true)) {
-        Router\refuse(500, "Cannot create page directory: {$dir}");
+        \Router\refuse(500, "Cannot create page directory: {$dir}");
     }
 
     $tmp = $dir . '/.index.' . bin2hex(random_bytes(6)) . '.tmp';
     if (file_put_contents($tmp, $raw) === false || !rename($tmp, $dir . '/index.md')) {
         @unlink($tmp);
-        Router\refuse(500, 'Write failed.');
+        \Router\refuse(500, 'Write failed.');
     }
 }
 
 function assertNonEmpty(string $raw): void
 {
     if (trim($raw) === '') {
-        Router\refuse(400, 'Refusing to save empty page.');
+        \Router\refuse(400, 'Refusing to save empty page.');
     }
 }
 
@@ -223,6 +305,6 @@ function assertNonEmpty(string $raw): void
 function assertDistinctFilenameSlug(string $type, string $slug, string $raw): void
 {
     if (preg_match('#^\s*<!--\s*slug:\s*([a-z0-9-]+)\s*-->\s*$#m', $raw, $m) === 1 && $m[1] !== $slug) {
-        Router\refuse(400, "Slug mismatch: URL says '{$slug}', file declares '{$m[1]}'");
+        \Router\refuse(400, "Slug mismatch: URL says '{$slug}', file declares '{$m[1]}'");
     }
 }

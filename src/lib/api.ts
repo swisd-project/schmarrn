@@ -226,6 +226,31 @@ export function releaseLock(type: string, slug: string): Promise<void> {
   }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
 }
 
+// ——— page media ———
+
+export interface MediaRef {
+  readonly name: string;
+  readonly size: number;
+  readonly mtime: number;
+}
+
+export function listMedia(type: string, slug: string): Promise<readonly MediaRef[]> {
+  return fetch(`/api/media/${type}/${slug}`).then((r) => json<readonly MediaRef[]>(r));
+}
+
+export function uploadMedia(type: string, slug: string, file: File): Promise<MediaRef> {
+  const form = new FormData();
+  form.append('file', file);
+  return fetch(`/api/media/${type}/${slug}`, {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': csrfToken() },
+    body: form
+  }).then((r) => json<MediaRef>(r));
+}
+
+export const mediaUrlOf = (type: string, slug: string, name: string): string =>
+  `/api/media/${type}/${slug}/${encodeURIComponent(name)}`;
+
 export function removeAccount(user: string): Promise<void> {
   return fetch(`/api/account/${encodeURIComponent(user)}`, {
     method: 'DELETE',

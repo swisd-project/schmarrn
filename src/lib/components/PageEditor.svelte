@@ -8,10 +8,11 @@
    * 5. SPDX-License-Identifier: MPL-2.0
    * 6. Copyright (c) 2026 Homahuki GmbH
    */
-  import { readDraft, writeDraft, publishPage, unpublishPage, acquireLock, releaseLock } from '$lib/api';
+  import { readDraft, writeDraft, publishPage, unpublishPage, acquireLock, releaseLock, listMedia, uploadMedia } from '$lib/api';
+  import { renderMdms } from '$lib/render';
   import { schemaFor } from '$lib/schema';
-  import { parseMdms } from '@swisd-project/mdms';
   import type { SelectedPage } from '$lib/types';
+  import type { MediaRef } from '$lib/api';
 
   interface Props {
     page: SelectedPage;
@@ -87,7 +88,11 @@
   const preview = $derived.by(() => {
     if (raw === '') return { full: '', warning: '' };
     try {
-      const result = parseMdms(raw, { validateFrontmatter: schemaFor(page.type).parse });
+      const result = renderMdms(raw, {
+        type: page.type,
+        slug: page.slug,
+        validateFrontmatter: schemaFor(page.type).parse
+      });
       return { full: result.fullHtml, warning: '' };
     } catch (e) {
       return { full: '', warning: e instanceof Error ? e.message : String(e) };
@@ -147,6 +152,71 @@
       error = e instanceof Error ? e.message : String(e);
     }
   }
+
+  // ——— media modal: list, upload, insert module markup at the caret ———
+  let mediaOpen = $state(false);
+  let media = $state<readonly MediaRef[]>([]);
+  let mediaBusy = $state(false);
+  let mediaError = $state('');
+  let textareaEl = $state<HTMLTextAreaElement | null>(null);
+
+  async function openMedia() {
+    mediaOpen = true;
+    mediaError = '';
+    try {
+      media = await listMedia(page.type, page.slug);
+    } catch (e) {
+      mediaError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  function closeMedia() {
+    mediaOpen = false;
+  }
+
+  async function uploadOne(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    mediaBusy = true;
+    mediaError = '';
+    try {
+      const stored = await uploadMedia(page.type, page.slug, file);
+      media = await listMedia(page.type, page.slug);
+      insertAtCaret(`\n:::image{file="${stored.name}" caption=""}\n:::\n`);
+    } catch (e) {
+      mediaError = e instanceof Error ? e.message : String(e);
+    } finally {
+      mediaBusy = false;
+      input.value = '';
+    }
+  }
+
+  /** Insert module markup at the caret (or append), then flag dirty. */
+  function insertAtCaret(snippet: string) {
+    const el = textareaEl;
+    if (el === null) {
+      raw = raw + snippet;
+    } else {
+      const start = el.selectionStart ?? raw.length;
+      const end = el.selectionEnd ?? raw.length;
+      raw = raw.slice(0, start) + snippet + raw.slice(end);
+      const next = start + snippet.length;
+      el.focus();
+      el.setSelectionRange(next, next);
+    }
+    queueAutosave(raw);
+  }
+
+  function insertImage(file: MediaRef) {
+    insertAtCaret(`\n:::image{file="${file.name}" caption=""}\n:::\n`);
+    closeMedia();
+  }
+
+  function insertVideo(file: MediaRef) {
+    insertAtCaret(`\n:::video{file="${file.name}"}\n:::\n`);
+    closeMedia();
+  }
 </script>
 
 <section class="editor">
@@ -160,6 +230,7 @@
       {#if published}
         <button class="takedown" onclick={takeDown} disabled={busy}>Unpublish</button>
       {/if}
+      <button class="media-btn" onclick={openMedia} disabled={busy}>Media…</button>
     {/if}
     {#if lockedMessage}
       <span class="lock-banner" role="alert">
@@ -177,6 +248,7 @@
 
   <div class="panes">
     <textarea
+      bind:this={textareaEl}
       bind:value={raw}
       oninput={(e) => queueAutosave(e.currentTarget.value)}
       disabled={lockedMessage !== ''}
@@ -188,6 +260,36 @@
     </div>
   </div>
 </section>
+
+{#if mediaOpen}
+  <div class="media-overlay" role="dialog" aria-modal="true" aria-label="Page media">
+    <div class="media-card">
+      <header class="media-head">
+        <h3>Media — {page.type}/{page.slug}</h3>
+        <button class="media-close" onclick={closeMedia}>×</button>
+      </header>
+      <label class="upload">
+        <input type="file" accept="image/*,video/mp4,video/webm,audio/*,application/pdf" onchange={uploadOne} disabled={mediaBusy} />
+        {mediaBusy ? 'Uploading…' : 'Upload a file'}
+      </label>
+      {#if mediaError}<p class="error">{mediaError}</p>{/if}
+      <ul class="media-list">
+        {#each media as file (file.name)}
+          <li>
+            <img class="thumb" src={`/api/media/${page.type}/${page.slug}/${encodeURIComponent(file.name)}`} alt={file.name} loading="lazy" />
+            <span class="name">{file.name}</span>
+            <span class="actions">
+              <button onclick={() => insertImage(file)}>Insert image</button>
+              <button onclick={() => insertVideo(file)}>Insert video</button>
+            </span>
+          </li>
+        {:else}
+          <li class="empty">Nothing on this page's shelf yet.</li>
+        {/each}
+      </ul>
+    </div>
+  </div>
+{/if}
 
 <style>
   .editor { display: flex; flex-direction: column; gap: 1rem; height: 80vh; }
@@ -220,4 +322,25 @@
   .takedown { font-size: 0.8rem; opacity: 0.7; }
   .lock-banner { font-size: 0.8rem; color: #7a4a00; background: #ffe9d6; border-radius: 4px; padding: 0.2rem 0.5rem; }
   .takeover { font-size: 0.8rem; margin-left: 0.4rem; }
+  .media-btn { font-size: 0.8rem; opacity: 0.85; }
+  .media-overlay {
+    position: fixed; inset: 0; background: rgba(40, 25, 15, 0.45);
+    display: grid; place-items: center; z-index: 50;
+  }
+  .media-card {
+    background: #fffdf9; border-radius: 10px; padding: 1rem 1.25rem;
+    width: min(38rem, 92vw); max-height: 80vh; overflow: auto;
+    box-shadow: 0 12px 30px rgba(60, 30, 10, 0.25);
+  }
+  .media-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .media-head h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+  .media-close { border: 0; background: transparent; font-size: 1.2rem; cursor: pointer; }
+  .upload { display: block; margin: 0.5rem 0 0.75rem; font-size: 0.85rem; }
+  .media-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+  .media-list li { display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; }
+  .media-list .thumb { width: 3rem; height: 2rem; object-fit: cover; border-radius: 4px; background: #efe6d8; }
+  .media-list .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .media-list .actions { display: inline-flex; gap: 0.3rem; }
+  .media-list .empty { opacity: 0.5; font-style: italic; }
+  .error { color: #b3004c; font-size: 0.8rem; }
 </style>

@@ -276,6 +276,42 @@ try {
             break;
 
 
+        // ——— page-local media: upload via modal, serve raw, immutable by law ———
+        case $method === 'GET' && preg_match('#^media/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            [, $type, $slug] = explode('/', $path);
+            echo json_encode(Store\mediaList($type, $slug), JSON_UNESCAPED_SLASHES);
+            break;
+        case $method === 'POST' && preg_match('#^media/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            Auth\assertCsrf();
+            [, $type, $slug] = explode('/', $path);
+            $upload = $_FILES['file'] ?? null;
+            if (!is_array($upload) || ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+                || !is_string($upload['tmp_name']) || !is_string($upload['name'])) {
+                Router\refuse(400, 'No file uploaded.');
+            }
+            $stored = Store\mediaStore($type, $slug, $upload['name'], $upload['tmp_name']);
+            http_response_code(201);
+            echo json_encode($stored, JSON_UNESCAPED_SLASHES);
+            break;
+        case $method === 'GET' && preg_match('#^media/[a-z0-9-]+/[a-z0-9-]+/[A-Za-z0-9._-]+$#', $path) === 1:
+            [, $type, $slug, $name] = explode('/', $path);
+            $path = Store\mediaPath($type, $slug, (string)$name);
+            if ($path === null) {
+                Router\refuse(404, 'No such media.');
+            }
+            header('Content-Type: ' . Store\mediaMime((string)$name));
+            header('Content-Length: ' . (string)filesize($path));
+            header('Cache-Control: public, max-age=86400');
+            header('X-Content-Type-Options: nosniff');
+            readfile($path);
+            exit;
+
         // ——— editorial drafts + publishing: the editor's dirty little secret ———
 
         // GET — editorial copy (sidecar or published file, whichever freshest in life).
