@@ -229,6 +229,9 @@ function navHtml(array $site, string $currentSlug): string
         $items[] = '<a href="/' . htmlspecialchars($slug, ENT_QUOTES) . '"' . $current . '>'
             . htmlspecialchars(titleOf('pages', $slug, $slug), ENT_QUOTES) . '</a>';
     }
+    // The design workbench is a standing sub-page: core-served at /design, so the
+    // nav carries it even when it's not a page in the store.
+    $items[] = '<a href="/design">Design</a>';
     if ($items === []) {
         return '';
     }
