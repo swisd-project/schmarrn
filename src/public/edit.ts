@@ -721,6 +721,9 @@ async function boot(root: HTMLElement): Promise<void> {
     }
 
     // The actions row: new page (the plus), logout, and the deep backend for the rest.
+    // The actions row: new page (the plus) and log out. NO backend link — the
+    // user's law: the overlay houses what the day needs; deep admin (accounts,
+    // media, plugins, logo) stays at /_ by URL only, never dangled here.
     const actions = el('div', { class: 'sm-section' }, [
       el('h3', {}, ['Anything else?']),
       el('div', { style: 'display:flex;gap:.5rem;flex-wrap:wrap' }, [
@@ -734,8 +737,7 @@ async function boot(root: HTMLElement): Promise<void> {
               window.location.reload();
             }
           }
-        }, ['Log out']),
-        el('a', { class: 'sm-btn sm-btn-secondary', href: '/_' }, ['Manage site'])
+        }, ['Log out'])
       ])
     ]);
     inner.append(actions);
