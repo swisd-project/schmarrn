@@ -25,6 +25,7 @@ Schmarrn GUIDE
   `grep -nE '(^|[^\\\\])(Store|Cache|Site|Auth|Lock|Accounts|Mail|Router|Serve)\\\\[a-z]' api/<newfile>.php`
   (unqualified cross-namespace refs; comment hits are noise). The `[schmarrn-500]` error-log line in index.php's catch makes survivors visible.
 - Namespace-crossing lesson #6, the builtin-shadow edition: naming a lib function after a PHP builtin (`Store\rename()`) hijacks the builtin for the ENTIRE namespace — `write()`'s plain `rename()` call silently became `Store\rename($tmp, $path)` (ArgumentCountError). Never define namespace functions named like builtins; qualify builtin calls (`\rename()`) when a shadow exists.
+- `pkill -f` self-match: a `pkill -f 'php -S 127.0.0.1:8081'` issued from a shell whose OWN command line contains that string kills the calling shell itself — everything chained after it silently never runs (a commit+push vanished exactly this way). Use the bracket trick: `pkill -f '[p]hp -S 127.0.0.1:8081'`, or kill by PID.
 - `npm run dev` now starts BOTH servers via `concurrently` (api = php -S :8080, app = vite); split scripts `dev:app` / `dev:api` remain for solo runs.
 - Kit `alias: { $lib }` was REMOVED from svelte.config: `$lib` TS/JS imports resolve via Kit's built-in alias, but CSS imports evade it — CSS is imported relatively (`../lib/app.css`). Re-tested if Kit ≥ 2.22 changes.
 - SvelteKit project root = 08_Schmarrn repo root (package.json at root, sources under `src/`) — NOT a nested dashboard folder; `.svelte-kit` and `node_modules` sit at root. `api/` stays PHP-only.
