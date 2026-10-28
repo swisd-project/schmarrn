@@ -34,13 +34,13 @@ v1 — Schmarrn "known to work"
 [x] Edit-lock per page (coarse, heartbeat + takeover UX)
 
 ## p2 visual editor (the build's heart)
-[ ] Single-canvas editor: page rendered as-is, click into text/paragraphs inline
-[ ] Module spec v1 + implement in mdms: text, image, image with caption, video/html embed — boundary syntax + data location decided on the go, pinned per module
-[ ] Module modals: open → edit single item → must save (no live Markdown mangling of module internals)
-[ ] Uploads via modal into immutable IDed assets (v1: originals stored untouched, no gd); media browser = lazy-loaded tab in settings overlay
-[ ] Autosave-to-draft; draft/publish gate; draft preview link
-[ ] Delete/rename page in UI; new page: (a) upload `.md` then edit on page, (b) new-page button in page-tree inside settings overlay
-[ ] Site menu editing (classical style)
+[~] Single-canvas editor: page rendered as-is, click into text/paragraphs inline (two-pane textarea still current; canvas build is the next big slice)
+[x] Module spec v1 + implement in mdms: text, image, image with caption, video/html embed — boundary syntax + data location decided on the go, pinned per module (remark-directive `:::name{attrs}` … `:::`; attrs inline; media files page-local; shipped via mdms v0.1.9 `mdastPlugins`; unknown module names de-fanged to inert marker)
+[~] Module modals: open → edit single item → must save (insert via media modal done; per-module EDIT modals arrive with the canvas editor)
+[~] Uploads via modal into immutable IDed assets (v1: originals stored untouched, no gd); media browser = lazy-loaded tab in settings overlay (per-page modal + upload + insert done; global overlay tab comes with p4)
+[x] Autosave-to-draft; draft/publish gate; draft preview link (`.draft.md` sidecar engine + editor autosave + publish/unpublish; public preview URL lands with p3 serving)
+[x] Delete/rename page in UI; new page: (a) upload `.md` then edit on page, (b) new-page button in page-tree inside settings overlay (tree panel for now; overlay relocation comes with p4)
+[o] Site menu editing (classical style) (deferred to p3 — needs the classical theme to exist first)
 
 ## p3 serving & public site
 [ ] Clean URLs: front controller routes + `.htaccess` rewrite rules; 404/fallback
