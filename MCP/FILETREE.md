@@ -38,11 +38,12 @@
 │       └── assets/atelier.css
 ├── scripts/
 │   ├── build-fallback.mjs        # esbuild → api/assets/render.esm.js (committed)
+│   ├── build-edit.mjs            # esbuild → api/assets/edit.esm.js (committed live-page editor)
 │   └── (*.mts)                   # dev probes
 ├── api/                          # PHP core — front controller + libs, no framework
 │   ├── .htaccess                 # legacy (root .htaccess is the law now)
 │   ├── index.php                 # JSON routes: login/session, pages, drafts, publish(+html), public API, media, locks, plugins
-│   ├── serve.php                 # public serving engine: dispatch, themes, cached HTML, fallback shell, SEO head, plugin fills
+│   ├── serve.php                 # public serving engine: dispatch, themes, cached HTML, fallback shell, SEO head, plugin fills, editor injection
 │   ├── site.php                  # brand settings load/save (template < site.local.php) + site assets (.assets/)
 │   ├── plugins.php               # p6 capability contract: scan/validate/load/dispatch, state in config/plugins.local.php
 │   ├── router.php
@@ -54,6 +55,7 @@
 │   ├── cache.php                 # raw cache + rendered-HTML cache (storeHtml/htmlStale), mtime sentinels
 │   ├── assets/
 │   │   ├── render.esm.js         # committed fallback render bundle (client-side mdms)
+│   │   └── edit.esm.js           # committed live-page editor bundle (injected only for logged-in sessions)
 │   │   └── design.html           # /design workbench — public style guide, user-steered
 │   ├── config/
 │   │   ├── auth.php              # TEMPLATE (hash of "changeme")
@@ -70,12 +72,18 @@
 │   ├── package.json → moved to root (drag artifact, do not recreate)
 │   ├── lib/
 │   │   ├── api.ts                # typed fetcher for /api
+│   │   ├── blocks.ts             # block model: splitBlocks/joinPage (exact source spans)
+│   │   ├── modules.ts            # the module wall: directive allowlist → hast
+│   │   ├── render.ts             # THE one render pipeline (canvas, fallback, editor share it)
 │   │   ├── schema.ts             # Zod: PageFrontmatter (blog left for plugin-land)
 │   │   └── app.css               # tokens: crust/batter/raisin/jam
+│   ├── public/
+│   │   ├── fallback.ts           # client fallback renderer → render.esm.js
+│   │   └── edit.ts               # live-page editor (burger, click-to-edit, settings overlay) → edit.esm.js
 │   ├── routes/
 │   │   ├── +layout.svelte        # imports ../lib/app.css (relative — $lib evasion, see GUIDE)
 │   │   ├── +layout.ts            # prerender = true
-│   │   └── +page.svelte          # login/setup + burger overlay (Pages/Site/Accounts/Media) + editor stage (runes, Tailwind)
+│   │   └── +page.svelte          # login/setup + burger overlay (Pages/Site/Accounts/Media/Plugins) + editor stage (runes, Tailwind)
 │   └── content/                  # install-local user data — GITIGNORED, never committed
 │       ├── pages/                # content types (dirs = types, subdirs = slugs)
 │       │   └── <slug>/index.md   # + .draft.md sidecar + page-local media files

@@ -90,6 +90,18 @@ function page(string $type, string $slug, array $site): never
     }
     header('Content-Type: text/html; charset=utf-8');
     header('Cache-Control: no-cache');
+    // Logged-in editors: the live-page editor renders client-side from the raw .md —
+    // no cache question, no double render. Anonymous visitors: cached HTML straight
+    // out, stale/missing → the client fallback shell. Anon HTML never changes.
+    if (\Auth\check()) {
+        $html = '<div data-sm-edit-root data-type="' . htmlspecialchars($type, ENT_QUOTES)
+            . '" data-slug="' . htmlspecialchars($slug, ENT_QUOTES) . '"></div>'
+            . "\n" . '<script type="module" src="/api/assets/edit.esm.js"></script>';
+        $theme = themeTemplate($site, styleOf($type, $slug, $site));
+        $title = titleOf($type, $slug, $slug);
+        echo fill($theme, $site, $title, $html, seoHead($title, $site['name'], "{$type}/{$slug}"), $slug, $type);
+        exit;
+    }
     $html = \Cache\html($type, $slug);
     if ($html !== null && !\Cache\htmlStale($type, $slug)) {
         // The cache holds the BODY only — the theme wrap happens here, at serve

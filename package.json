@@ -9,6 +9,7 @@
     "dev:api": "php -S localhost:8080 index.php",
     "build": "vite build",
     "build:fallback": "node scripts/build-fallback.mjs",
+    "build:edit": "node scripts/build-edit.mjs",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
