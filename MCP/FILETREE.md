@@ -37,15 +37,14 @@
 │   ├── package.json → moved to root (drag artifact, do not recreate)
 │   ├── lib/
 │   │   ├── api.ts                # typed fetcher for /api
-│   │   ├── schema.ts             # Zod: PageFrontmatter + BlogFrontmatter
+│   │   ├── schema.ts             # Zod: PageFrontmatter (blog left for plugin-land)
 │   │   └── app.css               # tokens: crust/batter/raisin/jam
 │   ├── routes/
 │   │   ├── +layout.svelte        # imports ../lib/app.css (relative — $lib evasion, see GUIDE)
 │   │   ├── +layout.ts            # prerender = true
 │   │   └── +page.svelte          # login wall + page tree (runes)
 │   └── content/
-│       ├── pages/ha-for-you/index.md
-│       └── blog/off-the-griddle/index.md   # <!-- more --> split demo
+│       └── pages/ha-for-you/index.md
 ├── MCP/
 │   ├── GOSPEL.md                 # the law
 │   ├── BACKLOG.md                # the ledger

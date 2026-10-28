@@ -19,17 +19,8 @@ export const PageFrontmatterSchema = z.object({
 
 export type PageFrontmatter = z.infer<typeof PageFrontmatterSchema>;
 
-/** Blog entries: teaser split marker is meaningful here. */
-export const BlogFrontmatterSchema = PageFrontmatterSchema.extend({
-  author: z.string().min(1),
-  abstract: z.string().min(1)
-});
-
-export type BlogFrontmatter = z.infer<typeof BlogFrontmatterSchema>;
-
-/** One Zod gate per content type — schema.ts is the register. */
+/** One Zod gate per content type — schema.ts is the register. Blog went to plugin-land (v2). */
 const SCHEMAS: Record<string, z.ZodType> = {
-  blog: BlogFrontmatterSchema,
   pages: PageFrontmatterSchema
 };
 
@@ -62,18 +53,4 @@ export function withDraftFlag(raw: string, on: boolean): string {
     return raw.replace(/^draft:\s*(true|false)\s*$/m, flag);
   }
   return raw.replace(/^---\r?\n/, `---\n${flag}\n`);
-}
-
-/** Seed .md for a fresh page — editor fills the body, frontmatter defaults are law-abiding. */
-export function seedPage(type: string, slug: string): string {
-  const today = new Date().toISOString().slice(0, 10);
-  const common = `slug: ${slug}
-published: true
-draft: false
-date: ${today}`;
-  const frontmatter =
-    type === 'blog'
-      ? `---\ntitle: ""\nauthor: ""\nabstract: ""\n${common}\ntags: []\n---\n`
-      : `---\ntitle: ""\n${common}\n---\n`;
-  return `${frontmatter}\n\n\n`; // trailing newline so the caret has carpet
 }

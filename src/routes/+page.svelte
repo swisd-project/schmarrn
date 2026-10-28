@@ -1,7 +1,7 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen, phase 1.
   import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount } from '$lib/api';
-  import { seedPage, schemaFor, withDraftFlag } from '$lib/schema';
+  import { schemaFor, withDraftFlag } from '$lib/schema';
   import { splitFrontmatter } from '$lib/blocks';
   import { parseMdms } from '@swisd-project/mdms';
   import CanvasEditor from '$lib/components/CanvasEditor.svelte';
@@ -123,25 +123,32 @@
     }
   }
 
-  // ——— new page ———
-  let newType = $state('pages');
-  let newSlug = $state('');
+  // ——— new page → modal: title, slug, draft-vs-publish (blog left for plugin-land) ———
+  let newModal = $state<null | { title: string; slug: string; asDraft: boolean }>(null);
   let creating = $state(false);
-  let createError = $state('');
+  let newError = $state('');
 
-  async function createNew(event: SubmitEvent) {
+  function openNew() {
+    newError = '';
+    newModal = { title: '', slug: '', asDraft: false };
+  }
+
+  async function saveNew(event: SubmitEvent) {
     event.preventDefault();
+    const m = newModal;
+    if (m === null) return;
     creating = true;
-    createError = '';
-    const type = newType.trim().toLowerCase();
-    const slug = newSlug.trim().toLowerCase();
+    newError = '';
     try {
-      await createPage(type, slug, seedPage(type, slug));
+      const today = new Date().toISOString().slice(0, 10);
+      // JSON.stringify quotes the title — YAML-hostile colons stay harmless.
+      const frontmatter = `---\ntitle: ${JSON.stringify(m.title)}\nslug: ${m.slug}\npublished: true\ndraft: ${m.asDraft}\ndate: ${today}\ntags: []\n---`;
+      await createPage('pages', m.slug, `${frontmatter}\n\n\n`);
       refreshIndex();
-      select(type, slug);
-      newSlug = '';
+      select('pages', m.slug);
+      newModal = null;
     } catch (e) {
-      createError = e instanceof Error ? e.message : String(e);
+      newError = e instanceof Error ? e.message : String(e);
     } finally {
       creating = false;
     }
@@ -364,13 +371,7 @@
           {/if}
         {/if}
 
-        <form class="newpage" onsubmit={createNew}>
-          <input bind:value={newType} placeholder="type (e.g. pages)" required />
-          <input bind:value={newSlug} placeholder="slug (e.g. my-tart)" required
-            pattern="[a-z0-9]+(-[a-z0-9]+)*" title="lowercase, digits, hyphens" />
-          <button type="submit" disabled={creating}>{creating ? 'Folding…' : 'New page'}</button>
-          {#if createError}<p class="error">{createError}</p>{/if}
-        </form>
+        <button class="newpage-btn" onclick={openNew}>+ New page</button>
 
         <label class="upload-md">
           <input type="file" accept=".md,.markdown,text/markdown" onchange={onUploadPick} />
@@ -449,6 +450,39 @@
   </div>
 {/if}
 
+{#if newModal}
+  <div class="overlay" role="dialog" aria-modal="true" aria-label="New page">
+    <form class="card" onsubmit={saveNew}>
+      <header class="card-head">
+        <h3>New page</h3>
+        <button type="button" class="close" onclick={() => (newModal = null)}>×</button>
+      </header>
+
+      <label class="field">
+        <span>Title</span>
+        <input bind:value={newModal.title} required placeholder="Page title" />
+      </label>
+      <label class="field">
+        <span>Slug (URL)</span>
+        <input bind:value={newModal.slug} required pattern="[a-z0-9]+(-[a-z0-9]+)*"
+          title="lowercase letters, digits, hyphens" placeholder="my-tart" />
+      </label>
+
+      <fieldset class="serving">
+        <legend>Serve this page as</legend>
+        <label><input type="radio" bind:group={newModal.asDraft} value={false} /> Published — visible to the public</label>
+        <label><input type="radio" bind:group={newModal.asDraft} value={true} /> Draft — editors only until you publish</label>
+      </fieldset>
+
+      {#if newError}<p class="error" role="alert">{newError}</p>{/if}
+      <footer class="card-foot">
+        <button type="button" class="cancel" onclick={() => (newModal = null)}>Cancel</button>
+        <button type="submit" class="save" disabled={creating}>{creating ? 'Folding…' : 'Create page'}</button>
+      </footer>
+    </form>
+  </div>
+{/if}
+
 <style>
   .shell { max-width: 72rem; margin: 0 auto; padding: 2rem; }
   .login { display: flex; flex-direction: column; gap: 0.75rem; max-width: 16rem; }
@@ -499,6 +533,12 @@
   .upload-md { display: block; margin-top: 0.75rem; font-size: 0.8rem; opacity: 0.8; cursor: pointer; }
   .upload-md input { display: none; }
   .upload-md:hover { opacity: 1; }
+  .newpage-btn {
+    width: 100%; margin-top: 0.75rem; font-size: 0.85rem; font-weight: 600;
+    border: 1px dashed #d8c7b2; background: #fff4e6; border-radius: 6px;
+    padding: 0.4rem; cursor: pointer;
+  }
+  .newpage-btn:hover { background: #ffe9d6; }
   .newpage { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 1rem; }
   .newpage input { font-size: 0.8rem; padding: 0.3rem 0.5rem; border: 1px solid #d8c7b2; border-radius: 4px; }
   .empty { opacity: 0.5; font-style: italic; }

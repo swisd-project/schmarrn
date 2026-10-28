@@ -70,6 +70,7 @@ v2 — ideas (next era, post-v1)
 
 ## p6 plugins (own phase)
 [ ] Capability contract: may register template functions, API routes, editor blocks — nothing else; scanned `plugins/` dir; admin installs like WP with tighter lid
+[o] Blog content type → plugin (removed from v1 core per user call 2026-10-28: schema register, seed demo; existing blog dirs fall back to the pages schema)
 ## p7 media & packaging
 [ ] gd: image processing/derivatives on upload + on-the-fly resize; zip: theme/plugin packaging + installer
 ## p8 multilingual

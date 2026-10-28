@@ -23,9 +23,8 @@
     uploadMedia,
     ConflictError
   } from '$lib/api';
-  import { renderMdms } from '$lib/render';
-  import { frontmatterValidator } from '$lib/schema';
-  import { splitFrontmatter, splitBlocks, joinPage, directiveInner, attr, type Block, type PageSplit } from '$lib/blocks';
+  import { renderMdms, frontmatterError } from '$lib/render';
+  import { splitFrontmatter, splitBlocks, joinPage, directiveInner, attr, type Block } from '$lib/blocks';
   import type { SelectedPage } from '$lib/types';
   import type { MediaRef } from '$lib/api';
 
@@ -88,7 +87,10 @@
   });
 
   // ——— the canvas model: frontmatter + blocks + per-block rendered html ———
+  // Gated on the load: until THIS page's content has landed, nothing renders —
+  // no stale flashes of the previous page's markdown under the new page's schema.
   const canvas = $derived.by(() => {
+    if (loadedFor !== currentKey) return null;
     const split = splitFrontmatter(raw);
     const blocks = splitBlocks(split.body);
     const html = blocks.map((block) => {
@@ -104,22 +106,12 @@
     return { split, blocks, html };
   });
 
-  const pageTitle = $derived(/^title:\s*(.+)$/m.exec(canvas.split.frontmatter)?.[1]?.trim() ?? page.slug);
+  const pageTitle = $derived(
+    canvas === null ? page.slug : (/^title:\s*(.+)$/m.exec(canvas.split.frontmatter)?.[1]?.trim() ?? page.slug)
+  );
 
-  // Frontmatter schema gate — same validation the public render applies, human-readable.
-  const schemaWarning = $derived.by(() => {
-    try {
-      renderMdms(raw, {
-        type: page.type,
-        slug: page.slug,
-        validateFrontmatter: frontmatterValidator(page.type)
-      });
-      return '';
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      return message.replace(/^mdms: Frontmatter validation failed\. /, '');
-    }
-  });
+  // Frontmatter schema gate — frontmatter-only parse (cheap), human-readable output.
+  const schemaWarning = $derived(loadedFor === currentKey ? frontmatterError(raw, page.type) : '');
 
   // Autosave-to-draft, hash-guarded: 900 ms of silence, then a guarded PUT.
   const queueAutosave = (value: string) => {
@@ -146,7 +138,7 @@
   };
 
   /** Rewrite the body through a block transformer and queue the autosave. */
-  function withBlocks(fn: (blocks: Block[]) => Block[], frontmatter = canvas.split.frontmatter): void {
+  function withBlocks(fn: (blocks: Block[]) => Block[], frontmatter = canvas?.split.frontmatter ?? ''): void {
     queueAutosave(joinPage({ frontmatter, body: '' }, fn(splitBlocks(splitFrontmatter(raw).body))));
   }
 
@@ -285,7 +277,7 @@
   }
 
   const selectedIsModule = $derived(
-    selected !== null && canvas.blocks[selected]?.kind === 'module' &&
+    canvas !== null && selected !== null && canvas.blocks[selected]?.kind === 'module' &&
       ['image', 'video', 'embed'].includes(canvas.blocks[selected]?.name ?? '')
   );
 
@@ -302,12 +294,12 @@
 
   /** Insertion point for new blocks: after the selection, else at the end. */
   function insertAt(): number {
-    return selected === null ? canvas.blocks.length : selected + 1;
+    return selected === null ? (canvas?.blocks.length ?? 0) : selected + 1;
   }
 
   function openEditText(index: number) {
     modalError = '';
-    modal = { kind: 'text', index, isNew: false, value: canvas.blocks[index]?.source ?? '' };
+    modal = { kind: 'text', index, isNew: false, value: canvas?.blocks[index]?.source ?? '' };
   }
 
   function addText() {
@@ -321,7 +313,7 @@
 
   function openEditModule(index: number) {
     modalError = '';
-    const block = canvas.blocks[index];
+    const block = canvas?.blocks[index];
     if (block === undefined) return;
     const source = block.source;
     const inner = directiveInner(source);
@@ -347,7 +339,7 @@
 
   function openSettings() {
     modalError = '';
-    modal = { kind: 'settings', value: canvas.split.frontmatter };
+    modal = { kind: 'settings', value: canvas?.split.frontmatter ?? '' };
   }
 
   function closeModal() {
@@ -484,18 +476,21 @@
     }}
     onkeydown={(e) => e.key === 'Escape' && deselect()}
   >
-    <button
-      class="settings-chip"
-      title="Page settings (frontmatter)"
-      onclick={(e) => {
-        e.stopPropagation();
-        openSettings();
-      }}
-    >
-      ⚙ {pageTitle}
-    </button>
+    {#if canvas === null}
+      <p class="empty">Plating…</p>
+    {:else}
+      <button
+        class="settings-chip"
+        title="Page settings (frontmatter)"
+        onclick={(e) => {
+          e.stopPropagation();
+          openSettings();
+        }}
+      >
+        ⚙ {pageTitle}
+      </button>
 
-    {#each canvas.blocks as block, i}
+      {#each canvas.blocks as block, i (i)}
       <div
         class="block {block.kind}"
         class:selected={selected === i}
@@ -521,7 +516,7 @@
       <p class="empty">Empty page. Use the floating menu's Add row once something is selected — or start with Page settings.</p>
     {/each}
 
-    {#if selected !== null && menuPos !== null && conflictHash === ''}
+    {#if canvas !== null && selected !== null && menuPos !== null && conflictHash === ''}
       <div class="menu" style:left="{menuPos.x}px" style:top="{menuPos.y}px">
         <div class="menu-row">
           {#if selectedIsModule}
@@ -541,6 +536,7 @@
           <button onclick={() => addModule('embed')}>Embed</button>
         </div>
       </div>
+    {/if}
     {/if}
   </div>
 </section>

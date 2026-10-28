@@ -1,5 +1,5 @@
 ---
-title: Hands-On: Real World Schmarrn
+title: "Hands-On: Real World Schmarrn"
 ---
 
 Take your time.

@@ -12,6 +12,8 @@
 import remarkDirective from 'remark-directive';
 import { parseMdms } from '@swisd-project/mdms';
 import { schmarrnModules, stampDirectives } from './modules';
+import { splitFrontmatter } from './blocks';
+import { frontmatterValidator } from './schema';
 
 export interface RenderContext {
   /** Page type for the per-type Zod frontmatter gate. */
@@ -34,4 +36,20 @@ export function renderMdms(raw: string, context: RenderContext) {
     plugins: [plugins],
     validateFrontmatter: context.validateFrontmatter
   });
+}
+
+/** Frontmatter-only validation — no body parse, cheap enough for every keystroke.
+ *  Returns '' when the frontmatter is law-abiding, a human-readable message otherwise. */
+export function frontmatterError(raw: string, type: string): string {
+  const { frontmatter } = splitFrontmatter(raw);
+  try {
+    if (frontmatter === '') {
+      frontmatterValidator(type)({});
+    } else {
+      parseMdms(`${frontmatter}\n`, { validateFrontmatter: frontmatterValidator(type) });
+    }
+    return '';
+  } catch (e) {
+    return (e instanceof Error ? e.message : String(e)).replace(/^mdms: /, '');
+  }
 }
