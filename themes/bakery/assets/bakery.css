@@ -167,24 +167,41 @@ body.slide {
   font-style: italic;
 }
 
-/* ——— the deck: :::slide containers paginate the stage — CSS snaps, deck.js glides the anchors ——— */
-.slide-stage:has(> .sm-slide) {
-  flex-direction: column;
-  justify-content: flex-start; /* centered+overflow = sliced tops; never center a scroller */
-  align-items: stretch;
-  overflow-y: auto;
-  overflow-x: hidden;
+/* ——— the deck: the DOCUMENT scrolls, the root snaps. No inner scroller cage. ———
+   Native snap = native momentum, native keys, native anchors. scroll-snap-stop:
+   always makes every wheel gesture stop on one slide, exactly like the big
+   full-page decks behave. Only deck.js handles the loaded-at-mid-air edge. */
+html:has(.slide-stage > .sm-slide) {
   scroll-snap-type: y mandatory;
-  max-width: none;
-  padding: 0;
-  margin: 0;
+  scroll-behavior: smooth;
   scrollbar-width: none; /* the deck is the scrollbar */
 }
-.slide-stage:has(> .sm-slide)::-webkit-scrollbar { display: none; }
-.slide-stage:has(> .sm-slide) > * {
-  flex: 0 0 auto;
-  min-height: var(--sm-slide-h, 100%); /* deck.js measures; CSS is the fallback */
+html:has(.slide-stage > .sm-slide)::-webkit-scrollbar { display: none; }
+html:has(.slide-stage > .sm-slide) body.slide {
+  display: block; /* document scroll, no flex column, no inner sage */
+  min-height: 100vh;
+}
+html:has(.slide-stage > .sm-slide) .slide-brand,
+html:has(.slide-stage > .sm-slide) .slide-foot {
+  position: fixed; left: 0; right: 0; z-index: 20;
+  background: color-mix(in srgb, var(--batter) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+html:has(.slide-stage > .sm-slide) .slide-brand { top: 0; }
+html:has(.slide-stage > .sm-slide) .slide-foot { bottom: 0; border-top: none; }
+.slide-stage:has(> .sm-slide) {
+  display: block; /* the slides ARE the page */
+  max-width: none;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+}
+.slide-stage:has(> .sm-slide) > .sm-slide {
+  min-height: 100vh;         /* each slide owns the viewport */
   scroll-snap-align: start;
+  scroll-snap-stop: always;  /* one slide per gesture — natively */
+  box-sizing: border-box;
+  padding: 4.5rem 2rem;      /* clears the fixed brand / foot */
 }
 /* slide content breathes: nothing pins to the very edge of a full-height slide */
 .sm-slide > :first-child { margin-top: 0; }
@@ -194,7 +211,6 @@ body.slide {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 3rem 2rem;
   max-width: 52rem;
   width: 100%;
   margin: 0 auto;

@@ -136,23 +136,43 @@ body.slide {
   font-style: italic;
 }
 
-/* ——— the deck: :::slide containers paginate the stage — CSS snaps, deck.js glides the anchors ——— */
-.slide-stage:has(> .sm-slide) {
-  flex-direction: column; justify-content: flex-start; align-items: stretch;
-  overflow-y: auto; overflow-x: hidden;
+/* ——— the deck: the DOCUMENT scrolls, the root snaps. No inner scroller cage. ———
+   Native snap = native momentum, native keys, native anchors. scroll-snap-stop:
+   always makes every wheel gesture stop on one slide, exactly like the big
+   full-page decks behave. Only deck.js handles the loaded-at-mid-air edge. */
+html:has(.slide-stage > .sm-slide) {
   scroll-snap-type: y mandatory;
-  max-width: none; margin: 0; padding: 0;
-  scrollbar-width: none;
+  scroll-behavior: smooth;
+  scrollbar-width: none; /* the deck is the scrollbar */
 }
-.slide-stage:has(> .sm-slide)::-webkit-scrollbar { display: none; }
-.slide-stage:has(> .sm-slide) > * { flex: 0 0 auto; min-height: var(--sm-slide-h, 100%); scroll-snap-align: start; }
+html:has(.slide-stage > .sm-slide)::-webkit-scrollbar { display: none; }
+html:has(.slide-stage > .sm-slide) body.slide {
+  display: block; min-height: 100vh; /* document scroll, no flex column */
+}
+html:has(.slide-stage > .sm-slide) .slide-mark,
+html:has(.slide-stage > .sm-slide) .slide-foot {
+  position: fixed; left: 0; right: 0; z-index: 20;
+  background: color-mix(in srgb, var(--light) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+html:has(.slide-stage > .sm-slide) .slide-mark { top: 0; }
+html:has(.slide-stage > .sm-slide) .slide-foot { bottom: 0; }
+.slide-stage:has(> .sm-slide) {
+  display: block; max-width: none; width: 100%; margin: 0; padding: 0;
+}
+.slide-stage:has(> .sm-slide) > .sm-slide {
+  min-height: 100vh;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  box-sizing: border-box;
+  padding: 4.5rem 2.5rem;
+}
 /* slide content breathes: nothing pins to the very edge of a full-height slide */
 .sm-slide > :first-child { margin-top: 0; }
 .sm-slide > :last-child { margin-bottom: 0; }
 .sm-slide p, .sm-slide ul, .sm-slide ol { max-width: 56rem; }
 .sm-slide {
   display: flex; flex-direction: column; justify-content: center;
-  padding: 2rem 2.5rem;
   max-width: 56rem; width: 100%; margin: 0 auto;
 }
 
