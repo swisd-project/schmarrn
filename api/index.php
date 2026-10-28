@@ -318,6 +318,30 @@ try {
             echo json_encode(['ok' => true]);
             break;
 
+        // ——— page types (p6-era UX): pre-made, fillable scaffolds from pagetypes/ ———
+        case $method === 'GET' && $path === 'pagetypes':
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            $types = [];
+            foreach (scandir(dirname(__DIR__) . '/pagetypes') ?: [] as $file) {
+                if (!str_ends_with($file, '.md') || str_starts_with($file, '.')) {
+                    continue;
+                }
+                $name = substr($file, 0, -3);
+                if (preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $name) !== 1) {
+                    continue;
+                }
+                $types[] = [
+                    'name' => $name,
+                    'title' => ucfirst(str_replace('-', ' ', $name)),
+                    'body' => (string)file_get_contents(dirname(__DIR__) . '/pagetypes/' . $file),
+                ];
+            }
+            usort($types, fn($a, $b) => strcmp((string)$a['name'], (string)$b['name']));
+            echo json_encode($types, JSON_UNESCAPED_SLASHES);
+            break;
+
         // Plugin API routes: /api/plugin/<name>/<route> — auth/CSRF enforced by the contract.
         case preg_match('#^(GET|POST|PUT|DELETE)$#', $method) === 1
             && preg_match('#^plugin/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:

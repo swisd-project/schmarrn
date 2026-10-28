@@ -25,6 +25,7 @@
 │   └── hello/                    # demo plugin (copy-me template): placeholder + public/user routes
 │       ├── plugin.json
 │       └── plugin.php
+├── pagetypes/                    # page-type scaffolds: pre-made, fillable pages (blank/landing/gallery/article); :::image slots CLOSE with :::
 ├── themes/
 │   ├── bakery/                   # default theme (classical-first; slide.html too)
 │   │   ├── theme.json
@@ -42,9 +43,9 @@
 │   └── (*.mts)                   # dev probes
 ├── api/                          # PHP core — front controller + libs, no framework
 │   ├── .htaccess                 # legacy (root .htaccess is the law now)
-│   ├── index.php                 # JSON routes: login/session, pages, drafts, publish(+html), public API, media, locks, plugins
-│   ├── serve.php                 # public serving engine: dispatch, themes, cached HTML, fallback shell, SEO head, plugin fills, editor injection
-│   ├── site.php                  # brand settings load/save (template < site.local.php) + site assets (.assets/)
+│   ├── index.php                 # JSON routes: login/session, pages, drafts, publish(+html), pagetypes, public API, media, locks, plugins
+│   ├── serve.php                 # public serving engine: dispatch, themes, cached HTML, fallback shell, SEO head, plugin fills, editor injection; styleOf: page frontmatter → GLOBAL site style → theme default
+│   ├── site.php                  # brand settings load/save (template < site.local.php) + site assets (.assets/); `style` = GLOBAL template ('' | classical | slide, whitelist-validated)
 │   ├── plugins.php               # p6 capability contract: scan/validate/load/dispatch, state in config/plugins.local.php
 │   ├── router.php
 │   ├── auth.php                  # Argon2id password, session, 24h

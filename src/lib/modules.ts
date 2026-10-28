@@ -82,6 +82,17 @@ export function renderModule(
     case 'image': {
       const file = str(props.file);
       const caption = str(props.caption);
+      if (file === '') {
+        // The EMPTY image slot: a visible, fillable placeholder. Page-type
+        // scaffolds seed these; the user clicks one and fills it. No file, no
+        // src, nothing to inject — a labeled box, by design.
+        return {
+          type: 'element',
+          tagName: 'figure',
+          properties: { className: 'sm-module sm-image sm-empty-slot' },
+          children: [{ type: 'element' as const, tagName: 'figcaption', properties: {}, children: [text(caption !== '' ? caption : (alt !== '' ? alt : 'Empty image slot — click to fill'))] }]
+        };
+      }
       const remote = /^https?:\/\//i.test(file);
       // Defense in depth: local files must be plain paths even when the stamper was bypassed.
       if (!remote && !SAFE_FILE.test(file)) return null;

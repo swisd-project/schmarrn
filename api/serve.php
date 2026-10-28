@@ -140,9 +140,15 @@ function manifest(array $site): array
 /** Page style: frontmatter byte-peek wins, else the theme's declared default. */
 function styleOf(string $type, string $slug, array $site): string
 {
+    // Precedence: the page's own frontmatter (the dropdown — an override, kept for
+    // the page-type future) → the GLOBAL template (site setting, the everyday dial)
+    // → the theme's default style.
     $raw = \Store\read($type, $slug);
     if ($raw !== null && preg_match('/^style:\s*["\']?(slide|classical)["\']?\s*$/m', $raw, $m) === 1) {
         return $m[1];
+    }
+    if (($site['style'] ?? '') === 'slide' || ($site['style'] ?? '') === 'classical') {
+        return (string)$site['style'];
     }
     return (manifest($site)['defaultStyle'] ?? null) === 'slide' ? 'slide' : 'classical';
 }

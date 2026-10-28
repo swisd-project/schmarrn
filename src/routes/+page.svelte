@@ -76,7 +76,7 @@
   }
 
   // ——— brand settings (admin) ———
-  let siteSettings = $state<{ name: string; claim: string; logo: string; theme: string; home: string } | null>(null);
+  let siteSettings = $state<{ name: string; claim: string; logo: string; theme: string; home: string; style: string } | null>(null);
   let siteBusy = $state(false);
   let siteError = $state('');
   let siteNote = $state('');
@@ -636,6 +636,13 @@
                 {#each setupThemes as theme (theme)}
                   <option value={theme}>{theme}</option>
                 {/each}
+              </select>
+            </label>
+            <label class="field"><span>Template <span class="hint">(the whole site — a page's own "Served as" overrides)</span></span>
+              <select class="input" bind:value={siteSettings.style}>
+                <option value="">theme default</option>
+                <option value="classical">classical</option>
+                <option value="slide">slide</option>
               </select>
             </label>
             <label class="field">

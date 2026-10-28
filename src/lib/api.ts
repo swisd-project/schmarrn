@@ -211,6 +211,7 @@ export interface SiteSettings {
   readonly logo: string;
   readonly theme: string;
   readonly home: string;
+  readonly style: string;
 }
 
 export function getSiteSettings(): Promise<SiteSettings> {

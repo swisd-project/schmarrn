@@ -65,14 +65,21 @@ const EDIT_CSS = `
 .sm-edit-btn:hover { transform:translateY(-2px); box-shadow:var(--hover-lift); }
 .sm-edit-btn span { display:block; width:1.25rem; height:2px; background:var(--color-ink); margin:5px 0; }
 .sm-edit-layer { position:fixed; inset:0; background:rgba(40,25,15,.45); z-index:9999; display:grid; place-items:center; }
-.sm-edit-panel {
-  position:fixed; right:1.25rem; bottom:4.75rem; z-index:9999;
-  width:min(22rem,92vw); max-height:80vh; overflow:auto;
-  background:var(--color-batter); border-radius:4px; box-shadow:var(--float-shadow);
-  padding:1rem 1.25rem; display:flex; flex-direction:column; gap:.7rem;
+.sm-edit-overlay {
+  position:fixed; inset:0; z-index:9999; overflow:auto;
+  background:linear-gradient(145deg,#fffdf7,var(--color-batter) 45%,#f9ecd9);
+  display:flex; justify-content:center; align-items:flex-start;
+  padding:3rem 1.25rem 4rem;
   color:var(--color-ink); font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size:14px;
 }
-.sm-edit-panel h3 { margin:0; font-size:16px; font-weight:800; }
+.sm-edit-overlay-inner { width:min(34rem,100%); display:flex; flex-direction:column; gap:1rem; }
+.sm-edit-head { display:flex; justify-content:space-between; align-items:center; }
+.sm-edit-head h2 { margin:0; font-size:20px; font-weight:800; }
+.sm-section {
+  background:#fffdf7; border-radius:4px; box-shadow:var(--raise-mg);
+  padding:1rem 1.25rem; display:flex; flex-direction:column; gap:.7rem;
+}
+.sm-section h3 { margin:0; font-size:15px; font-weight:800; }
 .sm-modal {
   background:var(--color-batter); border-radius:4px; box-shadow:var(--float-shadow);
   width:min(34rem,92vw); max-height:84vh; overflow:auto;
@@ -151,6 +158,7 @@ async function boot(root: HTMLElement): Promise<void> {
   const context = { type, slug };
 
   let csrf = '';
+  let role = '';
   let raw = '';
   let baseHash = '';
   let blocks: Block[] = [];
@@ -172,9 +180,10 @@ async function boot(root: HTMLElement): Promise<void> {
   }
 
   async function loadPage(): Promise<void> {
-    const session = await apiJson<{ authenticated: boolean; csrf: string }>('/api/session');
+    const session = await apiJson<{ authenticated: boolean; role: string; csrf: string }>('/api/session');
     if (!session.authenticated) throw new Error('Not logged in.');
     csrf = session.csrf;
+    role = session.role;
     // The page the user SEES is the published one — edit from it, never from a surprise draft.
     raw = await fetch(`/api/page/${type}/${slug}`).then((r) => {
       if (!r.ok) throw new Error(`API ${r.status}`);
@@ -279,7 +288,7 @@ async function boot(root: HTMLElement): Promise<void> {
       class: 'sm-edit-btn',
       title: 'Page menu — settings, manage, logout',
       'aria-label': 'Page menu',
-      onclick: () => (panel === null ? openPanel() : closePanel())
+      onclick: () => (panel === null ? openOverlay() : closeOverlay())
     });
     for (let i = 0; i < 3; i += 1) burger.append(el('span'));
     document.body.append(burger);
@@ -293,7 +302,7 @@ async function boot(root: HTMLElement): Promise<void> {
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         deselect();
-        closePanel();
+        closeOverlay();
       }
     });
 
@@ -593,14 +602,14 @@ async function boot(root: HTMLElement): Promise<void> {
     void saveAndPublish(joinPage(splitFrontmatter(raw), blocks), { reload: false });
   }
 
-  // ——— the burger overlay: page settings + manage + logout ———
+  // ——— the burger overlay: FULL SCREEN, houses page settings + site template + new page ———
 
   function peek(key: string): string {
     const m = new RegExp(`^${key}:\\s*(.*)$`, 'm').exec(splitFrontmatter(raw).frontmatter);
     return m?.[1]?.trim().replace(/^["']|["']$/g, '') ?? '';
   }
 
-  function openPanel(): void {
+  function openOverlay(): void {
     if (panel !== null) return;
     const title = el('input', { class: 'sm-input', value: peek('title') });
     const slugInput = el('input', { class: 'sm-input', value: peek('slug') });
@@ -614,7 +623,7 @@ async function boot(root: HTMLElement): Promise<void> {
     const tags = el('input', { class: 'sm-input', value: peek('tags').replace(/^\[|\]$/g, '') });
     const err = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:0' });
 
-    const form = el('form', {
+    const settingsForm = el('form', {
       onsubmit: (e: Event) => {
         e.preventDefault();
         const nextSlug = slugInput.value.trim();
@@ -644,27 +653,80 @@ async function boot(root: HTMLElement): Promise<void> {
         const navigate = nextSlug !== slug
           ? (type === 'pages' ? `/${nextSlug}` : `/${type}/${nextSlug}`)
           : undefined;
-        closePanel();
+        closeOverlay();
         void saveAndPublish(next, { reload: navigate === undefined, navigate });
       }
     }, [
       field('Title', title),
       field('Slug', slugInput),
-      field('Served as', style),
+      field('Served as (this page only — the site template lives below)', style),
       field('Date', date),
       field('Tags (comma-separated)', tags),
       err,
       el('button', { class: 'sm-btn sm-btn-primary', type: 'submit', style: 'align-self:flex-start' }, ['Save + publish'])
     ]);
 
-    panel = el('div', { class: 'sm-edit-panel' }, [
-      el('h3', {}, ['Page settings']),
-      form,
+    const overlay = el('div', { class: 'sm-edit-overlay', role: 'dialog', 'aria-modal': 'true' });
+    const inner = el('div', { class: 'sm-edit-overlay-inner' });
+    inner.append(el('div', { class: 'sm-edit-head' }, [
+      el('h2', {}, ['Page settings']),
+      el('button', { class: 'sm-btn sm-btn-secondary', onclick: () => closeOverlay() }, ['×'])
+    ]));
+    inner.append(el('div', { class: 'sm-section' }, [settingsForm]));
+
+    // Admins get the SITE dial here — the global template, no backend trip.
+    if (role === 'admin') {
+      const siteStyle = el('select', { class: 'sm-input' });
+      for (const [value, label] of [['', 'theme default'], ['classical', 'classical'], ['slide', 'slide']] as const) {
+        siteStyle.append(el('option', { value }, [label]));
+      }
+      const siteErr = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:0' });
+      const siteSection = el('div', { class: 'sm-section' }, [
+        el('h3', {}, ['Site — the template for the WHOLE site']),
+        field('Template (every page, site-wide)', siteStyle),
+        siteErr,
+        el('button', {
+          class: 'sm-btn sm-btn-primary',
+          type: 'button',
+          style: 'align-self:flex-start',
+          onclick: async () => {
+            try {
+              const current = await apiJson<Record<string, string>>('/api/site');
+              await apiJson('/api/site', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...current, style: siteStyle.value })
+              });
+              siteErr.className = 'sm-alert sm-alert-ok';
+              siteErr.textContent = 'Saved — the whole site serves this template now.';
+              siteErr.style.display = '';
+              window.location.reload();
+            } catch (e) {
+              siteErr.className = 'sm-alert sm-alert-err';
+              siteErr.textContent = e instanceof Error ? e.message : String(e);
+              siteErr.style.display = '';
+            }
+          }
+        }, ['Save site template'])
+      ]);
+      void fetch('/api/site')
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`API ${r.status}`))))
+        .then((s: Record<string, string>) => {
+          siteStyle.value = s.style ?? '';
+        })
+        .catch(() => {
+          siteStyle.value = '';
+        });
+      inner.append(siteSection);
+    }
+
+    // The actions row: new page (the plus), logout, and the deep backend for the rest.
+    const actions = el('div', { class: 'sm-section' }, [
+      el('h3', {}, ['Anything else?']),
       el('div', { style: 'display:flex;gap:.5rem;flex-wrap:wrap' }, [
-        el('a', { class: 'sm-btn sm-btn-secondary', href: '/_' }, ['Manage site']),
+        el('button', { class: 'sm-btn sm-btn-primary', onclick: () => openNewPage() }, ['＋ New page']),
         el('button', {
           class: 'sm-btn sm-btn-secondary',
-          type: 'button',
           onclick: async () => {
             try {
               await apiJson('/api/logout', { method: 'POST' });
@@ -672,15 +734,108 @@ async function boot(root: HTMLElement): Promise<void> {
               window.location.reload();
             }
           }
-        }, ['Log out'])
+        }, ['Log out']),
+        el('a', { class: 'sm-btn sm-btn-secondary', href: '/_' }, ['Manage site'])
       ])
     ]);
-    document.body.append(panel);
+    inner.append(actions);
+    overlay.append(inner);
+    // Click somewhere on the bg → the overlay goes away.
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeOverlay();
+    });
+    document.body.append(overlay);
+    panel = overlay;
   }
 
-  function closePanel(): void {
+  function closeOverlay(): void {
     panel?.remove();
     panel = null;
+  }
+
+  // ——— the plus: a new page from a page-type scaffold ———
+
+  interface PageType {
+    readonly name: string;
+    readonly title: string;
+    readonly body: string;
+  }
+
+  let pageTypes: readonly PageType[] = [];
+
+  function openNewPage(): void {
+    const title = el('input', { class: 'sm-input', placeholder: 'The page title' });
+    const slugInput = el('input', { class: 'sm-input', placeholder: 'the-page-slug' });
+    const typeSelect = el('select', { class: 'sm-input' });
+    const err = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:0' });
+
+    void apiJson<readonly PageType[]>('/api/pagetypes')
+      .then((types) => {
+        pageTypes = types;
+        for (const t of types) typeSelect.append(el('option', { value: t.name }, [t.title]));
+      })
+      .catch((e: unknown) => {
+        err.textContent = e instanceof Error ? e.message : String(e);
+        err.style.display = '';
+      });
+
+    const form = el('form', {
+      onsubmit: (e: Event) => {
+        e.preventDefault();
+        const nextSlug = slugInput.value.trim();
+        const pageTitle = title.value.trim();
+        if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(nextSlug)) {
+          err.textContent = 'Slug: lowercase letters, digits and hyphens only.';
+          err.style.display = '';
+          return;
+        }
+        if (pageTitle === '') {
+          err.textContent = 'The title cannot be empty.';
+          err.style.display = '';
+          return;
+        }
+        const scaffold = pageTypes.find((t) => t.name === typeSelect.value);
+        const body = scaffold !== undefined ? scaffold.body : '';
+        const lines = [
+          '---',
+          `title: ${JSON.stringify(pageTitle)}`,
+          `slug: ${nextSlug}`,
+          'published: true',
+          'draft: false',
+          `date: ${new Date().toISOString().slice(0, 10)}`,
+          'tags: []',
+          '---'
+        ];
+        const nextRaw = `${lines.join('\n')}\n\n${body}`.trimEnd() + '\n';
+        void (async () => {
+          try {
+            await fetch(`/api/page/pages/${nextSlug}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/markdown', 'X-CSRF-Token': csrf },
+              body: nextRaw
+            }).then(async (r) => {
+              if (!r.ok) {
+                const body = (await r.json().catch(() => null)) as { error?: string } | null;
+                throw new Error(body?.error ?? `API ${r.status}`);
+              }
+            });
+            document.querySelector('.sm-edit-layer')?.remove();
+            closeOverlay();
+            window.location.href = `/${nextSlug}`;
+          } catch (e2) {
+            err.textContent = e2 instanceof Error ? e2.message : String(e2);
+            err.style.display = '';
+          }
+        })();
+      }
+    }, [
+      field('Title', title),
+      field('Slug', slugInput),
+      field('Page type — a pre-made page to fill', typeSelect),
+      err,
+      el('button', { class: 'sm-btn sm-btn-primary', type: 'submit' }, ['Create page'])
+    ]);
+    openModal('New page', form);
   }
 
   // ——— toast ———

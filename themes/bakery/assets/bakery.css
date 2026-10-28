@@ -155,3 +155,14 @@ body.slide {
   text-align: center;
   padding: 1.25rem;
 }
+
+/* ——— the empty image slot: a fillable placeholder (page-type scaffolds seed it) ——— */
+.sm-empty-slot {
+  margin: 1.5rem 0;
+  padding: 2.5rem 1.5rem;
+  border: 2px dashed var(--line, #ccc);
+  border-radius: 4px;
+  text-align: center;
+  color: var(--ink-soft, #777);
+  font-style: italic;
+}

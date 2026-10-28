@@ -20,9 +20,10 @@ const DEFAULTS = [
     'logo' => '',
     'theme' => 'bakery',
     'home' => '',
+    'style' => '', // the GLOBAL template: '' = theme default, else 'classical' | 'slide'
 ];
 
-const KEYS = ['name', 'claim', 'logo', 'theme', 'home'];
+const KEYS = ['name', 'claim', 'logo', 'theme', 'home', 'style'];
 
 function configFile(): string
 {
@@ -55,7 +56,11 @@ function save(array $settings): void
 {
     $clean = [];
     foreach (KEYS as $key) {
-        $clean[$key] = isset($settings[$key]) && is_string($settings[$key]) ? $settings[$key] : DEFAULTS[$key];
+        $value = isset($settings[$key]) && is_string($settings[$key]) ? $settings[$key] : DEFAULTS[$key];
+        if ($key === 'style' && !in_array($value, ['', 'classical', 'slide'], true)) {
+            $value = '';
+        }
+        $clean[$key] = $value;
     }
     $export = "<?php\n\ndeclare(strict_types=1);\n\nreturn " . var_export($clean, true) . ";\n";
     if (file_put_contents(configFile(), $export) === false) {
