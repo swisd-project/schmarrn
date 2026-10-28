@@ -15,6 +15,19 @@ import { visit } from 'unist-util-visit';
 // boundary). Boundaries shipped: image (+caption), video (page file or url), embed (url).
 export const MODULE_NAMES = ['image', 'video', 'embed'] as const;
 
+/**
+ * The injection wall: per-module attribute allowlist. Any directive attribute
+ * outside this table never reaches hast — no on*, no style, no data-*, nothing.
+ */
+const MODULE_ATTRS: Record<string, readonly string[]> = {
+  image: ['file', 'caption'],
+  video: ['url', 'file'],
+  embed: ['url']
+};
+
+/** Local media references are plain relative paths — no schemes, no `..` games. */
+const SAFE_FILE = /^[\w./-]+$/;
+
 export interface ModuleContext {
   /** Page-local media resolver: filename inside the page folder → URL. */
   readonly mediaUrl?: (file: string) => string;
@@ -69,7 +82,10 @@ export function renderModule(
     case 'image': {
       const file = str(props.file);
       const caption = str(props.caption);
-      let src = /^https?:\/\//i.test(file) ? cleanUrl(file) : ctx.mediaUrl ? ctx.mediaUrl(file) : file;
+      const remote = /^https?:\/\//i.test(file);
+      // Defense in depth: local files must be plain paths even when the stamper was bypassed.
+      if (!remote && !SAFE_FILE.test(file)) return null;
+      let src = remote ? cleanUrl(file) : ctx.mediaUrl ? ctx.mediaUrl(file) : file;
       if (src === '') return null;
       let img: HastNode = {
         type: 'element',
@@ -130,11 +146,27 @@ export function renderModule(
 /** Drop-in factory for mdms `plugins`. Walks hast, spawns module HTML in place. */
 export function schmarrnModules(ctx: ModuleContext = {}) {
   return () => (tree: unknown) => {
+    // Generated output must never be re-processed when the walk descends into it.
+    const generated = new WeakSet<object>();
+    const markAll = (node: HastNode): void => {
+      generated.add(node);
+      node.children?.forEach(markAll);
+    };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     visit(tree, 'element' as never, (node: any) => {
       const html = renderModule(node as ElementNode, ctx);
-      if (html === null) return;
-      Object.assign(node, { tagName: html.tagName, properties: { ...(html.properties ?? {}) }, children: html.children });
+      if (html !== null) {
+        Object.assign(node, { tagName: html.tagName, properties: { ...(html.properties ?? {}) }, children: html.children });
+        markAll(node);
+        return;
+      }
+      // A module directive that failed validation must not survive as a raw tag
+      // with its raw attributes — de-fang it exactly like an unknown name.
+      if ((MODULE_NAMES as readonly string[]).includes(node.tagName) && !generated.has(node)) {
+        node.tagName = 'p';
+        node.properties = { className: 'sm-unknown-module' };
+        node.children = [];
+      }
     });
   };
 }
@@ -155,12 +187,22 @@ export function stampDirectives() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (node: any) => {
         const known = (MODULE_NAMES as readonly string[]).includes(node.name);
-        node.data = {
-          ...(node.data ?? {}),
+        if (!known) {
           // Unknown module names must never become live tags — de-fang to a visible marker.
-          hName: known ? node.name : 'p',
-          hProperties: known ? { ...(node.attributes ?? {}) } : { className: 'sm-unknown-module' }
-        };
+          node.data = { ...(node.data ?? {}), hName: 'p', hProperties: { className: 'sm-unknown-module' } };
+          return;
+        }
+        // Allowlist pass: only the pinned attributes survive, so `on*`, `style`,
+        // `srcdoc` & friends are dead before hast is even built.
+        const props: Record<string, string> = {};
+        for (const key of MODULE_ATTRS[node.name] ?? []) {
+          const value = node.attributes?.[key];
+          if (typeof value === 'string' && value !== '') props[key] = value;
+        }
+        if (typeof props.file === 'string' && !SAFE_FILE.test(props.file) && !/^https?:\/\//i.test(props.file)) {
+          delete props.file;
+        }
+        node.data = { ...(node.data ?? {}), hName: node.name, hProperties: props };
       }
     );
   };

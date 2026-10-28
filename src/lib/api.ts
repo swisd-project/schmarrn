@@ -56,22 +56,44 @@ export function writePage(type: string, slug: string, raw: string): Promise<void
 
 // ——— editorial copies + publishing ———
 
-export async function readDraft(type: string, slug: string): Promise<{ raw: string; hasDraft: boolean }> {
+/** Raised when a guarded draft save hits a newer server copy (409). */
+export class ConflictError extends Error {
+  /** Fingerprint of the server's current copy — empty when unknown. */
+  readonly serverHash: string;
+  constructor(serverHash: string) {
+    super('Draft changed elsewhere since you started editing.');
+    this.name = 'ConflictError';
+    this.serverHash = serverHash;
+  }
+}
+
+export async function readDraft(type: string, slug: string): Promise<{ raw: string; hasDraft: boolean; hash: string }> {
   const res = await fetch(`/api/draft/${type}/${slug}`);
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new Error(body?.error ?? `API ${res.status}`);
   }
   const raw = await res.text();
-  return { raw, hasDraft: res.headers.get('X-Has-Draft') === '1' };
+  return { raw, hasDraft: res.headers.get('X-Has-Draft') === '1', hash: res.headers.get('X-Content-Hash') ?? '' };
 }
 
-export function writeDraft(type: string, slug: string, raw: string): Promise<void> {
-  return fetch(`/api/draft/${type}/${slug}`, {
+/** Guarded autosave. With baseHash set, a stale save throws ConflictError instead
+ *  of clobbering — the flaky-internet guardrail. Omit baseHash to force-overwrite. */
+export async function writeDraft(type: string, slug: string, raw: string, baseHash?: string): Promise<string> {
+  const res = await fetch(`/api/draft/${type}/${slug}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'text/markdown', 'X-CSRF-Token': csrfToken() },
+    headers: {
+      'Content-Type': 'text/markdown',
+      'X-CSRF-Token': csrfToken(),
+      ...(baseHash ? { 'X-Base-Hash': baseHash } : {})
+    },
     body: raw
-  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
+  });
+  if (res.status === 409) {
+    throw new ConflictError(res.headers.get('X-Current-Hash') ?? '');
+  }
+  const body = await json<{ ok: boolean; hash: string }>(res);
+  return body.hash;
 }
 
 export function publishPage(type: string, slug: string): Promise<void> {

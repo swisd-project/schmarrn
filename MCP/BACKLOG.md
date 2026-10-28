@@ -34,10 +34,12 @@ v1 — Schmarrn "known to work"
 [x] Edit-lock per page (coarse, heartbeat + takeover UX)
 
 ## p2 visual editor (the build's heart)
-[~] Single-canvas editor: page rendered as-is, click into text/paragraphs inline (two-pane textarea still current; canvas build is the next big slice)
+[x] Single-canvas editor: page rendered as-is → click block to select → floating button menu → modal → save writes the block back to markdown (user-pinned interaction model; block model in `src/lib/blocks.ts`; two-pane editor deleted)
 [x] Module spec v1 + implement in mdms: text, image, image with caption, video/html embed — boundary syntax + data location decided on the go, pinned per module (remark-directive `:::name{attrs}` … `:::`; attrs inline; media files page-local; shipped via mdms v0.1.9 `mdastPlugins`; unknown module names de-fanged to inert marker)
-[~] Module modals: open → edit single item → must save (insert via media modal done; per-module EDIT modals arrive with the canvas editor)
-[~] Uploads via modal into immutable IDed assets (v1: originals stored untouched, no gd); media browser = lazy-loaded tab in settings overlay (per-page modal + upload + insert done; global overlay tab comes with p4)
+[x] Module modals: open → edit single item → must save (text textarea modal; image file+caption; video url-or-file; embed url; page-settings frontmatter modal; add-block row in the floating menu)
+[x] Guardrail — unstable internet: sha256 draft fingerprints, guarded autosave (X-Base-Hash), stale save → 409 + conflict banner (take server copy / keep mine), force-overwrite explicit; atomic tmp+rename writes
+[x] Guardrail — code injection: per-module attribute allowlist (image: file,caption; video: url,file; embed: url), local file values locked to `[\w./-]`, URLs http(s)-only, unknown/failed directives de-fanged to inert `p.sm-unknown-module`, raw HTML dropped by remark-rehype
+[~] Uploads via modal into immutable IDed assets (v1: originals stored untouched, no gd); media browser = lazy-loaded tab in settings overlay (upload lives inside the image/video modals now; global overlay tab comes with p4)
 [x] Autosave-to-draft; draft/publish gate; draft preview link (`.draft.md` sidecar engine + editor autosave + publish/unpublish; public preview URL lands with p3 serving)
 [x] Delete/rename page in UI; new page: (a) upload `.md` then edit on page, (b) new-page button in page-tree inside settings overlay (tree panel for now; overlay relocation comes with p4)
 [o] Site menu editing (classical style) (deferred to p3 — needs the classical theme to exist first)

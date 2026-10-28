@@ -27,6 +27,18 @@ cozy shot
 
 :::evil{onclick="pwn()"}
 :::
+
+:::image{file="ok.jpg" onclick="steal()" style="x" data-y="z" srcdoc="<script>alert(1)</script>"}
+:::
+
+:::image{file="javascript:alert(1)"}
+:::
+
+:::embed{url="javascript:alert(1)"}
+:::
+
+:::video{url="data:text/html,<script>alert(1)</script>"}
+:::
 `;
 const html = renderMdms(raw, { type: 'pages', slug: 'probes' }).fullHtml;
 console.log(html);

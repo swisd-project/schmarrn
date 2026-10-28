@@ -2,7 +2,7 @@
   // Login wall + page tree + editor — the Schmarrn kitchen, phase 1.
   import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount } from '$lib/api';
   import { seedPage } from '$lib/schema';
-  import PageEditor from '$lib/components/PageEditor.svelte';
+  import CanvasEditor from '$lib/components/CanvasEditor.svelte';
   import type { PageIndex, SelectedPage, AccountRef } from '$lib/types';
 
   let authenticated = $state<boolean | null>(null);
@@ -320,7 +320,7 @@
         {#if selected}
           {#if selected}
             {#key `${selected.type}/${selected.slug}`}
-              <PageEditor
+              <CanvasEditor
                 page={selected}
                 published={selectedPublished}
                 currentUserName={user}

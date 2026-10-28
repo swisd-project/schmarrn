@@ -353,6 +353,7 @@ try {
             }
             header('Content-Type: text/markdown; charset=utf-8');
             header('X-Has-Draft: ' . (Store\hasDraft($type, $slug) ? '1' : '0'));
+            header('X-Content-Hash: ' . Store\draftHash($type, $slug));
             echo $raw;
             break;
 
@@ -364,9 +365,17 @@ try {
             Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
             Lock\assertFreeOrMine($type, $slug, Auth\user());
-            Store\writeDraft($type, $slug, file_get_contents('php://input') ?: '');
+            // X-Base-Hash: the fingerprint the client based its edit on. Mismatch → 409,
+            // never a silent clobber (flaky-internet guardrail).
+            $baseHash = $_SERVER['HTTP_X_BASE_HASH'] ?? null;
+            $hash = Store\writeDraft(
+                $type,
+                $slug,
+                file_get_contents('php://input') ?: '',
+                is_string($baseHash) && $baseHash !== '' ? $baseHash : null
+            );
             Lock\acquire($type, $slug, Auth\user());
-            echo json_encode(['ok' => true]);
+            echo json_encode(['ok' => true, 'hash' => $hash]);
             break;
 
         // POST — `draft/<t>/<s>/publish` and `/unpublish`. The button behind the glass.

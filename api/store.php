@@ -111,8 +111,17 @@ function readDraft(string $type, string $slug): ?string
     return read($type, $slug);
 }
 
-/** Atomic write of the editorial sidecar (no cache involvement — public never sees it). */
-function writeDraft(string $type, string $slug, string $raw): void
+/** sha256 of the current editorial copy — the concurrency fingerprint for guarded saves. */
+function draftHash(string $type, string $slug): string
+{
+    return hash('sha256', (string)readDraft($type, $slug));
+}
+
+/** Atomic write of the editorial sidecar (no cache involvement — public never sees it).
+ *  With $baseHash set, a save based on a stale copy is refused (409) instead of
+ *  silently clobbering a newer draft — the guardrail against flaky-internet
+ *  lost updates. Returns the sha256 of the stored content. */
+function writeDraft(string $type, string $slug, string $raw, ?string $baseHash = null): string
 {
     assertNonEmpty($raw);
     assertDistinctFilenameSlug($type, $slug, $raw);
@@ -120,11 +129,17 @@ function writeDraft(string $type, string $slug, string $raw): void
     if (!is_dir($dir)) {
         \Router\refuse(404, "Page not found: {$type}/{$slug}");
     }
+    if ($baseHash !== null && !hash_equals(draftHash($type, $slug), $baseHash)) {
+        header('Content-Type: application/json; charset=utf-8');
+        header('X-Current-Hash: ' . draftHash($type, $slug));
+        \Router\refuse(409, 'Draft changed elsewhere since you started editing.');
+    }
     $tmp = $dir . '/.draft.' . bin2hex(random_bytes(6)) . '.tmp';
     if (file_put_contents($tmp, $raw) === false || !\rename($tmp, draftFile($type, $slug))) {
         @unlink($tmp);
         \Router\refuse(500, 'Draft write failed.');
     }
+    return hash('sha256', $raw);
 }
 
 function hasDraft(string $type, string $slug): bool
