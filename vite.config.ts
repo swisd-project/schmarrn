@@ -6,7 +6,9 @@ export default defineConfig({
   server: {
     proxy: {
       // Dev nudges /api to the PHP core — one origin in dev, no CORS drama.
-      '/api': 'http://localhost:8080'
+      '/api': 'http://localhost:8080',
+      // The design workbench lives on the PHP side too.
+      '/design': 'http://localhost:8080'
     }
   }
 });
