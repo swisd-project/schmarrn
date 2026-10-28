@@ -336,6 +336,19 @@ export function listMedia(type: string, slug: string): Promise<readonly MediaRef
   return fetch(`/api/media/${type}/${slug}`).then((r) => json<readonly MediaRef[]>(r));
 }
 
+/** One file somewhere on the site — the overlay's media tab sweeps these. */
+export interface SiteMediaRef {
+  readonly type: string;
+  readonly slug: string;
+  readonly name: string;
+  readonly size: number;
+  readonly url: string;
+}
+
+export function listAllMedia(): Promise<readonly SiteMediaRef[]> {
+  return fetch('/api/media').then((r) => json<readonly SiteMediaRef[]>(r));
+}
+
 export function uploadMedia(type: string, slug: string, file: File): Promise<MediaRef> {
   const form = new FormData();
   form.append('file', file);

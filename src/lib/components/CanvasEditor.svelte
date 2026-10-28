@@ -548,35 +548,35 @@
 </script>
 
 <section class="editor">
-  <header>
-    <h2>{page.type} / {page.slug}</h2>
-    <span class="state">{hasDraftCopy ? 'draft' : 'published'} · {saveState}</span>
+  <header class="flex items-center gap-3 flex-wrap">
+    <h2 class="m-0 text-base font-extrabold">{page.type} / {page.slug}</h2>
+    <span class="text-xs text-ink-soft">{hasDraftCopy ? 'draft' : 'published'} · {saveState}</span>
     {#if lockedMessage === '' && conflictHash === ''}
-      <button class="publish" onclick={publish} disabled={busy}>
+      <button class="btn btn-primary" onclick={publish} disabled={busy}>
         {saveState === 'publishing' ? 'Serving…' : 'Publish'}
       </button>
       {#if published}
-        <button class="takedown" onclick={takeDown} disabled={busy}>Unpublish</button>
+        <button class="btn btn-secondary" onclick={takeDown} disabled={busy}>Unpublish</button>
       {/if}
     {/if}
     {#if lockedMessage}
-      <span class="lock-banner" role="alert">
+      <span class="alert alert-warn m-0" role="alert">
         {lockedMessage}
-        <button class="takeover" onclick={takeover}>Take over</button>
+        <button class="btn btn-secondary" onclick={takeover}>Take over</button>
       </span>
     {/if}
     {#if conflictHash !== ''}
-      <span class="conflict" role="alert">
+      <span class="alert alert-warn m-0" role="alert">
         This draft changed elsewhere while you were editing — nothing was clobbered.
-        <button onclick={reloadDraft}>Take the server copy</button>
-        <button onclick={forceOverwrite}>Keep mine</button>
+        <button class="btn btn-secondary" onclick={reloadDraft}>Take the server copy</button>
+        <button class="btn btn-attention" onclick={forceOverwrite}>Keep mine</button>
       </span>
     {/if}
     {#if schemaWarning}
-      <span class="v-error" role="alert">{schemaWarning} — open ⚙ Page settings and save the form to rebuild the frontmatter.</span>
+      <span class="alert alert-err m-0" role="alert">{schemaWarning} — open ⚙ Page settings and save the form to rebuild the frontmatter.</span>
     {/if}
     {#if error}
-      <span class="v-error" role="alert">{error}</span>
+      <span class="alert alert-err m-0" role="alert">{error}</span>
     {/if}
   </header>
 
@@ -594,8 +594,8 @@
       <p class="empty">Plating…</p>
     {:else}
       <button
-        class="settings-chip"
-        title="Page settings (frontmatter)"
+        class="btn btn-secondary settings-chip"
+        title="Page settings (title, slug, style)"
         onclick={(e) => {
           e.stopPropagation();
           openSettings();
@@ -637,7 +637,7 @@
             Empty page — start with a block:
           {/if}
         </p>
-        <div class="menu-row add starter-row">
+        <div class="float-menu starter-row">
           <button onclick={addText}>Text</button>
           <button onclick={() => addModule('image')}>Image</button>
           <button onclick={() => addModule('video')}>Video</button>
@@ -647,7 +647,7 @@
     {/each}
 
     {#if canvas !== null && selected !== null && menuPos !== null && conflictHash === ''}
-      <div class="menu" style:left="{menuPos.x}px" style:top="{menuPos.y}px">
+      <div class="float-menu menu" style:left="{menuPos.x}px" style:top="{menuPos.y}px">
         <div class="menu-row">
           {#if selectedIsModule}
             <button onclick={() => openEditModule(selected as number)}>Edit module</button>
@@ -672,9 +672,9 @@
 </section>
 
 {#if modal !== null}
-  <div class="overlay" role="dialog" aria-modal="true">
-    <form class="card" onsubmit={saveModal}>
-      <header class="card-head">
+  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50" role="dialog" aria-modal="true">
+    <form class="modal-card" onsubmit={saveModal}>
+      <header class="modal-head">
         <h3>
           {#if modal.kind === 'text'}{modal.isNew ? 'Add text block' : 'Edit text block'}{/if}
           {#if modal.kind === 'image'}{modal.isNew ? 'Add image' : 'Edit image'}{/if}
@@ -682,20 +682,20 @@
           {#if modal.kind === 'embed'}{modal.isNew ? 'Add embed' : 'Edit embed'}{/if}
           {#if modal.kind === 'settings'}Page settings{/if}
         </h3>
-        <button type="button" class="close" onclick={closeModal}>×</button>
+        <button type="button" class="close-x" onclick={closeModal}>×</button>
       </header>
 
       {#if modal.kind === 'text'}
-        <textarea bind:value={modal.value} rows="8" spellcheck="true"></textarea>
-        <p class="hint">Markdown. Raw HTML is dropped by the renderer — by design.</p>
+        <textarea class="input" bind:value={modal.value} rows="8" spellcheck="true"></textarea>
+        <p class="hint text-xs text-ink-soft m-0">Markdown. Raw HTML is dropped by the renderer — by design.</p>
       {:else if modal.kind === 'image'}
         <label class="field">
           <span>File</span>
-          <input bind:value={modal.file} placeholder="pick below or paste an http(s) URL" readonly={false} />
+          <input class="input" bind:value={modal.file} placeholder="pick below or paste an http(s) URL" readonly={false} />
         </label>
         <label class="field">
           <span>Caption</span>
-          <input bind:value={modal.caption} placeholder="A cappuccino and a hush" />
+          <input class="input" bind:value={modal.caption} placeholder="A cappuccino and a hush" />
         </label>
         <div class="media-pick">
           <span class="hint">Page media</span>
@@ -717,7 +717,7 @@
       {:else if modal.kind === 'video'}
         <label class="field">
           <span>URL (http(s))</span>
-          <input bind:value={modal.url} placeholder="https://…" />
+          <input class="input" bind:value={modal.url} placeholder="https://…" />
         </label>
         <div class="media-pick">
           <span class="hint">…or a page video file</span>
@@ -738,16 +738,16 @@
       {:else if modal.kind === 'embed'}
         <label class="field">
           <span>Embed URL (http(s))</span>
-          <input bind:value={modal.url} placeholder="https://www.youtube.com/embed/…" />
+          <input class="input" bind:value={modal.url} placeholder="https://www.youtube.com/embed/…" />
         </label>
       {:else}
         <label class="field">
           <span>Title</span>
-          <input bind:value={modal.title} required placeholder="Page title" />
+          <input class="input" bind:value={modal.title} required placeholder="Page title" />
         </label>
         <label class="field">
           <span>Slug (URL)</span>
-          <input bind:value={modal.slug} required pattern="[a-z0-9]+(-[a-z0-9]+)*"
+          <input class="input" bind:value={modal.slug} required pattern="[a-z0-9]+(-[a-z0-9]+)*"
             title="lowercase letters, digits, hyphens" />
           {#if modal.slug.trim() !== page.slug}
             <span class="hint warn-hint">Saving renames the page to <code>{modal.slug.trim()}</code>.</span>
@@ -755,7 +755,7 @@
         </label>
         <label class="field">
           <span>Serve as</span>
-          <select bind:value={modal.style}>
+          <select class="input" bind:value={modal.style}>
             <option value="">Theme default</option>
             <option value="slide">Slide — full screen</option>
             <option value="classical">Classical — with menu</option>
@@ -763,119 +763,73 @@
         </label>
         <label class="field">
           <span>Date</span>
-          <input type="date" bind:value={modal.date} />
+          <input class="input" type="date" bind:value={modal.date} />
         </label>
         <label class="field">
           <span>Tags (comma-separated)</span>
-          <input bind:value={modal.tagsText} placeholder="studio, 2026" />
+          <input class="input" bind:value={modal.tagsText} placeholder="studio, 2026" />
         </label>
-        <p class="hint">Saving rebuilds the frontmatter from these fields — a broken one gets fixed in the same breath. Visibility stays with the Publish / Unpublish buttons.</p>
+        <p class="hint text-xs text-ink-soft m-0">Saving rebuilds the frontmatter from these fields — a broken one gets fixed in the same breath. Visibility stays with the Publish / Unpublish buttons.</p>
       {/if}
 
-      {#if modalError}<p class="error" role="alert">{modalError}</p>{/if}
-      <footer class="card-foot">
-        <button type="button" class="cancel" onclick={closeModal}>Cancel</button>
-        <button type="submit" class="save">Save</button>
+      {#if modalError}<p class="alert alert-err m-0" role="alert">{modalError}</p>{/if}
+      <footer class="modal-foot">
+        <button type="button" class="btn btn-secondary" onclick={closeModal}>Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
       </footer>
     </form>
   </div>
 {/if}
 
 <style>
+  /* The editor chrome wears the system (app.css); only the canvas-specific
+     geometry lives here. Colors come from the tokens. */
   .editor { display: flex; flex-direction: column; gap: 1rem; height: 80vh; }
-  header { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
-  h2 { margin: 0; font-size: 1rem; }
-  .state { font-size: 0.8rem; opacity: 0.6; }
-  .v-error { font-size: 0.8rem; color: #b3004c; }
-  .publish { font-weight: 600; }
-  .takedown { font-size: 0.8rem; opacity: 0.7; }
-  .lock-banner { font-size: 0.8rem; color: #7a4a00; background: #ffe9d6; border-radius: 4px; padding: 0.2rem 0.5rem; }
-  .takeover { font-size: 0.8rem; margin-left: 0.4rem; }
-  .conflict {
-    font-size: 0.8rem; color: #7a1fa0; background: #f3e2ff;
-    border-radius: 6px; padding: 0.3rem 0.6rem; display: inline-flex; gap: 0.5rem; align-items: center;
-  }
 
   .canvas {
     position: relative;
     overflow: auto;
     flex: 1;
     min-height: 0;
-    border: 1px solid #d8c7b2;
-    border-radius: 8px;
-    background: #fffdf9;
+    border-radius: var(--radius-lg);
+    background: var(--color-batter);
+    box-shadow: var(--raise-mg);
     padding: 1.25rem 1.5rem 3rem;
   }
-  .settings-chip {
-    font-size: 0.8rem; border: 1px dashed #d8c7b2; background: #fff4e6;
-    border-radius: 999px; padding: 0.25rem 0.8rem; cursor: pointer; margin-bottom: 1rem;
-  }
-  .settings-chip:hover { background: #ffe9d6; }
+  .settings-chip { font-size: var(--text-xs); padding: 0.25rem 0.75rem; margin-bottom: 1rem; }
 
-  .block { border: 1px solid transparent; border-radius: 6px; padding: 0.35rem 0.5rem; cursor: pointer; }
-  .block:hover { border-color: #f3c9b8; }
-  .block.selected { border-color: #e0567a; background: #fff7f2; box-shadow: 0 2px 8px rgba(224, 86, 122, 0.15); }
+  .block { border: 1px solid transparent; border-radius: var(--radius-md); padding: 0.35rem 0.5rem; cursor: pointer; }
+  .block:hover { border-color: var(--color-blossom); }
+  .block.selected { border-color: var(--color-jam); background: #fff7f2; box-shadow: var(--hover-lift); }
   .block.module { background: #fbf7ff; }
-  .block.module.selected { border-color: #7a1fa0; background: #f7f0ff; }
+  .block.module.selected { border-color: var(--color-neon-blue); background: #f4fbff; }
   .block :global(figure) { margin: 0.5rem 0; }
-  .block :global(img), .block :global(video) { max-width: 100%; border-radius: 8px; }
-  .block :global(iframe) { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 8px; }
-  .block-warning { color: #b3004c; font-size: 0.8rem; }
-  .empty { opacity: 0.55; font-style: italic; }
-  .starter { border: 1px dashed #e8d9c5; border-radius: 8px; padding: 1rem; }
+  .block :global(img), .block :global(video) { max-width: 100%; border-radius: var(--radius-md); }
+  .block :global(iframe) { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: var(--radius-md); }
+  .block-warning { color: var(--color-error); font-size: var(--text-xs); }
+  .empty { opacity: 0.6; font-style: italic; color: var(--color-ink-soft); }
+  .starter { border: 2px dashed var(--color-line); border-radius: var(--radius-lg); padding: 1rem; }
   .starter .empty { margin: 0 0 0.6rem; }
-  .starter-row button {
-    font-size: 0.8rem; border: 1px solid #e8d9c5; background: #fff;
-    border-radius: 6px; padding: 0.25rem 0.6rem; cursor: pointer;
-  }
-  .starter-row button:hover { background: #fff4e6; }
-  .warn-hint { color: #7a4a00; }
 
-  .menu {
-    position: absolute; z-index: 20;
-    display: flex; flex-direction: column; gap: 0.3rem;
-    background: #fffdf9; border: 1px solid #e8d9c5; border-radius: 10px;
-    padding: 0.4rem; box-shadow: 0 10px 24px rgba(60, 30, 10, 0.22);
-  }
-  .menu-row { display: flex; gap: 0.3rem; align-items: center; }
-  .menu-row.add { border-top: 1px dashed #e8d9c5; padding-top: 0.3rem; font-size: 0.75rem; }
-  .menu button { font-size: 0.78rem; border: 1px solid #e8d9c5; background: #fff; border-radius: 6px; padding: 0.2rem 0.5rem; cursor: pointer; }
-  .menu button:hover:not(:disabled) { background: #fff4e6; }
+  /* float-menu specifics: the .float-menu base is global; position + rows here */
+  .menu { position: absolute; z-index: 20; flex-direction: column; }
+  .menu-row { display: flex; gap: 0.25rem; align-items: center; }
+  .menu-row.add { border-top: 1px solid rgba(255, 255, 255, 0.2); margin-top: 0.25rem; padding-top: 0.35rem; }
+  .menu-row.add span { font-size: var(--text-xs); opacity: 0.7; }
   .menu button:disabled { opacity: 0.35; cursor: default; }
-  .menu .danger { color: #b3004c; }
 
-  .overlay {
-    position: fixed; inset: 0; background: rgba(40, 25, 15, 0.45);
-    display: grid; place-items: center; z-index: 50;
-  }
-  .card {
-    background: #fffdf9; border-radius: 12px; padding: 1rem 1.25rem;
-    width: min(34rem, 92vw); max-height: 84vh; overflow: auto;
-    box-shadow: 0 12px 30px rgba(60, 30, 10, 0.25);
-    display: flex; flex-direction: column; gap: 0.7rem;
-  }
-  .card-head { display: flex; justify-content: space-between; align-items: baseline; }
-  .card-head h3 { margin: 0; font-size: 1rem; }
-  .close { border: 0; background: transparent; font-size: 1.2rem; cursor: pointer; }
-  .card textarea {
-    width: 100%; box-sizing: border-box; resize: vertical;
-    font: 0.9rem/1.5 ui-monospace, monospace;
-    border: 1px solid #d8c7b2; border-radius: 6px; padding: 0.6rem; background: #fff;
-  }
-  .field { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; }
-  .field input { border: 1px solid #d8c7b2; border-radius: 6px; padding: 0.4rem 0.6rem; background: #fff; }
-  .hint { font-size: 0.75rem; opacity: 0.6; margin: 0; }
   .media-pick ul { list-style: none; margin: 0.3rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; max-height: 9rem; overflow: auto; }
   .media-pick li button {
-    display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem;
-    border: 1px solid #e8d9c5; background: #fff; border-radius: 6px; padding: 0.2rem 0.4rem; cursor: pointer;
+    display: flex; align-items: center; gap: 0.35rem; font-size: var(--text-xs);
+    background: var(--color-batter); border-radius: var(--radius-md);
+    padding: 0.2rem 0.4rem; cursor: pointer; box-shadow: var(--hover-lift);
+    transition: box-shadow var(--lift), transform var(--lift);
   }
-  .media-pick li button.picked { border-color: #e0567a; background: #fff7f2; }
-  .media-pick li img { width: 2.4rem; height: 1.6rem; object-fit: cover; border-radius: 4px; background: #efe6d8; }
-  .upload { font-size: 0.78rem; cursor: pointer; }
+  .media-pick li button:hover { transform: translateY(-2px); }
+  .media-pick li button.picked { box-shadow: var(--press); transform: none; }
+  .media-pick li img { width: 2.4rem; height: 1.6rem; object-fit: cover; border-radius: var(--radius-sm); background: var(--color-crust); }
+  .upload { font-size: var(--text-xs); cursor: pointer; color: var(--color-ink-soft); }
+  .upload:hover { color: var(--color-ink); }
   .upload input { display: none; }
-  .card-foot { display: flex; justify-content: flex-end; gap: 0.5rem; }
-  .save { font-weight: 600; }
-  .cancel { opacity: 0.7; }
-  .error { color: #b3004c; font-size: 0.8rem; margin: 0; }
+  .warn-hint { color: var(--color-warn); }
 </style>

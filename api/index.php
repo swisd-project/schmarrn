@@ -406,6 +406,33 @@ try {
             break;
 
         // ——— page-local media: upload via modal, serve raw, immutable by law ———
+        case $method === 'GET' && $path === 'media':
+            // The overlay's media tab: every page's files in one lazy sweep.
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            $allMedia = [];
+            foreach (Store\listAll() as $type => $pages) {
+                foreach ($pages as $page) {
+                    $slug = (string)$page['slug'];
+                    try {
+                        foreach (Store\mediaList($type, $slug) as $file) {
+                            $allMedia[] = [
+                                'type' => $type,
+                                'slug' => $slug,
+                                'name' => $file['name'],
+                                'size' => $file['size'],
+                                'url' => "/api/media/{$type}/{$slug}/" . rawurlencode((string)$file['name']),
+                            ];
+                        }
+                    } catch (\Throwable) {
+                        continue; // a vanished page never breaks the sweep
+                    }
+                }
+            }
+            echo json_encode($allMedia, JSON_UNESCAPED_SLASHES);
+            break;
+
         case $method === 'GET' && preg_match('#^media/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             if (!Auth\check()) {
                 Router\refuse(401, 'Not authenticated.');

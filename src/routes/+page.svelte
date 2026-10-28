@@ -1,11 +1,13 @@
 <script lang="ts">
-  // Login wall + page tree + editor — the Schmarrn kitchen, phase 1.
-  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings } from '$lib/api';
+  // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
+  // a burger opens the full-screen overlay (Pages / Site / Accounts / Media).
+  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia } from '$lib/api';
   import { schemaFor, withDraftFlag } from '$lib/schema';
   import { splitFrontmatter } from '$lib/blocks';
   import { parseMdms } from '@swisd-project/mdms';
   import CanvasEditor from '$lib/components/CanvasEditor.svelte';
   import type { PageIndex, SelectedPage, AccountRef } from '$lib/types';
+  import type { SiteMediaRef } from '$lib/api';
 
   let authenticated = $state<boolean | null>(null);
   let user = $state('');
@@ -69,20 +71,17 @@
   }
 
   // ——— brand settings (admin) ———
-  let showSite = $state(false);
   let siteSettings = $state<{ name: string; claim: string; logo: string; theme: string; home: string } | null>(null);
   let siteBusy = $state(false);
   let siteError = $state('');
   let siteNote = $state('');
 
-  async function toggleSite() {
-    showSite = !showSite;
-    if (showSite && siteSettings === null) {
-      try {
-        siteSettings = { ...(await getSiteSettings()) };
-      } catch (e) {
-        siteError = e instanceof Error ? e.message : String(e);
-      }
+  async function loadSiteSettings() {
+    if (siteSettings !== null) return;
+    try {
+      siteSettings = { ...(await getSiteSettings()) };
+    } catch (e) {
+      siteError = e instanceof Error ? e.message : String(e);
     }
   }
 
@@ -122,6 +121,7 @@
     await logout();
     authenticated = false;
     selected = null;
+    menuOpen = false;
   }
 
   // load the page tree the moment we're in
@@ -139,6 +139,7 @@
 
   function select(type: string, slug: string) {
     selected = { type, slug };
+    menuOpen = false; // picking a page leaves the overlay — back to the canvas
   }
 
   const selectedPublished = $derived.by(() => {
@@ -147,8 +148,55 @@
     return (index?.[sel.type] ?? []).some((p) => p.slug === sel.slug && p.draft !== true);
   });
 
+  // ——— the burger overlay: Pages / Site / Accounts / Media ———
+  type Tab = 'pages' | 'site' | 'accounts' | 'media';
+  let menuOpen = $state(false);
+  let tab = $state<Tab>('pages');
+
+  function openMenu() {
+    menuOpen = true;
+    if (role === 'admin') void loadSiteSettings(); // warm the site form while the overlay opens
+  }
+
+  function closeMenu() {
+    menuOpen = false;
+  }
+
+  function showTab(next: Tab) {
+    tab = next;
+    if (next === 'media') void loadAllMedia(); // lazy — the tab pays for itself
+  }
+
+  // ——— media tab (lazy) ———
+  let overlayMedia = $state<readonly SiteMediaRef[]>([]);
+  let mediaBusy = $state(false);
+  let mediaError = $state('');
+  let mediaNote = $state('');
+
+  async function loadAllMedia() {
+    if (mediaBusy) return;
+    mediaBusy = true;
+    mediaError = '';
+    try {
+      overlayMedia = await listAllMedia();
+    } catch (e) {
+      mediaError = e instanceof Error ? e.message : String(e);
+    } finally {
+      mediaBusy = false;
+    }
+  }
+
+  async function copyMediaUrl(item: SiteMediaRef) {
+    try {
+      await navigator.clipboard.writeText(item.url);
+      mediaNote = `Copied: ${item.name}`;
+    } catch {
+      mediaError = 'Clipboard refused — copy the URL below by hand.';
+      mediaNote = item.url;
+    }
+  }
+
   // ——— accounts (admin) ———
-  let showAccounts = $state(false);
   let accounts = $state<readonly AccountRef[]>([]);
   let accountAddUser = $state('');
   let accountAddRole = $state<'admin' | 'editor'>('editor');
@@ -157,10 +205,11 @@
   let accountError = $state('');
   let accountNote = $state('');
 
-  async function toggleAccounts() {
-    showAccounts = !showAccounts;
-    if (showAccounts) {
+  async function loadAccounts() {
+    try {
       accounts = await listAccounts();
+    } catch (e) {
+      accountError = e instanceof Error ? e.message : String(e);
     }
   }
 
@@ -344,206 +393,259 @@
   }
 </script>
 
-<main class="shell">
+<main class="min-h-screen">
   {#if authenticated === null}
-    <p aria-live="polite">Reaching for the pantry…</p>
+    <p class="p-8 italic text-ink-soft" aria-live="polite">Reaching for the pantry…</p>
   {:else if setupNeeded}
-    <form onsubmit={foundBakery} class="login setup">
-      <h1>Welcome to Schmarrn</h1>
-      <p class="setup-note">First visit — found the bakery. One admin account, one name, one theme.</p>
-      <input type="text" bind:value={setupUser} placeholder="admin username" autocomplete="username" required />
-      <input type="password" bind:value={setupPassword} placeholder="password (min 8)" minlength="8" autocomplete="new-password" required />
-      <input type="text" bind:value={setupSiteName} placeholder="site name" required />
-      <input type="text" bind:value={setupClaim} placeholder="claim (optional)" />
-      <select bind:value={setupTheme}>
-        {#each setupThemes as theme (theme)}
-          <option value={theme}>{theme}</option>
-        {/each}
-      </select>
-      <button type="submit" disabled={setupBusy}>{setupBusy ? 'Lighting the ovens…' : 'Found the bakery'}</button>
-      {#if setupError}<p class="error">{setupError}</p>{/if}
-    </form>
+    <div class="min-h-screen grid place-items-center p-6">
+      <form onsubmit={foundBakery} class="mg w-full max-w-sm flex flex-col gap-3" aria-label="First-visit setup">
+        <h1 class="m-0 font-extrabold text-2xl tracking-tight">Welcome to Schmarrn</h1>
+        <p class="text-sm text-ink-soft m-0">First visit — found the bakery. One admin account, one name, one theme.</p>
+        <label class="field"><span>Admin username</span><input class="input" type="text" bind:value={setupUser} autocomplete="username" required /></label>
+        <label class="field"><span>Password</span><input class="input" type="password" bind:value={setupPassword} placeholder="min 8" minlength="8" autocomplete="new-password" required /></label>
+        <label class="field"><span>Site name</span><input class="input" type="text" bind:value={setupSiteName} required /></label>
+        <label class="field"><span>Claim <span class="hint">(optional)</span></span><input class="input" type="text" bind:value={setupClaim} /></label>
+        <label class="field"><span>Theme</span>
+          <select class="input" bind:value={setupTheme}>
+            {#each setupThemes as theme (theme)}
+              <option value={theme}>{theme}</option>
+            {/each}
+          </select>
+        </label>
+        <button type="submit" class="btn btn-primary" disabled={setupBusy}>{setupBusy ? 'Lighting the ovens…' : 'Found the bakery'}</button>
+        {#if setupError}<p class="alert alert-err m-0" role="alert">{setupError}</p>{/if}
+      </form>
+    </div>
   {:else if authenticated === false}
-    <form onsubmit={signIn} class="login">
-      <h1>Schmarrn</h1>
-      <input type="text" bind:value={user} placeholder="Who's kneading?" autocomplete="username" required />
-      <input type="password" bind:value={password} placeholder="Kitchen password" autocomplete="current-password" required />
-      <button type="submit" disabled={busy}>{busy ? 'Plating…' : 'Schnitten!'}</button>
-      {#if error}<p class="error">{error}</p>{/if}
-    </form>
+    <div class="min-h-screen grid place-items-center p-6">
+      <form onsubmit={signIn} class="mg w-full max-w-xs flex flex-col gap-3" aria-label="Login">
+        <h1 class="m-0 font-extrabold text-2xl tracking-tight">Schmarrn</h1>
+        <label class="field"><span>Who's kneading?</span><input class="input" type="text" bind:value={user} autocomplete="username" required /></label>
+        <label class="field"><span>Kitchen password</span><input class="input" type="password" bind:value={password} autocomplete="current-password" required /></label>
+        <button type="submit" class="btn btn-primary" disabled={busy}>{busy ? 'Plating…' : 'Schnitten!'}</button>
+        {#if error}<p class="alert alert-err m-0" role="alert">{error}</p>{/if}
+      </form>
+    </div>
   {:else}
-    <header>
-      <h1>Schmarrn</h1>
-      <span class="whoami">{user}{#if role} · {role}{/if}</span>
-      <button onclick={signOut}>Log out</button>
+    <header class="flex items-center gap-3 px-4 py-3">
+      <button class="burger" aria-label="Open menu" onclick={openMenu}>
+        <span></span><span></span><span></span>
+      </button>
+      <span class="font-extrabold text-lg tracking-tight">Schmarrn</span>
+      {#if selected}
+        <span class="text-sm text-ink-soft">{selected.type} / {selected.slug}</span>
+      {/if}
+      <span class="ml-auto text-sm text-ink-soft">{user}{#if role} · {role}{/if}</span>
+      <button class="btn btn-secondary" onclick={signOut}>Log out</button>
     </header>
 
-    <div class="workbench">
-      <nav class="tree" aria-label="Pages">
+    <section class="px-4 pb-8 max-w-6xl mx-auto w-full">
+      {#if selected}
+        {#key `${selected.type}/${selected.slug}`}
+          <CanvasEditor
+            page={selected}
+            published={selectedPublished}
+            currentUserName={user}
+            onsaved={refreshIndex}
+            onrenamed={(slug) => {
+              if (selected) selected = { ...selected, slug };
+              refreshIndex();
+            }}
+          />
+        {/key}
+      {:else}
+        <div class="mg py-16 text-center">
+          <p class="m-0 italic text-ink-soft">Pick a shredded piece from the menu, sugar.</p>
+        </div>
+      {/if}
+    </section>
+  {/if}
+
+  {#if error && authenticated !== false}
+    <p class="alert alert-err" role="alert">{error}</p>
+  {/if}
+</main>
+
+{#if menuOpen}
+  <div class="fixed inset-0 z-40 overflow-auto" role="dialog" aria-modal="true" aria-label="Menu" tabindex="-1"
+    style="background: linear-gradient(145deg, #fffdf7 0%, #fff8ef 45%, #f9ecd9 100%);"
+    onkeydown={(e) => e.key === 'Escape' && closeMenu()}
+  >
+    <div class="flex items-center gap-3 px-4 py-3">
+      <button class="burger" aria-label="Close menu" onclick={closeMenu}>
+        <span></span><span></span><span></span>
+      </button>
+      <span class="font-extrabold text-lg tracking-tight">Schmarrn</span>
+      <span class="ml-auto text-sm text-ink-soft">{user}{#if role} · {role}{/if}</span>
+      <button class="btn btn-secondary" onclick={closeMenu}>Back to the canvas</button>
+    </div>
+
+    <nav class="flex gap-2 px-4 pb-4 flex-wrap" aria-label="Menu sections">
+      <button class="btn {tab === 'pages' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('pages')}>Pages</button>
+      {#if role === 'admin'}
+        <button class="btn {tab === 'site' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('site')}>Site</button>
+        <button class="btn {tab === 'accounts' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('accounts')}>Accounts</button>
+      {/if}
+      <button class="btn {tab === 'media' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('media')}>Media</button>
+    </nav>
+
+    <div class="px-4 pb-12 max-w-4xl mx-auto w-full">
+      {#if tab === 'pages'}
         {#if index}
           {#each Object.entries(index) as [type, pages] (type)}
-            <p><strong>{type}</strong></p>
-            <ul>
-              {#each pages as page (page.slug)}
-                <li>
-                  {#if renaming?.type === type && renaming?.slug === page.slug}
-                    {@const to = renaming.value.trim().toLowerCase()}
-                    {@const unchanged = to === renaming?.slug}
-                    {@const taken = (index?.[type] ?? []).some((p) => p.slug === to && p.slug !== renaming?.slug)}
-                    <form class="rename" onsubmit={commitRename}>
-                      <input bind:value={renaming.value} pattern="[a-z0-9]+(-[a-z0-9]+)*" required />
-                      <button type="submit" disabled={unchanged || taken} title={unchanged ? 'Name unchanged' : taken ? 'Already taken' : 'Rename'}>✓</button>
-                      <button type="button" onclick={() => (renaming = null)}>×</button>
-                      {#if unchanged}
-                        <span class="rename-hint">Same name — change it or close.</span>
-                      {:else if taken}
-                        <span class="rename-error">Another page already uses “{to}”.</span>
-                      {:else if renameError}
-                        <span class="rename-error">{renameError}</span>
-                      {/if}
-                    </form>
-                  {:else}
-                    <button
-                      class:active={selected?.type === type && selected?.slug === page.slug}
-                      onclick={() => select(type, page.slug)}
-                    >
-                      {page.slug}{#if page.draft}<span class="draft">draft</span>{/if}{#if page.hasDraft}<span class="draft">edits</span>{/if}
-                    </button>
-                    <span class="page-actions">
-                      <button class="mini" title="Rename" onclick={() => startRename(type, page.slug)}>✎</button>
-                      <button class="mini danger" title="Delete" onclick={() => removePage(type, page.slug)}>×</button>
-                    </span>
-                  {/if}
-                </li>
-              {/each}
-            </ul>
-          {/each}
-        {/if}
-
-        {#if role === 'admin'}
-          <button class="accounts-toggle" onclick={toggleSite}>
-            {showSite ? 'Hide site settings' : 'Site settings'}
-          </button>
-          {#if showSite && siteSettings}
-            <form class="site-settings" onsubmit={saveSiteNow}>
-              <input bind:value={siteSettings.name} placeholder="site name" required />
-              <input bind:value={siteSettings.claim} placeholder="claim" />
-              <input bind:value={siteSettings.logo} placeholder="logo (URL or /path)" />
-              <select bind:value={siteSettings.theme}>
-                {#each setupThemes as theme (theme)}
-                  <option value={theme}>{theme}</option>
-                {/each}
-              </select>
-              <input bind:value={siteSettings.home} placeholder="home slug (empty = first page)"
-                pattern="[a-z0-9]+(-[a-z0-9]+)*" title="lowercase, digits, hyphens — or empty" />
-              <button type="submit" disabled={siteBusy}>{siteBusy ? 'Saving…' : 'Save site'}</button>
-              {#if siteError}<p class="error">{siteError}</p>{/if}
-              {#if siteNote}<p class="account-note">{siteNote}</p>{/if}
-            </form>
-          {/if}
-
-          <button class="accounts-toggle" onclick={toggleAccounts}>
-            {showAccounts ? 'Hide accounts' : 'Accounts'}
-          </button>
-          {#if showAccounts}
-            <div class="accounts">
-              <ul>
-                {#each accounts as account (account.user)}
-                  <li>
-                    <span>{account.user} · {account.role}{#if account.email} · {account.email}{/if}</span>
-                    {#if account.user !== user}
-                      <span class="account-actions">
-                        {#if account.email}
-                          <button
-                            class="account-mail"
-                            title="Mail freshly issued credentials"
-                            onclick={() => inviteNow(account.user)}>✉</button
-                          >
+            <section class="mg mb-6">
+              <h4 class="mg-h">{type}</h4>
+              <ul class="list-none p-0 m-0 flex flex-col gap-1">
+                {#each pages as page (page.slug)}
+                  <li class="flex items-center gap-1">
+                    {#if renaming?.type === type && renaming?.slug === page.slug}
+                      {@const to = renaming.value.trim().toLowerCase()}
+                      {@const unchanged = to === renaming?.slug}
+                      {@const taken = (index?.[type] ?? []).some((p) => p.slug === to && p.slug !== renaming?.slug)}
+                      <form class="rename flex gap-1 flex-wrap items-center" onsubmit={commitRename}>
+                        <input class="input max-w-48" bind:value={renaming.value} pattern="[a-z0-9]+(-[a-z0-9]+)*" required />
+                        <button type="submit" class="btn btn-primary" disabled={unchanged || taken}
+                          title={unchanged ? 'Name unchanged' : taken ? 'Already taken' : 'Rename'}>✓</button>
+                        <button type="button" class="btn btn-secondary" onclick={() => (renaming = null)}>×</button>
+                        {#if unchanged}
+                          <span class="text-xs text-ink-soft">Same name — change it or close.</span>
+                        {:else if taken}
+                          <span class="text-xs text-error">Another page already uses “{to}”.</span>
+                        {:else if renameError}
+                          <span class="text-xs text-error">{renameError}</span>
                         {/if}
-                        <button
-                          class="account-remove"
-                          aria-label={`Remove account ${account.user}`}
-                          onclick={() => deleteAccountNow(account.user)}>×</button
-                        >
-                      </span>
+                      </form>
+                    {:else}
+                      <button
+                        class="btn btn-secondary flex-1 justify-start {selected?.type === type && selected?.slug === page.slug ? 'ring-2 ring-jam' : ''}"
+                        onclick={() => select(type, page.slug)}
+                      >
+                        {page.slug}
+                        {#if page.draft}<span class="badge badge-draft ml-2">draft</span>{/if}
+                        {#if page.hasDraft}<span class="badge badge-live ml-2">edits</span>{/if}
+                      </button>
+                      <button class="btn-ghost" title="Rename" onclick={() => startRename(type, page.slug)}>✎</button>
+                      <button class="btn-ghost danger" title="Delete" onclick={() => removePage(type, page.slug)}>×</button>
                     {/if}
                   </li>
                 {/each}
               </ul>
-              <form class="newpage" onsubmit={addAccountNow}>
-                <input bind:value={accountAddUser} placeholder="username" required />
-                <input
-                  bind:value={accountAddPassword}
-                  type="password"
-                  placeholder="password (min 8)"
-                  minlength="8"
-                  required
-                />
-                <input bind:value={accountAddEmail} type="email" placeholder="email (for invites)" />
-                <select bind:value={accountAddRole}>
-                  <option value="editor">editor</option>
-                  <option value="admin">admin</option>
-                </select>
-                <button type="submit">Add account</button>
-              </form>
-              {#if accountError}<p class="error">{accountError}</p>{/if}
-              {#if accountNote}<p class="account-note">{accountNote}</p>{/if}
-            </div>
-          {/if}
+            </section>
+          {/each}
         {/if}
 
-        <button class="newpage-btn" onclick={openNew}>+ New page</button>
-
-        <label class="upload-md">
-          <input type="file" accept=".md,.markdown,text/markdown" onchange={onUploadPick} />
-          Upload .md → new page
-        </label>
-        {#if uploadError}<p class="error">{uploadError}</p>{/if}
-      </nav>
-
-      <section class="stage">
-        {#if selected}
-          {#if selected}
-            {#key `${selected.type}/${selected.slug}`}
-              <CanvasEditor
-                page={selected}
-                published={selectedPublished}
-                currentUserName={user}
-                onsaved={refreshIndex}
-                onrenamed={(slug) => {
-                  if (selected) selected = { ...selected, slug };
-                  refreshIndex();
-                }}
-              />
-            {/key}
-          {/if}
+        <section class="mg flex flex-col gap-3">
+          <h4 class="mg-h">New</h4>
+          <button class="btn btn-primary self-start" onclick={openNew}>+ New page</button>
+          <label class="btn btn-secondary self-start cursor-pointer">
+            <input class="hidden" type="file" accept=".md,.markdown,text/markdown" onchange={onUploadPick} />
+            Upload .md → new page
+          </label>
+          {#if uploadError}<p class="alert alert-err m-0" role="alert">{uploadError}</p>{/if}
+        </section>
+      {:else if tab === 'site' && role === 'admin'}
+        {#if siteSettings}
+          <form class="mg flex flex-col gap-3 max-w-md" onsubmit={saveSiteNow}>
+            <h4 class="mg-h">Site settings</h4>
+            <label class="field"><span>Site name</span><input class="input" bind:value={siteSettings.name} required /></label>
+            <label class="field"><span>Claim</span><input class="input" bind:value={siteSettings.claim} /></label>
+            <label class="field"><span>Logo (URL or /path)</span><input class="input" bind:value={siteSettings.logo} /></label>
+            <label class="field"><span>Theme</span>
+              <select class="input" bind:value={siteSettings.theme}>
+                {#each setupThemes as theme (theme)}
+                  <option value={theme}>{theme}</option>
+                {/each}
+              </select>
+            </label>
+            <label class="field">
+              <span>Home slug <span class="hint">(empty = first page)</span></span>
+              <input class="input" bind:value={siteSettings.home} pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                title="lowercase, digits, hyphens — or empty" />
+            </label>
+            <button type="submit" class="btn btn-primary self-start" disabled={siteBusy}>{siteBusy ? 'Saving…' : 'Save site'}</button>
+            {#if siteError}<p class="alert alert-err m-0" role="alert">{siteError}</p>{/if}
+            {#if siteNote}<p class="alert alert-ok m-0">{siteNote}</p>{/if}
+          </form>
         {:else}
-          <p class="empty">Pick a shredded piece from the left, sugar.</p>
+          <p class="italic text-ink-soft">Reaching for the settings…</p>
         {/if}
-      </section>
+      {:else if tab === 'accounts' && role === 'admin'}
+        <section class="mg mb-6">
+          <h4 class="mg-h">Accounts</h4>
+          <ul class="list-none p-0 m-0 flex flex-col gap-1">
+            {#each accounts as account (account.user)}
+              <li class="flex items-center justify-between gap-2 text-sm">
+                <span>{account.user} · {account.role}{#if account.email} · {account.email}{/if}</span>
+                {#if account.user !== user}
+                  <span class="flex gap-2">
+                    {#if account.email}
+                      <button class="btn-ghost" title="Mail freshly issued credentials" onclick={() => inviteNow(account.user)}>✉</button>
+                    {/if}
+                    <button class="btn-ghost danger" aria-label={`Remove account ${account.user}`} onclick={() => deleteAccountNow(account.user)}>×</button>
+                  </span>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+          {#if accountError}<p class="alert alert-err" role="alert">{accountError}</p>{/if}
+          {#if accountNote}<p class="alert alert-ok">{accountNote}</p>{/if}
+        </section>
+        <form class="mg flex flex-col gap-3 max-w-md" onsubmit={addAccountNow}>
+          <h4 class="mg-h">Add account</h4>
+          <label class="field"><span>Username</span><input class="input" bind:value={accountAddUser} required /></label>
+          <label class="field"><span>Password</span><input class="input" type="password" bind:value={accountAddPassword} placeholder="min 8" minlength="8" required /></label>
+          <label class="field"><span>Email <span class="hint">(for invites)</span></span><input class="input" type="email" bind:value={accountAddEmail} /></label>
+          <label class="field"><span>Role</span>
+            <select class="input" bind:value={accountAddRole}>
+              <option value="editor">editor</option>
+              <option value="admin">admin</option>
+            </select>
+          </label>
+          <button type="submit" class="btn btn-primary self-start">Add account</button>
+        </form>
+      {:else if tab === 'media'}
+        {#if mediaBusy}
+          <p class="italic text-ink-soft">Sweeping the pantry…</p>
+        {:else if mediaError}
+          <p class="alert alert-err" role="alert">{mediaError}</p>
+        {:else if overlayMedia.length === 0}
+          <div class="mg py-12 text-center"><p class="m-0 italic text-ink-soft">No media yet — upload lives inside the image and video modals.</p></div>
+        {:else}
+          {#if mediaNote}<p class="alert alert-ok">{mediaNote}</p>{/if}
+          <div class="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(10rem,1fr))]">
+            {#each overlayMedia as item (item.type + '/' + item.slug + '/' + item.name)}
+              <button class="card text-left" title={`Copy URL — ${item.url}`} onclick={() => copyMediaUrl(item)}>
+                {#if /\.(png|jpe?g|gif|webp|svg)$/i.test(item.name)}
+                  <img class="w-full aspect-video object-cover" src={item.url} alt={item.name} loading="lazy" />
+                {:else}
+                  <div class="w-full aspect-video bg-crust grid place-items-center text-xs text-ink-soft">{item.name.split('.').pop()?.toUpperCase()}</div>
+                {/if}
+                <span class="text-xs font-bold truncate">{item.name}</span>
+                <span class="text-xs text-ink-soft truncate">{item.slug}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      {/if}
     </div>
-  {/if}
-
-  {#if error && authenticated !== false}
-    <p class="error">{error}</p>
-  {/if}
-</main>
+  </div>
+{/if}
 
 {#if uploadModal}
-  <div class="overlay" role="dialog" aria-modal="true" aria-label="Upload markdown page">
-    <form class="card" onsubmit={saveUpload}>
-      <header class="card-head">
+  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50" role="dialog" aria-modal="true" aria-label="Upload markdown page">
+    <form class="modal-card" onsubmit={saveUpload}>
+      <header class="modal-head">
         <h3>Upload — {uploadModal.fileName}</h3>
-        <button type="button" class="close" onclick={() => (uploadModal = null)}>×</button>
+        <button type="button" class="close-x" onclick={() => (uploadModal = null)}>×</button>
       </header>
 
       {#if uploadModal.valid}
-        <p class="ok">Frontmatter checks out. Serving as-is.</p>
+        <p class="alert alert-ok m-0">Frontmatter checks out. Serving as-is.</p>
       {:else}
-        <p class="warn">
+        <p class="alert alert-warn m-0">
           The frontmatter needs attention — save will rebuild it from the fields below (body stays untouched):
         </p>
-        <ul class="issues">
+        <ul class="list-disc pl-5 my-0 text-error text-xs">
           {#each uploadModal.issues as issue}
             <li>{issue}</li>
           {/each}
@@ -552,135 +654,58 @@
 
       <label class="field">
         <span>Title</span>
-        <input bind:value={uploadModal.title} required placeholder="Page title" />
+        <input class="input" bind:value={uploadModal.title} required placeholder="Page title" />
       </label>
       <label class="field">
         <span>Slug (URL)</span>
-        <input bind:value={uploadModal.slug} required pattern="[a-z0-9]+(-[a-z0-9]+)*"
+        <input class="input" bind:value={uploadModal.slug} required pattern="[a-z0-9]+(-[a-z0-9]+)*"
           title="lowercase letters, digits, hyphens" />
       </label>
 
-      <fieldset class="serving">
-        <legend>Serve this page as</legend>
-        <label><input type="radio" bind:group={uploadModal.asDraft} value={false} /> Published — visible to the public</label>
-        <label><input type="radio" bind:group={uploadModal.asDraft} value={true} /> Draft — editors only until you publish</label>
+      <fieldset class="border border-dashed border-line p-2 flex flex-col gap-1 text-sm">
+        <legend class="text-xs text-ink-soft px-1">Serve this page as</legend>
+        <label class="check"><input type="radio" bind:group={uploadModal.asDraft} value={false} /> Published — visible to the public</label>
+        <label class="check"><input type="radio" bind:group={uploadModal.asDraft} value={true} /> Draft — editors only until you publish</label>
       </fieldset>
 
-      {#if uploadError}<p class="error" role="alert">{uploadError}</p>{/if}
-      <footer class="card-foot">
-        <button type="button" class="cancel" onclick={() => (uploadModal = null)}>Cancel</button>
-        <button type="submit" class="save" disabled={uploading}>{uploading ? 'Folding…' : 'Create page'}</button>
+      {#if uploadError}<p class="alert alert-err m-0" role="alert">{uploadError}</p>{/if}
+      <footer class="modal-foot">
+        <button type="button" class="btn btn-secondary" onclick={() => (uploadModal = null)}>Cancel</button>
+        <button type="submit" class="btn btn-primary" disabled={uploading}>{uploading ? 'Folding…' : 'Create page'}</button>
       </footer>
     </form>
   </div>
 {/if}
 
 {#if newModal}
-  <div class="overlay" role="dialog" aria-modal="true" aria-label="New page">
-    <form class="card" onsubmit={saveNew}>
-      <header class="card-head">
+  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50" role="dialog" aria-modal="true" aria-label="New page">
+    <form class="modal-card" onsubmit={saveNew}>
+      <header class="modal-head">
         <h3>New page</h3>
-        <button type="button" class="close" onclick={() => (newModal = null)}>×</button>
+        <button type="button" class="close-x" onclick={() => (newModal = null)}>×</button>
       </header>
 
       <label class="field">
         <span>Title</span>
-        <input bind:value={newModal.title} required placeholder="Page title" />
+        <input class="input" bind:value={newModal.title} required placeholder="Page title" />
       </label>
       <label class="field">
         <span>Slug (URL)</span>
-        <input bind:value={newModal.slug} required pattern="[a-z0-9]+(-[a-z0-9]+)*"
+        <input class="input" bind:value={newModal.slug} required pattern="[a-z0-9]+(-[a-z0-9]+)*"
           title="lowercase letters, digits, hyphens" placeholder="my-tart" />
       </label>
 
-      <fieldset class="serving">
-        <legend>Serve this page as</legend>
-        <label><input type="radio" bind:group={newModal.asDraft} value={false} /> Published — visible to the public</label>
-        <label><input type="radio" bind:group={newModal.asDraft} value={true} /> Draft — editors only until you publish</label>
+      <fieldset class="border border-dashed border-line p-2 flex flex-col gap-1 text-sm">
+        <legend class="text-xs text-ink-soft px-1">Serve this page as</legend>
+        <label class="check"><input type="radio" bind:group={newModal.asDraft} value={false} /> Published — visible to the public</label>
+        <label class="check"><input type="radio" bind:group={newModal.asDraft} value={true} /> Draft — editors only until you publish</label>
       </fieldset>
 
-      {#if newError}<p class="error" role="alert">{newError}</p>{/if}
-      <footer class="card-foot">
-        <button type="button" class="cancel" onclick={() => (newModal = null)}>Cancel</button>
-        <button type="submit" class="save" disabled={creating}>{creating ? 'Folding…' : 'Create page'}</button>
+      {#if newError}<p class="alert alert-err m-0" role="alert">{newError}</p>{/if}
+      <footer class="modal-foot">
+        <button type="button" class="btn btn-secondary" onclick={() => (newModal = null)}>Cancel</button>
+        <button type="submit" class="btn btn-primary" disabled={creating}>{creating ? 'Folding…' : 'Create page'}</button>
       </footer>
     </form>
   </div>
 {/if}
-
-<style>
-  .shell { max-width: 72rem; margin: 0 auto; padding: 2rem; }
-  .login { display: flex; flex-direction: column; gap: 0.75rem; max-width: 16rem; }
-  .error { color: #b3004c; }
-  header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; }
-  .workbench { display: grid; grid-template-columns: 12rem 1fr; gap: 1.5rem; }
-  .tree ul { list-style: none; padding: 0; margin: 0.25rem 0 1rem; }
-  .tree p { margin: 0.5rem 0 0; opacity: 0.7; }
-  .tree button {
-    width: 100%; text-align: left; background: transparent; border: 0;
-    padding: 0.25rem 0.5rem; cursor: pointer; border-radius: 4px; color: var(--crust);
-  }
-  .tree button:hover { background: #efe6d8; }
-  .tree button.active { background: var(--raisin); color: var(--batter); }
-  .draft { margin-left: 0.4rem; font-size: 0.65rem; text-transform: uppercase; opacity: 0.75; }
-  .tree li { display: flex; align-items: center; gap: 0.2rem; }
-  .tree li > button:first-child { flex: 1; }
-  .page-actions { display: inline-flex; }
-  .mini { border: 0; background: transparent; cursor: pointer; font-size: 0.75rem; opacity: 0.5; padding: 0 0.2rem; }
-  .mini:hover { opacity: 1; }
-  .mini.danger { color: #b3004c; }
-  .rename { display: flex; gap: 0.2rem; width: 100%; flex-wrap: wrap; }
-  .rename input { width: 100%; font-size: 0.8rem; padding: 0.15rem 0.3rem; border: 1px solid #d8c7b2; border-radius: 4px; }
-  .rename-error { flex-basis: 100%; color: #b3004c; font-size: 0.7rem; }
-  .rename-hint { flex-basis: 100%; color: #6f5d4f; font-size: 0.7rem; }
-  .overlay {
-    position: fixed; inset: 0; background: rgba(40, 25, 15, 0.45);
-    display: grid; place-items: center; z-index: 50;
-  }
-  .card {
-    background: #fffdf9; border-radius: 12px; padding: 1rem 1.25rem;
-    width: min(30rem, 92vw); max-height: 84vh; overflow: auto;
-    box-shadow: 0 12px 30px rgba(60, 30, 10, 0.25);
-    display: flex; flex-direction: column; gap: 0.7rem;
-  }
-  .card-head { display: flex; justify-content: space-between; align-items: baseline; }
-  .card-head h3 { margin: 0; font-size: 1rem; }
-  .close { border: 0; background: transparent; font-size: 1.2rem; cursor: pointer; }
-  .field { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; }
-  .field input { border: 1px solid #d8c7b2; border-radius: 6px; padding: 0.4rem 0.6rem; background: #fff; }
-  .serving { border: 1px dashed #d8c7b2; border-radius: 8px; padding: 0.5rem 0.75rem; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; }
-  .serving legend { font-size: 0.75rem; opacity: 0.7; padding: 0 0.3rem; }
-  .ok { color: #1d7a3a; font-size: 0.85rem; margin: 0; }
-  .warn { color: #7a4a00; font-size: 0.85rem; margin: 0; }
-  .issues { margin: 0; padding-left: 1.2rem; color: #b3004c; font-size: 0.8rem; }
-  .card-foot { display: flex; justify-content: flex-end; gap: 0.5rem; }
-  .save { font-weight: 600; }
-  .cancel { opacity: 0.7; }
-  .upload-md { display: block; margin-top: 0.75rem; font-size: 0.8rem; opacity: 0.8; cursor: pointer; }
-  .upload-md input { display: none; }
-  .upload-md:hover { opacity: 1; }
-  .newpage-btn {
-    width: 100%; margin-top: 0.75rem; font-size: 0.85rem; font-weight: 600;
-    border: 1px dashed #d8c7b2; background: #fff4e6; border-radius: 6px;
-    padding: 0.4rem; cursor: pointer;
-  }
-  .newpage-btn:hover { background: #ffe9d6; }
-  .newpage { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 1rem; }
-  .newpage input { font-size: 0.8rem; padding: 0.3rem 0.5rem; border: 1px solid #d8c7b2; border-radius: 4px; }
-  .empty { opacity: 0.5; font-style: italic; }
-  .whoami { opacity: 0.6; font-size: 0.85rem; }
-  .accounts-toggle { font-size: 0.8rem; width: 100%; margin-top: 0.75rem; }
-  .accounts ul { list-style: none; padding: 0; margin: 0.25rem 0; }
-  .accounts li { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; }
-  .account-remove { border: 0; background: transparent; cursor: pointer; color: #b3004c; font-weight: bold; }
-  .accounts select { font-size: 0.8rem; padding: 0.25rem; border: 1px solid #d8c7b2; border-radius: 4px; }
-  .accounts { border: 1px solid #efe6d8; border-radius: 4px; padding: 0.5rem; }
-  .site-settings { border: 1px solid #efe6d8; border-radius: 4px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem; }
-  .setup-note { font-size: 0.85rem; color: #6f5d4f; margin: 0 0 0.75rem; }
-  .account-actions { display: inline-flex; gap: 0.35rem; }
-  .account-mail { border: 0; background: transparent; cursor: pointer; }
-  .account-note { font-size: 0.75rem; opacity: 0.75; margin: 0.25rem 0 0; }
-  @media (max-width: 60rem) {
-    .workbench { grid-template-columns: 1fr; }
-  }
-</style>

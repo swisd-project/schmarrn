@@ -1,22 +1,254 @@
 /*
  * 1. Relative path: src/lib/app.css
- * 2. Description: Base look for the Schmarrn kitchen. Modest — the dashboard is a tool.
- * 3. Provides: Tokenized colors and typography so features never hand-style.
+ * 2. Description: The settled design system, ported from the /design workbench
+ *                 (api/assets/design.html — THE law). Depth: bg → mg → fg, one fake
+ *                 light source top-left. mg panels raise; fg rests flat and lifts on
+ *                 hover; the inset dent is reserved for inputs. Square corners. Sans
+ *                 everywhere. Neons are attention-only. Three button intents, one size.
+ * 3. Provides: Tailwind (v4, CSS-first) + the token block + the system's component
+ *              classes (btn, input, mg, badge, alert, card, float-menu, burger).
  * 4. SPDX-License-Identifier: MPL-2.0
  * 5. Copyright (c) 2026 Homahuki GmbH
  */
 
+@import 'tailwindcss';
+
+/* ————————————————————————————————————————————————
+   TOKENS — the one block to retokenize (mirrors /design)
+   ———————————————————————————————————————————————— */
+@theme {
+  /* surfaces — one flesh for bg and mg; depth comes from shadow, not color */
+  --color-batter: #fff8ef;
+  --color-crust: #f6e7d7;
+  --color-line: #e5d5c0;
+
+  /* accents */
+  --color-blossom: #f2b8c6;
+  --color-sky: #bcd9ea;
+  --color-jam: #e2543e;
+
+  /* neon — electric, attention only */
+  --color-neon-pink: #ff2e88;
+  --color-neon-blue: #00cfff;
+
+  /* ink */
+  --color-ink: #3a2e26;
+  --color-ink-soft: #6f5d4f;
+
+  /* feedback */
+  --color-ok: #4d8f5f;
+  --color-warn: #c98a1b;
+  --color-error: #c23a2b;
+
+  /* type — sans everywhere */
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* scale (1.25 ratio) */
+  --text-xs: 0.75rem;
+  --text-sm: 0.85rem;
+  --text-base: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.563rem;
+  --text-2xl: 1.953rem;
+  --text-3xl: 2.441rem;
+  --text-4xl: 3.052rem;
+
+  /* shape — square by law; tokens remain so curvature can return by decree */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+}
+
+/* the light — shared by every shadow in the system (not Tailwind colors: raw CSS) */
 :root {
-  --crust: #2b2118;
-  --batter: #f7f2e9;
-  --raisin: #7a5c3e;
-  --jam: #b3004c;
-  --font: system-ui, sans-serif;
+  --light: rgba(255, 255, 255, 0.95);
+  --shade: rgba(58, 46, 38, 0.16);
+  --shade-strong: rgba(58, 46, 38, 0.28);
+
+  /* depth vocabulary */
+  --raise-mg: -5px -5px 12px var(--light), 6px 6px 14px var(--shade);
+  --hover-lift: 3px 4px 10px var(--shade);
+  --hover-lift-deep: 4px 6px 14px var(--shade-strong);
+  --press: inset 3px 3px 8px var(--shade), inset -3px -3px 8px var(--light);
+  --float-shadow: var(--raise-mg), 0 18px 44px rgba(58, 46, 38, 0.22);
+
+  /* motion */
+  --lift: 0.16s cubic-bezier(0.34, 1.3, 0.64, 1);
 }
 
 body {
-  margin: 0;
-  background: var(--batter);
-  color: var(--crust);
-  font-family: var(--font);
+  /* the page itself is the bg layer — a breath of gradient from the light */
+  background: linear-gradient(145deg, #fffdf7 0%, var(--color-batter) 45%, #f9ecd9 100%);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.6;
+}
+
+/* ————————————————————————————————————————————————
+   01 · DEPTH — mg: the grouping signal
+   ———————————————————————————————————————————————— */
+.mg {
+  background: var(--color-batter);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--raise-mg);
+  padding: var(--sp-6, 1.5rem);
+}
+.mg > h4,
+.mg-h {
+  margin: 0 0 0.5rem;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-soft);
+}
+
+/* ————————————————————————————————————————————————
+   04 · BUTTONS — three intents, one size. fg rests FLAT;
+   interaction lifts it (small, subtle shadow); release is flat.
+   ———————————————————————————————————————————————— */
+.btn {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  font: inherit; font-weight: 700; font-size: var(--text-sm);
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer; text-decoration: none; color: var(--color-ink);
+  transition: box-shadow var(--lift), transform var(--lift), filter var(--lift);
+}
+.btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--hover-lift); }
+.btn:active:not(:disabled) { transform: translateY(0); box-shadow: none; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.btn-secondary { background: linear-gradient(145deg, #fffdf7, var(--color-batter) 55%, #f5e7d2); }
+.btn-primary { background: linear-gradient(145deg, #f06a52, var(--color-jam) 55%, #c94630); color: #fff; }
+.btn-primary:hover:not(:disabled) { filter: brightness(1.06); }
+.btn-attention { background: linear-gradient(145deg, #ff55a0, var(--color-neon-pink) 55%, #d9006a); color: #fff; }
+.btn-attention:hover:not(:disabled) { filter: brightness(1.08); }
+
+/* quiet ghost for icon-only micro actions (tree ✎ ×, ✉) — flat, ink-soft */
+.btn-ghost {
+  border: none; background: transparent; cursor: pointer;
+  color: var(--color-ink-soft); font-size: var(--text-sm);
+  padding: 0 0.25rem; transition: color 0.12s ease;
+}
+.btn-ghost:hover { color: var(--color-jam); }
+.btn-ghost.danger:hover { color: var(--color-neon-pink); }
+
+/* ————————————————————————————————————————————————
+   05 · FORMS — the dent is the type-here key. Focus = the light finds it.
+   ———————————————————————————————————————————————— */
+.field { display: flex; flex-direction: column; gap: 0.25rem; }
+.field > label,
+.field > span { font-size: var(--text-sm); font-weight: 700; }
+.field .hint { font-size: var(--text-xs); color: var(--color-ink-soft); }
+.field .err { font-size: var(--text-xs); color: var(--color-error); }
+
+.input, textarea.input, select.input {
+  font: inherit; color: var(--color-ink);
+  background: var(--color-batter);
+  border: none; border-radius: var(--radius-md);
+  padding: 0.5rem 0.75rem; width: 100%;
+  box-shadow: var(--press);
+  transition: box-shadow var(--lift);
+}
+.input:focus { outline: none; box-shadow: var(--press), 0 0 0 3px rgba(0, 207, 255, 0.25); }
+.input.invalid { box-shadow: var(--press), 0 0 0 3px rgba(194, 58, 43, 0.22); }
+textarea.input { resize: vertical; min-height: 5rem; }
+
+.check { display: flex; gap: 0.5rem; align-items: center; font-size: var(--text-sm); }
+.check input { width: 1.05rem; height: 1.05rem; accent-color: var(--color-jam); }
+
+/* ————————————————————————————————————————————————
+   06 · BADGES, TAGS, FEEDBACK — flat at rest; neon pulse is
+   attention by light, not by shadow.
+   ———————————————————————————————————————————————— */
+.badge {
+  display: inline-block; font-size: var(--text-xs); font-weight: 800;
+  padding: 0.15rem 0.75rem;
+  letter-spacing: 0.05em; text-transform: uppercase;
+}
+.badge-draft { background: linear-gradient(145deg, #f8ccd6, var(--color-blossom)); }
+.badge-live { background: linear-gradient(145deg, #d3e7f4, var(--color-sky)); }
+.badge-err { background: linear-gradient(145deg, #e05746, var(--color-error)); color: #fff; }
+.badge-neon { background: var(--color-neon-pink); color: #fff; animation: pulse 2.2s ease-in-out infinite; }
+@keyframes pulse {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 14px rgba(255, 46, 136, 0.55); }
+}
+.tag {
+  display: inline-block; font-size: var(--text-xs);
+  background: var(--color-crust);
+  padding: 0.1rem 0.5rem; color: var(--color-ink-soft);
+}
+.alert {
+  display: flex; gap: 0.75rem; align-items: flex-start;
+  padding: 0.75rem 1rem; border-radius: var(--radius-md);
+  font-size: var(--text-sm); margin: 0.5rem 0;
+  box-shadow: var(--raise-mg);
+}
+.alert b { display: block; }
+.alert-ok { background: #e8f2ea; color: #2e5c3a; }
+.alert-warn { background: #faf0dd; color: #7a5410; }
+.alert-err { background: #fae4e0; color: #7c2318; }
+.alert-info { background: #e8f1f8; color: #33586e; }
+
+/* ————————————————————————————————————————————————
+   07 · CARDS — mg, breathing on hover
+   ———————————————————————————————————————————————— */
+.card {
+  background: var(--color-batter); border-radius: var(--radius-lg);
+  padding: 0.75rem; box-shadow: var(--raise-mg);
+  display: flex; flex-direction: column; gap: 0.5rem;
+  border: none; cursor: pointer; font: inherit; color: var(--color-ink);
+  transition: transform var(--lift), box-shadow var(--lift);
+}
+.card:hover { transform: translateY(-3px); box-shadow: var(--hover-lift-deep); }
+
+/* ————————————————————————————————————————————————
+   08 · OVERLAY BITS — overlays float above the whole stack;
+   that shadow is position, not decoration.
+   ———————————————————————————————————————————————— */
+.modal-card {
+  background: var(--color-batter); border-radius: var(--radius-lg);
+  box-shadow: var(--float-shadow);
+  width: min(34rem, 92vw); max-height: 84vh; overflow: auto;
+  display: flex; flex-direction: column; gap: 0.7rem;
+  padding: 1rem 1.25rem;
+}
+.modal-head { display: flex; justify-content: space-between; align-items: center; }
+.modal-head h3 { margin: 0; font-weight: 800; font-size: var(--text-lg); }
+.modal-foot { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.close-x { border: none; background: none; font-size: var(--text-lg); cursor: pointer; color: var(--color-ink-soft); }
+.close-x:hover { color: var(--color-ink); }
+
+.burger {
+  display: inline-flex; flex-direction: column; gap: 5px; padding: 0.75rem;
+  background: var(--color-batter); border: none; border-radius: var(--radius-md);
+  cursor: pointer; transition: box-shadow var(--lift), transform var(--lift);
+}
+.burger:hover { transform: translateY(-2px); box-shadow: var(--hover-lift); }
+.burger:active { transform: translateY(0); box-shadow: none; }
+.burger span { width: 1.25rem; height: 2px; background: var(--color-ink); }
+
+.float-menu {
+  display: inline-flex; gap: 0.25rem; background: var(--color-ink); color: #fff;
+  padding: 0.25rem;
+  box-shadow: 0 8px 20px rgba(58, 46, 38, 0.3);
+}
+.float-menu button {
+  font: inherit; font-size: var(--text-xs); color: #fff; background: transparent;
+  border: none; padding: 0.25rem 0.5rem; cursor: pointer;
+  transition: background 0.12s ease;
+}
+.float-menu button:hover { background: rgba(255, 255, 255, 0.16); }
+.float-menu button.danger { color: var(--color-neon-pink); }
+
+/* ————————————————————————————————————————————————
+   motion respect
+   ———————————————————————————————————————————————— */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
 }
