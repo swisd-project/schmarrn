@@ -63,6 +63,11 @@
       user = s.user;
       role = s.role;
       setupPassword = '';
+      // Fresh install: the bakery is founded, now show the baker their shop.
+      if (!import.meta.env.DEV) {
+        window.location.href = '/';
+        return;
+      }
     } catch (e) {
       setupError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -130,6 +135,12 @@
       authenticated = true;
       role = s.role;
       password = '';
+      // The law: login at /_, then the PAGE comes back up. Dev stays in the SPA
+      // (the vite origin's / is the dashboard itself).
+      if (!import.meta.env.DEV) {
+        window.location.href = '/';
+        return;
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Login failed';
     } finally {

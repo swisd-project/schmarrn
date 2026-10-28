@@ -19,8 +19,8 @@
 ├── vite.config.ts                # sveltekit() + /api dev proxy → :8080
 ├── tsconfig.json
 ├── build/                        # built dashboard (ignored)
-├── index.php                     # root front controller: /api/* → core, else public site (also php -S router)
-├── .htaccess                     # whitelist law: ONLY themes/, api/assets/, dashboard/, plugins/<n>/assets/ + index.php servable
+├── index.php                     # root front controller: /api/* → core, /_ → dashboard SPA, else public site (also php -S router)
+├── .htaccess                     # whitelist law: themes/, api/assets/, dashboard/, _app/, dashboard.html, plugins/<n>/assets/ + index.php; /_ → dashboard.html
 ├── plugins/                      # p6 plugin contract — manifest + code, core-enforced lid
 │   └── hello/                    # demo plugin (copy-me template): placeholder + public/user routes
 │       ├── plugin.json

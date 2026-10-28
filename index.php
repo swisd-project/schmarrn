@@ -22,24 +22,58 @@ if ($path !== '/' && str_starts_with($path, '/api/') && !str_starts_with($path, 
     exit;
 }
 
+// ——— /_ → the dashboard SPA (login + management). Root dashboard.html on the
+// ——— host layout, build/dashboard.html in the repo. Never the public face.
+if ($path === '/_' || str_starts_with($path, '/_/')) {
+    $shell = is_file(__DIR__ . '/dashboard.html') ? __DIR__ . '/dashboard.html' : __DIR__ . '/build/dashboard.html';
+    if (!is_file($shell)) {
+        http_response_code(404);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo "Dashboard not built — run `npm run build` (dev: use the vite port).";
+        exit;
+    }
+    header('Content-Type: text/html; charset=utf-8');
+    header('X-Content-Type-Options: nosniff');
+    readfile($shell);
+    exit;
+}
+
 // ——— real public files: let the server do its job (php -S router mode) ———
 // Whitelist only: themes, plugin assets, and the fallback render bundle. Plugin
 // CODE is never whitelisted — a direct hit on plugins/<name>/plugin.php would
 // execute it outside the front controller. Everything else on disk is none of
 // the visitor's business — it falls through to the public 404.
 if ($path !== '/') {
-    $file = realpath(__DIR__ . rawurldecode($path));
     $root = realpath(__DIR__);
+    $file = realpath(__DIR__ . rawurldecode($path));
+    if ($file === false && $root !== false && str_starts_with($path, '/_app/')) {
+        // The SPA bundle lives at root on the host, under build/ in the repo.
+        $candidate = __DIR__ . '/build' . rawurldecode($path);
+        $real = realpath($candidate);
+        if ($real !== false && str_starts_with($real, $root . DIRECTORY_SEPARATOR)) {
+            $file = $real;
+        }
+    }
     if ($file !== false && $root !== false && str_starts_with($file, $root . DIRECTORY_SEPARATOR) && is_file($file)) {
         $rel = str_replace(DIRECTORY_SEPARATOR, '/', substr($file, strlen($root) + 1));
+        $fromBuild = str_starts_with($rel, 'build/');
+        if ($fromBuild) {
+            $rel = substr($rel, strlen('build/'));
+        }
         if (str_starts_with($rel, 'themes/') || str_starts_with($rel, 'api/assets/')
+            || str_starts_with($rel, '_app/')
             || preg_match('#^plugins/[a-z0-9-]+/assets/#', $rel) === 1) {
-            if (PHP_SAPI === 'cli-server') {
+            if (PHP_SAPI === 'cli-server' && !$fromBuild) {
                 return false; // php -S serves it with proper MIME
             }
-            // Safety net for exotic SAPIs without rewrite: stream it ourselves.
-            $mime = str_ends_with($rel, '.css') ? 'text/css'
-                : (str_ends_with($rel, '.js') ? 'text/javascript' : 'application/octet-stream');
+            // Streamed by hand: exotic SAPIs without rewrite, and anything resolved
+            // out of build/ (php -S can't serve what isn't at the path it knows).
+            $mime = str_ends_with($rel, '.js') || str_ends_with($rel, '.mjs') ? 'text/javascript'
+                : (str_ends_with($rel, '.css') ? 'text/css'
+                : (str_ends_with($rel, '.html') ? 'text/html'
+                : (str_ends_with($rel, '.svg') ? 'image/svg+xml'
+                : (str_ends_with($rel, '.woff2') ? 'font/woff2'
+                : (mime_content_type($file) ?: 'application/octet-stream')))));
             header('Content-Type: ' . $mime);
             header('X-Content-Type-Options: nosniff');
             readfile($file);

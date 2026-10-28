@@ -63,6 +63,7 @@ v1 — Schmarrn "known to work"
 [ ] SPA fallback renamed to `dashboard.html` (adapter root-overwrite warning) — ALREADY DONE in svelte.config (fallback: 'dashboard.html', build emits both index.html prerender + dashboard.html fallback); row closed as stale
 
 ## p5 v1 ship-out
+[ ] README install guide — DEPLOY LAW CHANGED 2026-10-28 (user): public site at /, dashboard/login at /_; FTP upload = index.php + .htaccess + themes/ + api/ + dashboard.html + _app/ (NOT the built index.html — Apache DirectoryIndex would shadow index.php with the dashboard login)
 [ ] Full smoke test on a real FTP host (PHP 8.4+, .htaccess honored, writable cache)
 [ ] README install guide (FTP one folder, wizard walkthrough)
 [ ] Docs on GitHub Pages with examples (module cookbook, theme manifest spec, API shape)

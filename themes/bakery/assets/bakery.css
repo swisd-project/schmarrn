@@ -103,6 +103,24 @@ body.slide {
   background: linear-gradient(160deg, var(--batter) 0%, var(--crust) 55%, var(--blossom) 130%);
 }
 
+.slide-brand {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1.5rem;
+  padding: 1rem 2rem;
+}
+.slide-brand a {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  color: var(--ink);
+  text-decoration: none;
+}
+.slide-brand a:hover { color: var(--jam); }
+.slide-brand .sm-nav { margin-top: 0; }
+
 .slide-stage {
   flex: 1;
   display: flex;

@@ -89,12 +89,13 @@ body.slide {
   display: flex; flex-direction: column; min-height: 100vh;
 }
 
-.slide-mark { padding: 1.75rem 2.5rem; }
+.slide-mark { padding: 1.75rem 2.5rem; display: flex; justify-content: space-between; align-items: baseline; gap: 1.5rem; }
 .slide-mark a {
   font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
   font-size: 0.85rem; color: var(--ink-soft); text-decoration: none;
 }
 .slide-mark a:hover { color: var(--jam); }
+.slide-mark .sm-nav { margin-top: 0; }
 
 .slide-stage {
   flex: 1; display: flex; flex-direction: column; justify-content: center;
