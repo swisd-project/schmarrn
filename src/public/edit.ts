@@ -207,7 +207,10 @@ async function boot(root: HTMLElement): Promise<void> {
   }
 
   function currentBody(): string {
-    return joinPage({ frontmatter: splitFrontmatter(raw).frontmatter, body: '' }, blocks);
+    // Body ONLY — the frontmatter is rebuilt by the caller. Gluing the old
+    // frontmatter back here double-stamped every settings save (the bug that
+    // printed the whole frontmatter onto the page).
+    return blocks.map((b) => b.source).join('\n\n');
   }
 
   // ——— save + publish (one act — the page IS the editor) ———
