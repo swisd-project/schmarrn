@@ -10,6 +10,7 @@ api/cache/
 api/config/auth.local.php
 api/config/accounts.local.php
 api/config/site.local.php
+api/config/plugins.local.php
 
 # Site content — install-local data (the user's pages, drafts, media). Never repo material.
 src/content/

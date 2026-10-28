@@ -1,7 +1,7 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
   // a burger opens the full-screen overlay (Pages / Site / Accounts / Media).
-  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia, uploadSiteAsset } from '$lib/api';
+  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, type PluginRef } from '$lib/api';
   import { schemaFor, withDraftFlag } from '$lib/schema';
   import { splitFrontmatter } from '$lib/blocks';
   import { parseMdms } from '@swisd-project/mdms';
@@ -168,8 +168,8 @@
     return (index?.[sel.type] ?? []).some((p) => p.slug === sel.slug && p.draft !== true);
   });
 
-  // ——— the burger overlay: Pages / Site / Accounts / Media ———
-  type Tab = 'pages' | 'site' | 'accounts' | 'media';
+  // ——— the burger overlay: Pages / Site / Accounts / Media / Plugins ———
+  type Tab = 'pages' | 'site' | 'accounts' | 'media' | 'plugins';
   let menuOpen = $state(false);
   let tab = $state<Tab>('pages');
 
@@ -185,6 +185,46 @@
   function showTab(next: Tab) {
     tab = next;
     if (next === 'media') void loadAllMedia(); // lazy — the tab pays for itself
+    if (next === 'plugins') void loadPlugins();
+  }
+
+  // ——— plugins tab (admin, lazy) ———
+  let plugins = $state<readonly PluginRef[]>([]);
+  let pluginsBusy = $state(false);
+  let pluginsError = $state('');
+  let pluginsNote = $state('');
+
+  async function loadPlugins() {
+    if (pluginsBusy) return;
+    pluginsBusy = true;
+    pluginsError = '';
+    try {
+      plugins = await listPlugins();
+    } catch (e) {
+      pluginsError = e instanceof Error ? e.message : String(e);
+    } finally {
+      pluginsBusy = false;
+    }
+  }
+
+  async function togglePlugin(plugin: PluginRef) {
+    if (pluginsBusy) return;
+    pluginsBusy = true;
+    pluginsError = '';
+    pluginsNote = '';
+    try {
+      // The map is rebuilt from the FRESH list — never from stale local state.
+      const fresh = await listPlugins();
+      const enabled: Record<string, boolean> = {};
+      for (const p of fresh) enabled[p.name] = p.name === plugin.name ? !p.enabled : p.enabled;
+      await setPlugins(enabled);
+      plugins = await listPlugins();
+      pluginsNote = `${plugin.title} ${plugins.find((p) => p.name === plugin.name)?.enabled ? 'enabled' : 'disabled'}.`;
+    } catch (e) {
+      pluginsError = e instanceof Error ? e.message : String(e);
+    } finally {
+      pluginsBusy = false;
+    }
   }
 
   // ——— media tab (lazy) ———
@@ -507,6 +547,9 @@
         <button class="btn {tab === 'accounts' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('accounts')}>Accounts</button>
       {/if}
       <button class="btn {tab === 'media' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('media')}>Media</button>
+      {#if role === 'admin'}
+        <button class="btn {tab === 'plugins' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('plugins')}>Plugins</button>
+      {/if}
     </nav>
 
     <div class="px-4 pb-12 max-w-4xl mx-auto w-full">
@@ -653,6 +696,50 @@
             {/each}
           </div>
         {/if}
+      {:else if tab === 'plugins' && role === 'admin'}
+        <section class="mg mb-6">
+          <h4 class="mg-h">Plugins</h4>
+          {#if pluginsBusy && plugins.length === 0}
+            <p class="italic text-ink-soft">Opening the pantry…</p>
+          {:else if pluginsError && plugins.length === 0}
+            <p class="alert alert-err" role="alert">{pluginsError}</p>
+          {:else if plugins.length === 0}
+            <p class="m-0 italic text-ink-soft">No plugins installed — drop a folder with plugin.json + plugin.php into plugins/.</p>
+          {:else}
+            <ul class="list-none p-0 m-0 flex flex-col gap-2">
+              {#each plugins as plugin (plugin.name)}
+                <li class="card flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="m-0 font-bold">
+                      {plugin.title} <span class="text-xs text-ink-soft">v{plugin.version}</span>
+                      {#if plugin.error}<span class="badge">broken</span>{/if}
+                    </p>
+                    {#if plugin.description}<p class="m-0 text-sm text-ink-soft">{plugin.description}</p>{/if}
+                    {#if plugin.error}
+                      <p class="m-0 text-sm text-ink-soft">{plugin.error}</p>
+                    {:else}
+                      <p class="m-0 text-xs text-ink-soft">
+                        {plugin.placeholders.length} placeholder{plugin.placeholders.length === 1 ? '' : 's'}
+                        · {plugin.routes.length} route{plugin.routes.length === 1 ? '' : 's'}
+                      </p>
+                    {/if}
+                  </div>
+                  {#if !plugin.error}
+                    <button
+                      class="btn {plugin.enabled ? 'btn-secondary' : 'btn-primary'}"
+                      disabled={pluginsBusy}
+                      onclick={() => togglePlugin(plugin)}
+                    >
+                      {#if pluginsBusy}…{:else if plugin.enabled}Disable{:else}Enable{/if}
+                    </button>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          {#if pluginsError && plugins.length > 0}<p class="alert alert-err" role="alert">{pluginsError}</p>{/if}
+          {#if pluginsNote}<p class="alert alert-ok">{pluginsNote}</p>{/if}
+        </section>
       {/if}
     </div>
   </div>

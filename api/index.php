@@ -19,6 +19,7 @@ require __DIR__ . '/lock.php';
 require __DIR__ . '/store.php';
 require __DIR__ . '/cache.php';
 require __DIR__ . '/site.php';
+require __DIR__ . '/plugins.php';
 require __DIR__ . '/serve.php'; // public JSON API reuses the serving engine's byte-peeks
 
 $path = Router\pathAfter('/api/');
@@ -282,6 +283,47 @@ try {
             header('X-Content-Type-Options: nosniff');
             readfile($assetPath);
             exit;
+
+        // ——— plugins (p6): the admin's install lid ———
+        case $method === 'GET' && $path === 'plugins':
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only.');
+            }
+            echo json_encode(Plugins\all(), JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'PUT' && $path === 'plugins':
+            if (!Auth\check()) {
+                Router\refuse(401, 'Not authenticated.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $wanted = is_array($body['enabled'] ?? null) ? $body['enabled'] : null;
+            if ($wanted === null) {
+                Router\refuse(400, 'Enabled map required.');
+            }
+            // Only INSTALLED plugins may be toggled — the lid holds.
+            $installed = array_filter(Plugins\all(), fn($p) => !isset($p['error']));
+            $clean = [];
+            foreach ($installed as $p) {
+                $clean[$p['name']] = $wanted[$p['name']] === true;
+            }
+            Plugins\setState($clean);
+            echo json_encode(['ok' => true]);
+            break;
+
+        // Plugin API routes: /api/plugin/<name>/<route> — auth/CSRF enforced by the contract.
+        case preg_match('#^(GET|POST|PUT|DELETE)$#', $method) === 1
+            && preg_match('#^plugin/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
+            [, $pluginName, $pluginRoute] = explode('/', $path);
+            Plugins\dispatch((string)$pluginName, (string)$pluginRoute, $method);
+            break;
 
         // ——— account management: admin-only, CSRF-gated ———
         case $method === 'GET' && $path === 'accounts':

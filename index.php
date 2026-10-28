@@ -23,14 +23,17 @@ if ($path !== '/' && str_starts_with($path, '/api/') && !str_starts_with($path, 
 }
 
 // ——— real public files: let the server do its job (php -S router mode) ———
-// Whitelist only: themes and the fallback render bundle. Everything else on disk
-// is none of the visitor's business — it falls through to the public 404.
+// Whitelist only: themes, plugin assets, and the fallback render bundle. Plugin
+// CODE is never whitelisted — a direct hit on plugins/<name>/plugin.php would
+// execute it outside the front controller. Everything else on disk is none of
+// the visitor's business — it falls through to the public 404.
 if ($path !== '/') {
     $file = realpath(__DIR__ . rawurldecode($path));
     $root = realpath(__DIR__);
     if ($file !== false && $root !== false && str_starts_with($file, $root . DIRECTORY_SEPARATOR) && is_file($file)) {
         $rel = str_replace(DIRECTORY_SEPARATOR, '/', substr($file, strlen($root) + 1));
-        if (str_starts_with($rel, 'themes/') || str_starts_with($rel, 'api/assets/')) {
+        if (str_starts_with($rel, 'themes/') || str_starts_with($rel, 'api/assets/')
+            || preg_match('#^plugins/[a-z0-9-]+/assets/#', $rel) === 1) {
             if (PHP_SAPI === 'cli-server') {
                 return false; // php -S serves it with proper MIME
             }

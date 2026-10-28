@@ -225,6 +225,39 @@ export function saveSiteSettings(settings: SiteSettings): Promise<void> {
   }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
 }
 
+// ——— plugins (admin) ———
+
+export interface PluginRoute {
+  readonly path: string;
+  readonly auth: 'public' | 'user' | 'admin';
+  readonly csrf: boolean;
+}
+
+export interface PluginRef {
+  readonly name: string;
+  readonly title: string;
+  readonly version: string;
+  readonly description: string;
+  readonly placeholders: readonly string[];
+  readonly routes: readonly PluginRoute[];
+  readonly editorBlocks: readonly string[];
+  readonly enabled: boolean;
+  readonly error?: string;
+}
+
+export function listPlugins(): Promise<readonly PluginRef[]> {
+  return fetch('/api/plugins').then((r) => json<readonly PluginRef[]>(r));
+}
+
+/** The whole enabled map in one PUT — only installed plugins survive the core's lid. */
+export function setPlugins(enabled: Readonly<Record<string, boolean>>): Promise<void> {
+  return fetch('/api/plugins', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({ enabled })
+  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
+}
+
 // ——— account management (admin) ———
 
 export function listAccounts(): Promise<readonly AccountRef[]> {

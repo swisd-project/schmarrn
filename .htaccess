@@ -7,8 +7,11 @@
 RewriteEngine On
 
 # Real files ONLY in the public static whitelist (themes, api/assets, dashboard/ —
-# the built SPA's home on the host). The front controller itself passes too.
+# the built SPA's home on the host — and plugin assets). Plugin CODE is never
+# whitelisted: a direct hit on plugins/<name>/plugin.php must not execute. The
+# front controller itself passes too.
 RewriteCond %{REQUEST_URI} ^/?(themes|api/assets|dashboard)/ [OR]
+RewriteCond %{REQUEST_URI} ^/?plugins/[a-z0-9-]+/assets/ [OR]
 RewriteCond %{REQUEST_URI} ^/?index\.php$
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]

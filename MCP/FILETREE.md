@@ -20,7 +20,11 @@
 ├── tsconfig.json
 ├── build/                        # built dashboard (ignored)
 ├── index.php                     # root front controller: /api/* → core, else public site (also php -S router)
-├── .htaccess                     # deny sensitive dirs; real files pass; rewrite to index.php
+├── .htaccess                     # whitelist law: ONLY themes/, api/assets/, dashboard/, plugins/<n>/assets/ + index.php servable
+├── plugins/                      # p6 plugin contract — manifest + code, core-enforced lid
+│   └── hello/                    # demo plugin (copy-me template): placeholder + public/user routes
+│       ├── plugin.json
+│       └── plugin.php
 ├── themes/
 │   ├── bakery/                   # default theme (classical-first; slide.html too)
 │   │   ├── theme.json
@@ -37,9 +41,10 @@
 │   └── (*.mts)                   # dev probes
 ├── api/                          # PHP core — front controller + libs, no framework
 │   ├── .htaccess                 # legacy (root .htaccess is the law now)
-│   ├── index.php                 # JSON routes: login/session, pages, drafts, publish(+html), public API, media, locks
-│   ├── serve.php                 # public serving engine: dispatch, themes, cached HTML, fallback shell, SEO head
-│   ├── site.php                  # brand settings load/save (template < site.local.php)
+│   ├── index.php                 # JSON routes: login/session, pages, drafts, publish(+html), public API, media, locks, plugins
+│   ├── serve.php                 # public serving engine: dispatch, themes, cached HTML, fallback shell, SEO head, plugin fills
+│   ├── site.php                  # brand settings load/save (template < site.local.php) + site assets (.assets/)
+│   ├── plugins.php               # p6 capability contract: scan/validate/load/dispatch, state in config/plugins.local.php
 │   ├── router.php
 │   ├── auth.php                  # Argon2id password, session, 24h
 │   ├── accounts.php              # file-backed account store + invites

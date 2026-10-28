@@ -22,12 +22,14 @@ require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/cache.php';
 require_once __DIR__ . '/site.php';
+require_once __DIR__ . '/plugins.php';
 
 const IDENTIFIER = '/^[a-z0-9]+(?:-[a-z0-9]+)*$/';
 
 /** The one door: dispatch a public request path. Never returns. */
 function dispatch(string $path): never
 {
+    \Plugins\load(); // enabled plugin code in place before any render fills placeholders
     $site = \Site\load();
     $path = trim($path, '/');
     if ($path === '') {
@@ -94,7 +96,7 @@ function page(string $type, string $slug, array $site): never
         // time, so theme and style switches apply to cached pages without a re-publish.
         $theme = themeTemplate($site, styleOf($type, $slug, $site));
         $title = titleOf($type, $slug, $slug);
-        echo fill($theme, $site, $title, $html, seoHead($title, $site['name'], "{$type}/{$slug}"), $slug);
+        echo fill($theme, $site, $title, $html, seoHead($title, $site['name'], "{$type}/{$slug}"), $slug, $type);
         exit;
     }
     // Stale or never rendered — the visitor's browser picks up the slack (GOSPEL serving law).
@@ -168,8 +170,9 @@ function houseTemplate(): string
 HTML;
 }
 
-/** Fill the theme template. Body HTML is trusted (walled pipeline); everything else escapes. */
-function fill(array $theme, array $site, string $title, string $bodyHtml, string $seoHead, string $currentSlug = ''): string
+/** Fill the theme template. Body HTML is trusted (walled pipeline); everything else escapes.
+ *  Plugin placeholders (p6) merge in last — manifest-declared only, values are the plugin's trusted HTML. */
+function fill(array $theme, array $site, string $title, string $bodyHtml, string $seoHead, string $currentSlug = '', string $type = ''): string
 {
     $replacements = [
         '{{siteName}}' => htmlspecialchars($site['name'], ENT_QUOTES),
@@ -189,6 +192,9 @@ function fill(array $theme, array $site, string $title, string $bodyHtml, string
         '{{themeBase}}' => htmlspecialchars($theme['base'], ENT_QUOTES),
         '{{year}}' => date('Y'),
     ];
+    foreach (\Plugins\placeholderFills(['site' => $site, 'type' => $type, 'slug' => $currentSlug, 'title' => $title]) as $token => $value) {
+        $replacements[$token] = $value;
+    }
     return str_replace(array_keys($replacements), array_values($replacements), $theme['template']);
 }
 
@@ -261,7 +267,7 @@ function shell(array $site, string $type, string $slug): string
     $body = '<div class="sm-fallback" data-schmarrn-root data-type="' . htmlspecialchars($type, ENT_QUOTES)
         . '" data-slug="' . htmlspecialchars($slug, ENT_QUOTES) . '"></div>' . "\n"
         . '<script type="module" src="/api/assets/render.esm.js"></script>';
-    return fill($theme, $site, $title, $body, seoHead($title, $site['name'], "{$type}/{$slug}"), $slug);
+    return fill($theme, $site, $title, $body, seoHead($title, $site['name'], "{$type}/{$slug}"), $slug, $type);
 }
 
 /** Themed 404 — the public never sees JSON from the serving engine. */
