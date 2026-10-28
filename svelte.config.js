@@ -10,9 +10,10 @@ const config = {
       fallback: 'dashboard.html',
       strict: false
     }),
-    // GitHub Pages hosts the dashboard under /schmarrn/ (deploy workflow sets BASE_PATH).
-    // Local dev and the FTP host use no base path.
-    paths: { base: process.env.BASE_PATH || '' }
+    // The dashboard lives at /_ (the public site never wears a login face).
+    // Local dev and FTP hosts build with base /_; the Pages deploy overrides
+    // via BASE_PATH (e.g. /schmarrn).
+    paths: { base: process.env.BASE_PATH || '/_' }
   }
 };
 

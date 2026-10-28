@@ -6,14 +6,17 @@
 
 RewriteEngine On
 
+# /_ is the dashboard's home (login + management) — the app is BUILT under that
+# base path. The dir and everything real under it passes; the dir itself goes
+# through mod_dir's DirectoryIndex (/_ → /_/ → its index.html). The public site
+# NEVER wears a login face — this is the only door.
+RewriteRule ^_(/|$) - [L]
+
 # Real files ONLY in the public static whitelist (themes, api/assets, dashboard/ —
-# the built SPA's home on the host — plugin assets, the dashboard shell itself and
-# its _app bundle). Plugin CODE is never whitelisted: a direct hit on
+# and plugin assets). Plugin CODE is never whitelisted: a direct hit on
 # plugins/<name>/plugin.php must not execute. The front controller itself passes too.
 RewriteCond %{REQUEST_URI} ^/?(themes|api/assets|dashboard)/ [OR]
 RewriteCond %{REQUEST_URI} ^/?plugins/[a-z0-9-]+/assets/ [OR]
-RewriteCond %{REQUEST_URI} ^/?_app/ [OR]
-RewriteCond %{REQUEST_URI} ^/?dashboard\.html$ [OR]
 RewriteCond %{REQUEST_URI} ^/?index\.php$
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
@@ -26,11 +29,6 @@ RewriteRule ^ - [F]
 
 # /api/* → the JSON core via the root front controller.
 RewriteRule ^api(/|$) index.php [L]
-
-# /_ → the dashboard (login + management). The public site NEVER wears a login face;
-# the built index.html from the SPA build is GitHub-Pages-only and must not be
-# uploaded to an FTP host's root (DirectoryIndex would shadow index.php).
-RewriteRule ^_+$ dashboard.html [L]
 
 # Everything else → the public site.
 RewriteRule ^ index.php [L]

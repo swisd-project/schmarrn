@@ -22,20 +22,36 @@ if ($path !== '/' && str_starts_with($path, '/api/') && !str_starts_with($path, 
     exit;
 }
 
-// ——— /_ → the dashboard SPA (login + management). Root dashboard.html on the
-// ——— host layout, build/dashboard.html in the repo. Never the public face.
-if ($path === '/_' || str_starts_with($path, '/_/')) {
-    $shell = is_file(__DIR__ . '/dashboard.html') ? __DIR__ . '/dashboard.html' : __DIR__ . '/build/dashboard.html';
-    if (!is_file($shell)) {
-        http_response_code(404);
-        header('Content-Type: text/plain; charset=utf-8');
-        echo "Dashboard not built — run `npm run build` (dev: use the vite port).";
-        exit;
-    }
-    header('Content-Type: text/html; charset=utf-8');
-    header('X-Content-Type-Options: nosniff');
-    readfile($shell);
+// ——— /_ → the dashboard SPA (login + management). The app is BUILT to live under
+// ——— /_ (paths.base) — its client router 404s anywhere else. Canonical: /_ → /_/.
+if ($path === '/_') {
+    header('Location: /_/', true, 301);
     exit;
+}
+if (str_starts_with($path, '/_/')) {
+    $sub = substr($path, 2); // keeps the leading slash: '/dashboard.html' | '/_app/...'
+    if ($sub === '' || $sub === '/') {
+        $sub = '/index.html'; // the dir itself → the prerendered dashboard root
+    }
+    // Host layout: a real _/ directory. Repo layout: the flat build/ output
+    // (/_/_app/x → build/_app/x — the base prefix collapses into the path).
+    foreach ([__DIR__ . '/_', __DIR__ . '/build'] as $baseDir) {
+        $file = realpath($baseDir . $sub);
+        $root = realpath(__DIR__);
+        if ($file !== false && $root !== false && str_starts_with($file, $root . DIRECTORY_SEPARATOR) && is_file($file)) {
+            $mime = str_ends_with($sub, '.js') || str_ends_with($sub, '.mjs') ? 'text/javascript'
+                : (str_ends_with($sub, '.css') ? 'text/css'
+                : (str_ends_with($sub, '.html') ? 'text/html'
+                : (str_ends_with($sub, '.svg') ? 'image/svg+xml'
+                : (str_ends_with($sub, '.woff2') ? 'font/woff2'
+                : (mime_content_type($file) ?: 'application/octet-stream')))));
+            header('Content-Type: ' . $mime);
+            header('X-Content-Type-Options: nosniff');
+            readfile($file);
+            exit;
+        }
+    }
+    // fall through to the public 404
 }
 
 // ——— real public files: let the server do its job (php -S router mode) ———
