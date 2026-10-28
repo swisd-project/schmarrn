@@ -22,10 +22,16 @@
 ├── index.php                     # root front controller: /api/* → core, else public site (also php -S router)
 ├── .htaccess                     # deny sensitive dirs; real files pass; rewrite to index.php
 ├── themes/
-│   └── bakery/                   # default theme (theme contract: manifest + template + assets)
+│   ├── bakery/                   # default theme (classical-first; slide.html too)
+│   │   ├── theme.json
+│   │   ├── page.html             # {{placeholders}} incl. {{navHtml}} — str_replace only
+│   │   ├── slide.html
+│   │   └── assets/bakery.css
+│   └── atelier/                  # artist presentation theme (slide-first, depth system)
 │       ├── theme.json
-│       ├── page.html             # {{placeholders}} — str_replace only, no code exec
-│       └── assets/bakery.css
+│       ├── page.html
+│       ├── slide.html
+│       └── assets/atelier.css
 ├── scripts/
 │   ├── build-fallback.mjs        # esbuild → api/assets/render.esm.js (committed)
 │   └── (*.mts)                   # dev probes

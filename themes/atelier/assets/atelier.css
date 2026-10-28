@@ -1,0 +1,125 @@
+/* Atelier — the artist presentation theme.
+   The settled design system at portfolio scale: one light (top-left), three
+   layers (bg → mg → fg), square corners, sans everywhere, electric accents
+   only for attention. Slides are the standard; the temperament is a gallery:
+   huge type, generous air, images first. */
+
+:root {
+  /* surfaces — one flesh; depth comes from shadow */
+  --batter: #fff8ef;
+  --crust: #f6e7d7;
+  --line: #e5d5c0;
+
+  /* accents */
+  --blossom: #f2b8c6;
+  --sky: #bcd9ea;
+  --jam: #e2543e;
+  --neon-pink: #ff2e88;
+  --neon-blue: #00cfff;
+
+  /* ink */
+  --ink: #3a2e26;
+  --ink-soft: #6f5d4f;
+
+  /* the light */
+  --light: rgba(255, 255, 255, 0.95);
+  --shade: rgba(58, 46, 38, 0.16);
+  --shade-strong: rgba(58, 46, 38, 0.28);
+  --raise-mg: -5px -5px 12px var(--light), 6px 6px 14px var(--shade);
+  --hover-lift: 3px 4px 10px var(--shade);
+  --press: inset 3px 3px 8px var(--shade), inset -3px -3px 8px var(--light);
+
+  /* type */
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: linear-gradient(145deg, #fffdf7 0%, var(--batter) 45%, #f9ecd9 100%);
+  color: var(--ink);
+  font-family: var(--font-body);
+  line-height: 1.65;
+}
+
+/* ——— classical ——— */
+
+.site-head { padding: 1.5rem 2rem; }
+.brand {
+  display: inline-flex; align-items: center; gap: 0.6rem;
+  font-weight: 800; font-size: 1.3rem; letter-spacing: -0.01em;
+  color: var(--ink); text-decoration: none;
+}
+.brand .logo { height: 2.4rem; width: auto; }
+
+.sm-nav { margin-top: 0.75rem; display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.sm-nav a { color: var(--ink-soft); text-decoration: none; font-size: 0.9rem; transition: color 0.12s ease; }
+.sm-nav a:hover { color: var(--jam); }
+.sm-nav a[aria-current] { color: var(--ink); font-weight: 700; box-shadow: var(--press); padding: 0.1rem 0.5rem; }
+
+main { max-width: 46rem; margin: 0 auto; padding: 3rem 2rem 4rem; }
+main h1, main h2, main h3 { font-weight: 800; letter-spacing: -0.015em; line-height: 1.15; }
+main h1 { font-size: clamp(2.4rem, 6vw, 4rem); }
+main h2 { font-size: clamp(1.7rem, 4vw, 2.6rem); }
+main a { color: var(--jam); }
+main img, main video { max-width: 100%; height: auto; }
+main figure { margin: 2.5rem 0; }
+main figure img { box-shadow: var(--raise-mg); }
+main figcaption { color: var(--ink-soft); font-size: 0.85rem; margin-top: 0.75rem; }
+main blockquote { margin: 2rem 0; padding: 1rem 1.5rem; background: var(--crust); color: var(--ink-soft); font-style: italic; }
+main code { font-family: var(--font-mono); background: var(--crust); padding: 0.1em 0.35em; font-size: 0.9em; }
+main hr { border: none; border-top: 2px dashed var(--line); margin: 3rem 0; }
+
+.sm-unknown-module {
+  background: var(--crust); color: var(--ink-soft);
+  padding: 1rem 1.25rem; font-size: 0.9rem;
+  box-shadow: var(--press);
+}
+
+.site-foot {
+  padding: 1.5rem 2rem; color: var(--ink-soft); font-size: 0.85rem;
+  border-top: 2px dashed var(--line);
+}
+
+/* ——— slide: the gallery wall ——— */
+
+body.slide {
+  display: flex; flex-direction: column; min-height: 100vh;
+}
+
+.slide-mark { padding: 1.75rem 2.5rem; }
+.slide-mark a {
+  font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  font-size: 0.85rem; color: var(--ink-soft); text-decoration: none;
+}
+.slide-mark a:hover { color: var(--jam); }
+
+.slide-stage {
+  flex: 1; display: flex; flex-direction: column; justify-content: center;
+  max-width: 56rem; width: 100%; margin: 0 auto; padding: 2rem 2.5rem 4rem;
+}
+.slide-stage h1 { font-size: clamp(3rem, 9vw, 6.5rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.02; margin: 0 0 1.5rem; }
+.slide-stage h2 { font-size: clamp(2rem, 5vw, 3.4rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+.slide-stage p { font-size: clamp(1.15rem, 2.4vw, 1.5rem); max-width: 38rem; }
+.slide-stage figure { margin: 2.5rem 0 0; }
+.slide-stage figure img {
+  width: 100%; height: auto; box-shadow: var(--raise-mg);
+}
+.slide-stage figcaption { color: var(--ink-soft); font-size: 0.85rem; margin-top: 1rem; }
+.slide-stage > *:first-child { margin-top: 0; }
+
+.slide-foot {
+  display: flex; justify-content: space-between;
+  padding: 1.25rem 2.5rem; color: var(--ink-soft); font-size: 0.85rem;
+}
+
+.sm-fallback:empty { min-height: 40vh; }
+
+.sm-notfound { text-align: center; padding: 4rem 0; }
+.sm-notfound h1 { font-size: 5rem; font-weight: 800; margin: 0; color: var(--jam); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

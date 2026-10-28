@@ -51,6 +51,11 @@ body {
   font-style: italic;
 }
 
+.sm-nav { margin-top: 0.6rem; display: flex; gap: 1.25rem; flex-wrap: wrap; }
+.sm-nav a { color: var(--ink-soft); text-decoration: none; font-size: 0.9rem; }
+.sm-nav a:hover { color: var(--jam); }
+.sm-nav a[aria-current] { color: var(--jam); font-weight: 700; }
+
 main {
   max-width: 44rem;
   margin: 0 auto;

@@ -1,0 +1,22 @@
+{
+  "name": "atelier",
+  "title": "Atelier",
+  "version": "0.1.0",
+  "style": "slide",
+  "defaultStyle": "slide",
+  "styles": ["slide", "classical"],
+  "description": "Artist presentation theme — slide-first, image-forward, the settled depth system at portfolio scale.",
+  "placeholders": [
+    "siteName",
+    "claim",
+    "claimHtml",
+    "logoUrl",
+    "logoHtml",
+    "pageTitle",
+    "bodyHtml",
+    "seoHead",
+    "navHtml",
+    "themeBase",
+    "year"
+  ]
+}

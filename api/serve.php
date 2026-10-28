@@ -165,7 +165,7 @@ HTML;
 }
 
 /** Fill the theme template. Body HTML is trusted (walled pipeline); everything else escapes. */
-function fill(array $theme, array $site, string $title, string $bodyHtml, string $seoHead): string
+function fill(array $theme, array $site, string $title, string $bodyHtml, string $seoHead, string $currentSlug = ''): string
 {
     $replacements = [
         '{{siteName}}' => htmlspecialchars($site['name'], ENT_QUOTES),
@@ -181,10 +181,30 @@ function fill(array $theme, array $site, string $title, string $bodyHtml, string
         '{{pageTitle}}' => htmlspecialchars($title, ENT_QUOTES),
         '{{bodyHtml}}' => $bodyHtml,
         '{{seoHead}}' => $seoHead,
+        '{{navHtml}}' => navHtml($site, $currentSlug),
         '{{themeBase}}' => htmlspecialchars($theme['base'], ENT_QUOTES),
         '{{year}}' => date('Y'),
     ];
     return str_replace(array_keys($replacements), array_values($replacements), $theme['template']);
+}
+
+/** The menu: published pages of "pages" as links, the current one marked. Classical style's spine. */
+function navHtml(array $site, string $currentSlug): string
+{
+    $items = [];
+    foreach (\Store\listAll()['pages'] ?? [] as $candidate) {
+        if ($candidate['draft'] ?? false) {
+            continue;
+        }
+        $slug = (string)$candidate['slug'];
+        $current = $slug === $currentSlug ? ' aria-current="page"' : '';
+        $items[] = '<a href="/' . htmlspecialchars($slug, ENT_QUOTES) . '"' . $current . '>'
+            . htmlspecialchars(titleOf('pages', $slug, $slug), ENT_QUOTES) . '</a>';
+    }
+    if ($items === []) {
+        return '';
+    }
+    return '<nav class="sm-nav">' . implode('', $items) . '</nav>';
 }
 
 /** Logo setting → URL. Absolute or root-relative passes through; anything else roots it. */
@@ -237,7 +257,7 @@ function shell(array $site, string $type, string $slug): string
     $body = '<div class="sm-fallback" data-schmarrn-root data-type="' . htmlspecialchars($type, ENT_QUOTES)
         . '" data-slug="' . htmlspecialchars($slug, ENT_QUOTES) . '"></div>' . "\n"
         . '<script type="module" src="/api/assets/render.esm.js"></script>';
-    return fill($theme, $site, $title, $body, seoHead($title, $site['name'], "{$type}/{$slug}"));
+    return fill($theme, $site, $title, $body, seoHead($title, $site['name'], "{$type}/{$slug}"), $slug);
 }
 
 /** Themed 404 — the public never sees JSON from the serving engine. */
