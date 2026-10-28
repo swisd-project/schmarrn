@@ -90,7 +90,11 @@ function page(string $type, string $slug, array $site): never
     header('Cache-Control: no-cache');
     $html = \Cache\html($type, $slug);
     if ($html !== null && !\Cache\htmlStale($type, $slug)) {
-        echo $html;
+        // The cache holds the BODY only — the theme wrap happens here, at serve
+        // time, so theme and style switches apply to cached pages without a re-publish.
+        $theme = themeTemplate($site, styleOf($type, $slug, $site));
+        $title = titleOf($type, $slug, $slug);
+        echo fill($theme, $site, $title, $html, seoHead($title, $site['name'], "{$type}/{$slug}"), $slug);
         exit;
     }
     // Stale or never rendered — the visitor's browser picks up the slack (GOSPEL serving law).

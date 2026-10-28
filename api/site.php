@@ -61,4 +61,10 @@ function save(array $settings): void
     if (file_put_contents(configFile(), $export) === false) {
         \Router\refuse(500, 'Cannot write site settings.');
     }
+    // The next request may land inside opcache's revalidation window (default 2s;
+    // some hosts ship validate_timestamps=0) and read the PREVIOUS settings —
+    // theme switches would appear to do nothing. Drop the cached bytecode now.
+    if (function_exists('opcache_invalidate')) {
+        opcache_invalidate(configFile(), true);
+    }
 }
