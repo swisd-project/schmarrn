@@ -57,7 +57,10 @@ function all(): array
             continue;
         }
         $email = isset($record['email']) && is_string($record['email']) ? $record['email'] : '';
-        $clean[$user] = ['role' => $role, 'passwordHash' => $hash, 'email' => $email];
+        // The session epoch survives normalization — check() compares it per
+        // request; a stripped epoch would read as 0 and resurrect dead sessions.
+        $epoch = isset($record['epoch']) && is_int($record['epoch']) ? $record['epoch'] : 0;
+        $clean[$user] = ['role' => $role, 'passwordHash' => $hash, 'email' => $email, 'epoch' => $epoch];
     }
     // Legacy migration: the old single-password hash becomes the 'admin' account.
     if ($clean === [] && is_file(__DIR__ . '/config/auth.local.php')) {
@@ -117,7 +120,7 @@ function add(string $user, string $hash, string $role, string $email = ''): void
     if (isset($accounts[$user])) {
         \Router\refuse(409, "Account exists: {$user}");
     }
-    $accounts[$user] = ['role' => $role, 'passwordHash' => $hash, 'email' => $email];
+    $accounts[$user] = ['role' => $role, 'passwordHash' => $hash, 'email' => $email, 'epoch' => 0];
     save($accounts);
 }
 
@@ -162,6 +165,11 @@ function setHash(string $user, string $hash): void
         \Router\refuse(404, "No account: {$user}");
     }
     $accounts[$user]['passwordHash'] = $hash;
+    // The session epoch: every existing session of this account was minted
+    // against the OLD credential — a password change or reset kills them all
+    // (stolen session included). The acting session re-stamps its own epoch
+    // after the call, so the person who changed the password stays logged in.
+    $accounts[$user]['epoch'] = time();
     save($accounts);
 }
 

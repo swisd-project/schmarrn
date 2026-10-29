@@ -142,16 +142,29 @@ function login(): void
     clearFailures($ip);
     session_regenerate_id(true);
     $_SESSION['user'] = $user;
-    $_SESSION['role'] = $account['role'];
+    $_SESSION['epoch'] = $account['epoch'] ?? 0;
     $_SESSION['founded'] = time();
     $_SESSION['csrf'] = bin2hex(random_bytes(32));
 }
 
-/** Authenticated within the 24h window. */
+/**
+ * Authenticated within the 24h window — AND the account still exists with the
+ * session's epoch. The session proves a login happened once; the store proves
+ * it still counts. Deletions and role changes take effect on the next request
+ * (no 24h revocation lag), and a password change/reset bumps the account's
+ * epoch so every older session — a hijacked one included — dies with it.
+ */
 function check(): bool
 {
-    return is_string($_SESSION['user'] ?? null)
-        && (time() - ($_SESSION['founded'] ?? 0)) < LIFETIME;
+    $user = $_SESSION['user'] ?? null;
+    if (!is_string($user) || (time() - ($_SESSION['founded'] ?? 0)) >= LIFETIME) {
+        return false;
+    }
+    $account = record($user);
+    if ($account === null || ($_SESSION['epoch'] ?? 0) !== ($account['epoch'] ?? 0)) {
+        return false;
+    }
+    return true;
 }
 
 function user(): string
@@ -159,9 +172,24 @@ function user(): string
     return check() ? (string)$_SESSION['user'] : '';
 }
 
+/** The role comes from the store, fresh per request — never from the session. */
 function role(): string
 {
-    return check() ? (string)$_SESSION['role'] : '';
+    if (!check()) {
+        return '';
+    }
+    return (string)(record((string)$_SESSION['user'])['role'] ?? '');
+}
+
+/** The account record behind a session user, or null when it's a ghost. */
+function record(string $user): ?array
+{
+    try {
+        $account = \Accounts\all()[$user] ?? null;
+    } catch (\Throwable) {
+        return null;
+    }
+    return is_array($account) ? $account : null;
 }
 
 function isAdmin(): bool

@@ -133,14 +133,20 @@ try {
             $body = json_decode(file_get_contents('php://input') ?: '{}', true);
             $current = is_string($body['current'] ?? null) ? $body['current'] : '';
             $fresh = is_string($body['password'] ?? null) ? $body['password'] : '';
-            $record = Accounts\all()[Auth\user()] ?? null;
+            // Captured BEFORE setHash: after the epoch bump, Auth\user()'s own
+            // check() would fail against the new epoch and return ''.
+            $user = Auth\user();
+            $record = Accounts\all()[$user] ?? null;
             if ($record === null || !password_verify($current, $record['passwordHash'])) {
                 Router\refuse(401, 'Current password is wrong.');
             }
             if (strlen($fresh) < 8) {
                 Router\refuse(400, 'That password is too thin to fold — give it 8+ characters.');
             }
-            Accounts\setHash(Auth\user(), password_hash($fresh, PASSWORD_ARGON2ID));
+            Accounts\setHash($user, password_hash($fresh, PASSWORD_ARGON2ID));
+            // The epoch bump above killed every old session of this account —
+            // re-stamp THIS one, or the password-changer logs themselves out.
+            $_SESSION['epoch'] = Accounts\all()[$user]['epoch'] ?? 0;
             echo json_encode(['ok' => true]);
             break;
 
