@@ -12,6 +12,7 @@ A flat-file, headless-ish CMS you dump onto any FTP host and it just runs. No da
 ```
 api/        PHP core (front controller + /api endpoints)
 src/        SvelteKit dashboard + content tree
+docs/       theme-contract.md — what themes may assume, enforced by code
 MCP/        GOSPEL (law), BACKLOG (ledger), GUIDE (kinks)
 ```
 

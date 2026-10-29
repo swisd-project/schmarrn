@@ -146,6 +146,12 @@ textarea.sm-input { resize:vertical; min-height:8rem; font-family:ui-monospace,m
 
 // ——— state ———
 
+// The style enum, ONE home in the editor (page style select + site global
+// select both render from this). The canonical law lives in
+// docs/theme-contract.md — core validates the same two values in site.php
+// and styleOf(); never add a style without touching every home listed there.
+const STYLE_OPTIONS = [['', 'theme default'], ['classical', 'classical'], ['slide', 'slide']] as const;
+
 const root = document.querySelector<HTMLElement>('[data-sm-edit-root]');
 if (root !== null) void boot(root);
 
@@ -658,7 +664,7 @@ async function boot(root: HTMLElement): Promise<void> {
     const title = el('input', { class: 'sm-input', value: peek('title') });
     const slugInput = el('input', { class: 'sm-input', value: peek('slug') });
     const style = el('select', { class: 'sm-input' });
-    for (const [value, label] of [['', 'theme default'], ['classical', 'classical'], ['slide', 'slide']] as const) {
+    for (const [value, label] of STYLE_OPTIONS) {
       const option = el('option', { value }, [label]);
       if (peek('style') === value) option.setAttribute('selected', '');
       style.append(option);
@@ -721,7 +727,7 @@ async function boot(root: HTMLElement): Promise<void> {
     // Admins get the SITE dial here — the global template, no backend trip.
     if (role === 'admin') {
       const siteStyle = el('select', { class: 'sm-input' });
-      for (const [value, label] of [['', 'theme default'], ['classical', 'classical'], ['slide', 'slide']] as const) {
+      for (const [value, label] of STYLE_OPTIONS) {
         siteStyle.append(el('option', { value }, [label]));
       }
       const siteErr = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:0' });
