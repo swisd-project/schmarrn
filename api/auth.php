@@ -24,6 +24,20 @@ const LIFETIME = 86400;     // 24 h — FTP hosts, no cron; the request itself i
 
 securityHeaders();
 hostProofSessionDir();
+// Cookie law, explicit — never the host's php.ini lottery: HttpOnly (no JS reads
+// the session), SameSite=Lax (cross-site POSTs carry no cookie; CSRF covers the
+// rest), Secure the moment the request arrived over HTTPS (dev on plain http
+// stays workable).
+$secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || strtolower($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'domain' => '',
+    'secure' => $secure,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
 session_start();
 
 function hostProofSessionDir(): void

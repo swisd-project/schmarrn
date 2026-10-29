@@ -11,6 +11,20 @@
 
 declare(strict_types=1);
 
+// The floor: Argon2id, str_starts_with, arrow functions. Refuse to run half-alive.
+if (PHP_VERSION_ID < 80100) {
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=utf-8');
+    exit('Schmarrn needs PHP 8.1 or newer.');
+}
+
+// Paths and stack traces are for the operator's eyes, not the internet's.
+// Local dev (the built-in server on loopback) keeps its errors.
+if (!in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)) {
+    ini_set('display_errors', '0');
+    ini_set('log_errors', '1');
+}
+
 require __DIR__ . '/router.php';
 require __DIR__ . '/auth.php';
 require __DIR__ . '/accounts.php';
@@ -281,6 +295,9 @@ try {
             header('Content-Length: ' . (string)filesize($assetPath));
             header('Cache-Control: public, max-age=86400');
             header('X-Content-Type-Options: nosniff');
+            // Raw bytes served on the site origin: the sandbox CSP turns any
+            // smuggled script (SVG is scriptable!) into dead weight.
+            header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox");
             readfile($assetPath);
             exit;
 
@@ -539,6 +556,9 @@ try {
             header('Content-Length: ' . (string)filesize($path));
             header('Cache-Control: public, max-age=86400');
             header('X-Content-Type-Options: nosniff');
+            // Raw bytes served on the site origin: the sandbox CSP turns any
+            // smuggled script (SVG is scriptable!) into dead weight.
+            header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox");
             readfile($path);
             exit;
 

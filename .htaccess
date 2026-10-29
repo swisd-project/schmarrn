@@ -35,6 +35,11 @@ RewriteRule ^api(/|$) index.php [L]
 # would serve stale decks/themes after an FTP update.
 <IfModule mod_headers.c>
   Header set Cache-Control "max-age=3600, must-revalidate" "expr=%{REQUEST_URI} =~ m#^/?(themes|api/assets)/# || %{REQUEST_URI} =~ m#^/?plugins/[a-z0-9-]+/assets/#"
+  # Public-page header law. The API sets its own in PHP — scoped out here so
+  # headers never double up. `set` (not `always`) keeps one value per table.
+  Header set X-Content-Type-Options "nosniff"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+  Header set X-Frame-Options "SAMEORIGIN" "expr=%{REQUEST_URI} !~ m#^/api(/|$)#"
 </IfModule>
 
 # Everything else → the public site.
