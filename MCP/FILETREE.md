@@ -73,7 +73,7 @@
 │   ├── lib/
 │   │   ├── api.ts                # typed fetcher for /api (dashboard-facing surface only — the live editor fetches /api directly)
 │   │   ├── blocks.ts             # block model: splitBlocks/joinPage (exact source spans)
-│   │   ├── modules.ts            # the module wall: directive allowlist → hast — image (+fillable empty slot), video, embed, slide (vertical deck: anchorId() + per-render usedIds registry, titles → anchors; themes ship assets/deck.js for measured heights + gliding anchor links), note (tip/warn), details, more (+fold); unknown → p.sm-unknown-module, hostile attrs dead at the stamper
+│   │   ├── modules.ts            # the module wall: directive allowlist → hast — image (+fillable empty slot), video, embed, slide (vertical deck: anchorId() + per-render usedIds registry, titles → anchors; themes ship assets/deck.js for measured heights + gliding anchor links), note (tip/warn), details, more (+fold); unknown → p.sm-unknown-module, hostile attrs dead at the stamper; safeUrls() URL gate after the wall (javascript:/data: schemes die, honest URLs live)
 │   │   ├── render.ts             # THE one render pipeline (fallback + editor share it)
 │   │   ├── schema.ts             # Zod: PageFrontmatter (blog left for plugin-land)
 │   │   └── app.css               # tokens: crust/batter/raisin/jam

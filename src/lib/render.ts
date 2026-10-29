@@ -11,7 +11,7 @@
 
 import remarkDirective from 'remark-directive';
 import { parseMdms } from '@swisd-project/mdms';
-import { schmarrnModules, stampDirectives } from './modules';
+import { schmarrnModules, safeUrls, stampDirectives } from './modules';
 
 export interface RenderContext {
   /** Page type for the per-type Zod frontmatter gate. */
@@ -31,7 +31,7 @@ export function renderMdms(raw: string, context: RenderContext) {
   const plugins = schmarrnModules({ mediaUrl: mediaUrl(context) });
   return parseMdms(raw, {
     mdastPlugins: [remarkDirective, stampDirectives()],
-    plugins: [plugins],
+    plugins: [plugins, safeUrls()],
     validateFrontmatter: context.validateFrontmatter
   });
 }

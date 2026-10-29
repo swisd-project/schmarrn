@@ -254,6 +254,20 @@ function move(string $type, string $slug, string $newSlug): void
 
 const MEDIA_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'mp4', 'webm', 'pdf', 'mp3', 'wav'];
 
+// Availability law (OWASP upload cheat sheet): an authenticated editor can
+// still be a full disk. 25 MiB per file is generous for editorial media and
+// small enough that a botched loop doesn't eat the host.
+const MAX_UPLOAD_BYTES = 26_214_400;
+
+/** The size gate both upload doors share. 413, not 400 — it's a size problem. */
+function assertUploadSize(string $tmpPath): void
+{
+    $size = @filesize($tmpPath);
+    if ($size !== false && $size > MAX_UPLOAD_BYTES) {
+        \Router\refuse(413, 'That file outweighs the tray — 25 MiB is the whole menu.');
+    }
+}
+
 function mediaMime(string $file): string
 {
     $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
@@ -294,6 +308,7 @@ function mediaList(string $type, string $slug): array
 /** Immutable by law: an existing filename is never overwritten — the upload gets a fresh prefix. */
 function mediaStore(string $type, string $slug, string $originalName, string $tmpPath): array
 {
+    assertUploadSize($tmpPath);
     assertPageExists($type, $slug);
     $base = basename($originalName);
     $base = preg_replace('/[^A-Za-z0-9._-]/', '-', $base) ?? 'file';

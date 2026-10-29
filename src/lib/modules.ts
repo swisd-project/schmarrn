@@ -77,6 +77,56 @@ function anchorId(title: string): string {
   return slug === '' || /^\d/.test(slug) ? '' : slug;
 }
 
+/**
+ * The URL gate: the one law every href/src must pass, wherever it came from —
+ * plain markdown links, images, module output, all of it. Dangerous schemes
+ * (javascript:, data:, vbscript:, and their mixed-case/entity costumes, which
+ * arrive here already decoded) never reach published HTML. Site-relative and
+ * http(s)/mailto/tel pass; anything unparseable is stripped, not guessed.
+ */
+function urlPasses(raw: string): boolean {
+  const compact = raw.replace(/[\s\x00-\x1f\x7f]/g, '').toLowerCase();
+  if (compact === '') return false;
+  // A scheme exists only when its ':' comes before the first / ? # — so
+  // 'photo.jpg' is a plain relative path (fine), 'mailto:x@y.z' names its
+  // scheme honestly (fine), and 'java script:…' with whitespace stripped
+  // must name itself honestly too — anything unnamed is refused.
+  const colon = compact.indexOf(':');
+  const slash = compact.search(/[/?#]/);
+  if (colon !== -1 && (slash === -1 || colon < slash)) {
+    return /^(https?|mailto|tel):$/.test(compact.slice(0, colon + 1));
+  }
+  return true;
+}
+
+const URL_ATTRS: Record<string, readonly string[]> = {
+  a: ['href'],
+  img: ['src'],
+  video: ['src', 'poster'],
+  audio: ['src'],
+  source: ['src'],
+  track: ['src'],
+  iframe: ['src'],
+  embed: ['src']
+};
+
+/** Rehype plugin: runs after the module wall and sweeps every URL attribute. */
+export function safeUrls() {
+  return () => (tree: unknown) => {
+    visit(tree, 'element' as never, (node: any) => {
+      const attrs = URL_ATTRS[node.tagName];
+      if (!attrs) return;
+      for (const attr of attrs) {
+        const value = node.properties?.[attr];
+        if (typeof value === 'string' && !urlPasses(value)) {
+          // Links collapse to a harmless anchor; media loses the attribute.
+          node.properties[attr] = attr === 'href' ? '#' : '';
+        }
+      }
+    });
+  };
+}
+
 /** Trim the directive payload: only an http(s) URL survives. */
 function cleanUrl(url: string): string {
   return safeUrl(url);

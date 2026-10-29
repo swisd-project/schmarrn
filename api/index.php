@@ -42,20 +42,27 @@ $isPublicApi = str_starts_with($path, 'public/');
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 
-// CORS, scoped by audience: the dashboard may run on a dev origin and needs
-// credentials for the session; the read-only public API is anonymous data —
-// it answers to any origin and never to credentials.
+// CORS, scoped by audience: the read-only public API is anonymous data — it
+// answers to any origin and never to credentials. The private API reflects an
+// origin ONLY when it names the same host as the request (the dev dashboard on
+// its own port); reflecting arbitrary origins with credentials would hand any
+// website a cross-origin read of the session API. SameSite=Lax already keeps
+// cross-site fetches cookieless in modern browsers — this closes the rest.
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if ($origin !== '') {
     if ($isPublicApi) {
         header('Access-Control-Allow-Origin: *');
         header('Access-Control-Allow-Methods: GET, OPTIONS');
     } else {
-        header('Access-Control-Allow-Origin: ' . $origin);
-        header('Access-Control-Allow-Credentials: true');
-        header('Vary: Origin');
-        header('Access-Control-Allow-Methods: GET, PUT, POST, DELETE, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
+        $originHost = strtolower(parse_url($origin, PHP_URL_HOST) ?? '');
+        $requestHost = strtolower($_SERVER['HTTP_HOST'] ?? '');
+        if ($originHost !== '' && $originHost === $requestHost) {
+            header('Access-Control-Allow-Origin: ' . $origin);
+            header('Access-Control-Allow-Credentials: true');
+            header('Vary: Origin');
+            header('Access-Control-Allow-Methods: GET, PUT, POST, DELETE, OPTIONS');
+            header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
+        }
     }
 }
 

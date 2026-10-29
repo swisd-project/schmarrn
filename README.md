@@ -47,7 +47,9 @@ Note: Pages is static — the `/api` endpoints don't exist there. It's the shell
 
 ## Deploy (FTP — the real thing)
 
-Requirements on the host: PHP ≥ 8.4, Apache with `.htaccess` honored (`AllowOverride All`), and three writable paths: `api/config/`, `api/cache/`, `src/content/`. Nothing else — no database, no composer, no Node on the server.
+Requirements on the host: **PHP ≥ 8.4.27** (or ≥ 8.3.36 / ≥ 8.2.35 — see the security note below), Apache with `.htaccess` honored (`AllowOverride All`), and three writable paths: `api/config/`, `api/cache/`, `src/content/`. Nothing else — no database, no composer, no Node on the server.
+
+> **Security note (PHP2Shell, October 2026):** CVE-2026-109618 / CVE-2026-109619 are unauthenticated remote-code-execution flaws in the PHP core itself (CVSS 9.2, in the CISA Known Exploited catalog). They affect every PHP-based site regardless of application code and are fixed in **PHP 8.4.27, 8.3.36, 8.2.35 and 8.5.12**. Do not deploy Schmarrn — or anything else — on a PHP version older than these. No application-level hardening can substitute for a patched interpreter.
 
 ### What to upload
 

@@ -85,6 +85,7 @@ function assetsDir(): string
 /** Immutable by law: an existing filename is never overwritten — the upload gets a fresh prefix. */
 function assetStore(string $originalName, string $tmpPath): array
 {
+    \Store\assertUploadSize($tmpPath);
     $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
     if (!in_array($ext, \Store\MEDIA_EXTENSIONS, true)) {
         \Router\refuse(400, "Unsupported asset type: .{$ext}");
