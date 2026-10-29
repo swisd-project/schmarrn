@@ -60,7 +60,7 @@ function send(string $to, string $subject, string $bodyPlain): void
 {
     $c = configPath();
     if (!enabled()) {
-        \Router\refuse(503, 'Mail not configured.');
+        \Router\refuse(503, 'The mail oven is not plumbed in — SMTP not configured.');
     }
     $mailer = new \PHPMailer\PHPMailer\PHPMailer(true);
     try {

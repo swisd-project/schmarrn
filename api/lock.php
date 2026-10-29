@@ -51,7 +51,7 @@ function acquire(string $type, string $slug, string $user, bool $force = false):
     $fresh = json_encode(['user' => $user, 'exp' => time() + TTL]);
     if (file_put_contents($tmp, $fresh) === false || !rename($tmp, $file)) {
         @unlink($tmp);
-        \Router\refuse(500, 'Cannot store lock.');
+        \Router\refuse(500, 'The kitchen ticket rail jammed — lock write failed.');
     }
     if ($force && $record !== null && $record['user'] !== $user) {
         @error_log("[schmarrn-lock] {$user} took over {$type}/{$slug} from {$record['user']}");

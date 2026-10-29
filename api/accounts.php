@@ -86,7 +86,7 @@ function save(array $accounts): void
     $tmp = $target . '.' . bin2hex(random_bytes(6)) . '.tmp';
     if (file_put_contents($tmp, $php) === false || !rename($tmp, $target)) {
         @unlink($tmp);
-        \Router\refuse(500, 'Cannot write account store.');
+        \Router\refuse(500, 'The account tin is sealed shut — write failed.');
     }
 }
 
@@ -100,11 +100,11 @@ function assertKnownRole(string $role): void
 function add(string $user, string $hash, string $role, string $email = ''): void
 {
     if (!is_string($user) || preg_match(USER_PATTERN, $user) !== 1) {
-        \Router\refuse(400, 'Invalid username.');
+        \Router\refuse(400, 'That username falls apart in the batter.');
     }
     assertKnownRole($role);
     if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-        \Router\refuse(400, 'Invalid email address.');
+        \Router\refuse(400, 'That email is half-baked — no proper address in the dough.');
     }
     $accounts = all();
     if (isset($accounts[$user])) {
@@ -117,7 +117,7 @@ function add(string $user, string $hash, string $role, string $email = ''): void
 function setEmail(string $user, string $email): void
 {
     if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-        \Router\refuse(400, 'Invalid email address.');
+        \Router\refuse(400, 'That email is half-baked — no proper address in the dough.');
     }
     $accounts = all();
     if (!isset($accounts[$user])) {
@@ -178,7 +178,7 @@ function issueMailToken(string $user, string $to, int $ttl = 7200): void
     $tmp = $file . '.tmp';
     if (file_put_contents($tmp, json_encode($record)) === false || !rename($tmp, $file)) {
         @unlink($tmp);
-        \Router\refuse(500, 'Cannot store reset token.');
+        \Router\refuse(500, 'The reset token slipped off the tray — storage failed.');
     }
     \Mail\send($to, "Schmarrn password reset ({$user})",
         "Someone asked for a Schmarrn password reset for the account '{$user}'.\n\n"
@@ -198,6 +198,6 @@ function takeMailToken(string $user, string $token): void
         && ($record['exp'] ?? 0) >= time()
         && hash_equals($record['t'], hash('sha256', $token));
     if (!$ok) {
-        \Router\refuse(401, 'Invalid or expired reset token.');
+        \Router\refuse(401, 'That reset token is stale dough — expired, eaten, or never baked.');
     }
 }

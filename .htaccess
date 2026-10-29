@@ -21,11 +21,13 @@ RewriteCond %{REQUEST_URI} ^/?index\.php$
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
 
-# Any other real file or directory: forbidden. No enumerating leaks — the
-# whitelist decides, nothing else on disk exists for the visitor.
+# Any other real file or directory: NOT a 403. A 403 would be an existence
+# oracle — outside scanners could map drafts, unpublished pages and config
+# names by telling 403 (exists) from 404 (doesn't). Everything non-whitelisted
+# gets the same public 404 through the front controller, existing or not.
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
-RewriteRule ^ - [F]
+RewriteRule ^ index.php [L]
 
 # /api/* → the JSON core via the root front controller.
 RewriteRule ^api(/|$) index.php [L]

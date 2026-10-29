@@ -22,6 +22,11 @@ const MAX_ATTEMPTS = 6;
 const ATTEMPT_WINDOW = 600; // s
 const LIFETIME = 86400;     // 24 h — FTP hosts, no cron; the request itself is the clock.
 
+// Timing dough for ghost logins: an Argon2id hash of a string nobody owns.
+// Verifying against it keeps unknown-username attempts at the same cost as
+// real ones — the timing side channel stays shut.
+const DUMMY_HASH = '$argon2id$v=19$m=65536,t=4,p=1$My84OUxGaUJWMElJeTEwMw$J6o5Usn7EslROOYCzE5TqNOVh0P9WcGqUw7DC/l2KIo';
+
 securityHeaders();
 hostProofSessionDir();
 // Cookie law, explicit — never the host's php.ini lottery: HttpOnly (no JS reads
@@ -112,7 +117,7 @@ function login(): void
     $user = is_string($body['user'] ?? null) ? $body['user'] : '';
     $password = is_string($body['password'] ?? null) ? $body['password'] : null;
     if ($user === '' || !is_string($password)) {
-        \Router\refuse(400, 'User and password required.');
+        \Router\refuse(400, 'The oven needs both — user and password.');
     }
 
     // Exceptions must never leak whether the account store is missing — same 401 either way.
@@ -122,9 +127,16 @@ function login(): void
         $account = null;
     }
 
+    // Timing dough: an unknown user must cost the same oven time as a real one,
+    // or the verify-skip betrays which usernames exist. Verify against a dummy
+    // hash of the same recipe (Argon2id) when the account is a ghost.
+    if ($account === null) {
+        password_verify($password, DUMMY_HASH);
+    }
+
     if ($account === null || !password_verify($password, $account['passwordHash'])) {
         countFailure($ip);
-        \Router\refuse(401, 'Invalid credentials.');
+        \Router\refuse(401, 'Wrong recipe — that user/password pair does not bake.');
     }
 
     clearFailures($ip);
@@ -162,7 +174,7 @@ function assertCsrf(): void
 {
     $sent = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
     if (!hash_equals((string)($_SESSION['csrf'] ?? ''), (string)$sent)) {
-        \Router\refuse(403, 'CSRF token mismatch.');
+        \Router\refuse(403, 'That CSRF token is from a different bakery.');
     }
 }
 

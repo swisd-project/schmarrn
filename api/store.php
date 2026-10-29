@@ -132,12 +132,12 @@ function writeDraft(string $type, string $slug, string $raw, ?string $baseHash =
     if ($baseHash !== null && !hash_equals(draftHash($type, $slug), $baseHash)) {
         header('Content-Type: application/json; charset=utf-8');
         header('X-Current-Hash: ' . draftHash($type, $slug));
-        \Router\refuse(409, 'Draft changed elsewhere since you started editing.');
+        \Router\refuse(409, 'Someone else kneaded this draft while you were reading — reload before you bake.');
     }
     $tmp = $dir . '/.draft.' . bin2hex(random_bytes(6)) . '.tmp';
     if (file_put_contents($tmp, $raw) === false || !\rename($tmp, draftFile($type, $slug))) {
         @unlink($tmp);
-        \Router\refuse(500, 'Draft write failed.');
+        \Router\refuse(500, 'The draft fell into the batter — write failed.');
     }
     return hash('sha256', $raw);
 }
@@ -153,14 +153,14 @@ function hasDraft(string $type, string $slug): bool
 function publish(string $type, string $slug): void
 {
     if (!hasDraft($type, $slug)) {
-        \Router\refuse(400, 'Nothing to publish — no editorial draft on file.');
+        \Router\refuse(400, 'Nothing to bake — the draft tin is empty.');
     }
     assertPageExists($type, $slug);
     $draft = draftFile($type, $slug);
     $tmp = $draft . '.pub';
     if (!copy($draft, $tmp) || !\rename($tmp, pageDir($type, $slug) . '/index.md')) {
         @unlink($tmp);
-        \Router\refuse(500, 'Publish failed.');
+        \Router\refuse(500, 'The publish collapsed in the oven.');
     }
     @unlink($draft);
 }
@@ -246,7 +246,7 @@ function move(string $type, string $slug, string $newSlug): void
         \Router\refuse(409, "Another page already uses the name \"{$newSlug}\" — pick a different slug.");
     }
     if (!@\rename($from, $to)) {
-        \Router\refuse(500, 'Rename failed on the server — the page is untouched.');
+        \Router\refuse(500, 'Rename burned on the stove — the page is untouched.');
     }
 }
 
@@ -311,7 +311,7 @@ function mediaStore(string $type, string $slug, string $originalName, string $tm
     $name = date('Ymd-His') . '-' . bin2hex(random_bytes(3)) . '-' . $stem . '.' . $ext;
     $target = $dir . '/' . $name;
     if (!move_uploaded_file($tmpPath, $target) && !@\rename($tmpPath, $target)) {
-        \Router\refuse(500, 'Media upload failed.');
+        \Router\refuse(500, 'The media tray collapsed — upload failed.');
     }
     return ['name' => $name, 'size' => filesize($target), 'mtime' => filemtime($target)];
 }
@@ -346,14 +346,14 @@ function write(string $type, string $slug, string $raw): void
     $tmp = $dir . '/.index.' . bin2hex(random_bytes(6)) . '.tmp';
     if (file_put_contents($tmp, $raw) === false || !\rename($tmp, $dir . '/index.md')) {
         @unlink($tmp);
-        \Router\refuse(500, 'Write failed.');
+        \Router\refuse(500, 'The write came out raw — try again.');
     }
 }
 
 function assertNonEmpty(string $raw): void
 {
     if (trim($raw) === '') {
-        \Router\refuse(400, 'Refusing to save empty page.');
+        \Router\refuse(400, 'An empty schmarrn is just a sad pan — write something first.');
     }
 }
 

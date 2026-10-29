@@ -64,7 +64,7 @@ function save(array $settings): void
     }
     $export = "<?php\n\ndeclare(strict_types=1);\n\nreturn " . var_export($clean, true) . ";\n";
     if (file_put_contents(configFile(), $export) === false) {
-        \Router\refuse(500, 'Cannot write site settings.');
+        \Router\refuse(500, 'Site settings slid off the plate — write failed.');
     }
     // The next request may land inside opcache's revalidation window (default 2s;
     // some hosts ship validate_timestamps=0) and read the PREVIOUS settings —
@@ -90,7 +90,7 @@ function assetStore(string $originalName, string $tmpPath): array
         \Router\refuse(400, "Unsupported asset type: .{$ext}");
     }
     if (!is_dir(assetsDir()) && !@mkdir(assetsDir(), 0775, true)) {
-        \Router\refuse(500, 'Cannot create the asset directory.');
+        \Router\refuse(500, 'Cannot build the pantry — the asset directory would not rise.');
     }
     $prefix = bin2hex(random_bytes(4));
     $base = strtolower(pathinfo($originalName, PATHINFO_FILENAME));
@@ -99,7 +99,7 @@ function assetStore(string $originalName, string $tmpPath): array
     $name = "{$prefix}-{$base}.{$ext}";
     $target = assetsDir() . '/' . $name;
     if (!@rename($tmpPath, $target) && !@copy($tmpPath, $target)) {
-        \Router\refuse(500, 'Asset storage failed.');
+        \Router\refuse(500, 'Asset storage burned — check the host writable paths.');
     }
     @chmod($target, 0664);
     return ['name' => $name, 'url' => '/api/site-assets/' . rawurlencode($name)];

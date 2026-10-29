@@ -151,7 +151,7 @@ function setState(array $enabled): void
     }
     $export = "<?php\n\ndeclare(strict_types=1);\n\nreturn " . var_export($clean, true) . ";\n";
     if (file_put_contents(stateFile(), $export) === false) {
-        \Router\refuse(500, 'Cannot write plugin state.');
+        \Router\refuse(500, 'Plugin state will not set — like jam without sugar.');
     }
     if (function_exists('opcache_invalidate')) {
         opcache_invalidate(stateFile(), true);
@@ -225,7 +225,7 @@ function dispatch(string $name, string $route, string $method): never
         }
     }
     if ($plugin === null || !($plugin['enabled'] ?? false)) {
-        \Router\refuse(404, 'No such plugin route.');
+        \Router\refuse(404, 'That plugin serves nothing — no such route.');
     }
     $declared = null;
     foreach ($plugin['routes'] as $candidate) {
@@ -235,14 +235,14 @@ function dispatch(string $name, string $route, string $method): never
         }
     }
     if ($declared === null) {
-        \Router\refuse(404, 'No such plugin route.');
+        \Router\refuse(404, 'That plugin serves nothing — no such route.');
     }
     // The lid: the core gates the door, the handler never has to remember.
     if ($declared['auth'] !== 'public' && !\Auth\check()) {
-        \Router\refuse(401, 'Not authenticated.');
+        \Router\refuse(401, 'The kitchen door is locked — log in first.');
     }
     if ($declared['auth'] === 'admin' && !\Auth\isAdmin()) {
-        \Router\refuse(403, 'Admins only.');
+        \Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
     }
     if ($declared['csrf'] && $method !== 'GET') {
         \Auth\assertCsrf();
@@ -258,7 +258,7 @@ function dispatch(string $name, string $route, string $method): never
         $result = $fn($method, $body);
     } catch (\Throwable $e) {
         @error_log("[schmarrn-plugins] '{$name}/{$route}' failed: {$e->getMessage()}");
-        \Router\refuse(500, 'Plugin route failed.');
+        \Router\refuse(500, 'That plugin burned on the route.');
     }
     http_response_code(is_array($result) && isset($result['_status']) ? (int)$result['_status'] : 200);
     unset($result['_status']);

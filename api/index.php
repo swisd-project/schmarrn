@@ -94,7 +94,7 @@ try {
         // POST /api/me/password — self-service change (authed + knows current).
         case $method === 'POST' && $path === 'me/password':
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             Auth\assertCsrf();
             $body = json_decode(file_get_contents('php://input') ?: '{}', true);
@@ -105,7 +105,7 @@ try {
                 Router\refuse(401, 'Current password is wrong.');
             }
             if (strlen($fresh) < 8) {
-                Router\refuse(400, 'Password must be at least 8 characters.');
+                Router\refuse(400, 'That password is too thin to fold — give it 8+ characters.');
             }
             Accounts\setHash(Auth\user(), password_hash($fresh, PASSWORD_ARGON2ID));
             echo json_encode(['ok' => true]);
@@ -114,10 +114,10 @@ try {
         // POST /api/account/<user>/invite — admin (re)issues credentials by mail.
         case $method === 'POST' && preg_match('#^account/[a-z0-9][a-z0-9._-]{0,63}/invite$#', $path) === 1:
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             if (!Auth\isAdmin()) {
-                Router\refuse(403, 'Admins only.');
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
             }
             Auth\assertCsrf();
             $target = substr($path, strlen('account/'), -7);
@@ -164,10 +164,10 @@ try {
             $token = is_string($body['token'] ?? null) ? $body['token'] : '';
             $fresh = is_string($body['password'] ?? null) ? $body['password'] : '';
             if ($user === '' || $token === '') {
-                Router\refuse(400, 'User and token required.');
+                Router\refuse(400, 'User and token, please — the recipe has two ingredients.');
             }
             if (strlen($fresh) < 8) {
-                Router\refuse(400, 'Password must be at least 8 characters.');
+                Router\refuse(400, 'That password is too thin to fold — give it 8+ characters.');
             }
             Accounts\takeMailToken($user, $token);
             Accounts\setHash($user, password_hash($fresh, PASSWORD_ARGON2ID));
@@ -204,7 +204,7 @@ try {
                 $needed = true;
             }
             if (!$needed) {
-                Router\refuse(403, 'Already set up.');
+                Router\refuse(403, 'The oven is already hot — setup only fires once.');
             }
             $body = json_decode(file_get_contents('php://input') ?: '{}', true);
             $user = is_string($body['user'] ?? null) ? trim($body['user']) : '';
@@ -213,7 +213,7 @@ try {
             $claim = is_string($body['claim'] ?? null) ? trim($body['claim']) : '';
             $theme = is_string($body['theme'] ?? null) ? $body['theme'] : 'bakery';
             if ($user === '' || $siteName === '' || strlen($password) < 8) {
-                Router\refuse(400, 'User, site name and a password of 8+ characters required.');
+                Router\refuse(400, 'Setup needs the full batter: user, site name and a password of 8+ characters.');
             }
             if (preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*$#', $theme) !== 1
                 || !is_file(dirname(__DIR__) . '/themes/' . $theme . '/theme.json')) {
@@ -228,20 +228,20 @@ try {
         // ——— brand settings: admin-only read/write over Site\ ———
         case $method === 'GET' && $path === 'site':
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             if (!Auth\isAdmin()) {
-                Router\refuse(403, 'Admins only.');
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
             }
             echo json_encode(Site\load());
             break;
 
         case $method === 'PUT' && $path === 'site':
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             if (!Auth\isAdmin()) {
-                Router\refuse(403, 'Admins only.');
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
             }
             Auth\assertCsrf();
             $body = json_decode(file_get_contents('php://input') ?: '{}', true);
@@ -252,14 +252,14 @@ try {
                 }
             }
             if ($settings['name'] === '') {
-                Router\refuse(400, 'Site name required.');
+                Router\refuse(400, 'Every bakery needs a name — site name required.');
             }
             if (preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*$#', $settings['theme']) !== 1
                 || !is_file(dirname(__DIR__) . '/themes/' . $settings['theme'] . '/theme.json')) {
                 Router\refuse(400, "Unknown theme: {$settings['theme']}");
             }
             if ($settings['home'] !== '' && preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*$#', $settings['home']) !== 1) {
-                Router\refuse(400, 'Home must be a slug or empty.');
+                Router\refuse(400, 'The home slice needs a slug — or an empty plate.');
             }
             Site\save($settings);
             echo json_encode(['ok' => true]);
@@ -268,16 +268,16 @@ try {
         // ——— site assets: the logo's upload door (admin) + public serving ———
         case $method === 'POST' && $path === 'site-assets':
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             if (!Auth\isAdmin()) {
-                Router\refuse(403, 'Admins only.');
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
             }
             Auth\assertCsrf();
             $upload = $_FILES['file'] ?? null;
             if (!is_array($upload) || ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
                 || !is_string($upload['tmp_name']) || !is_string($upload['name'])) {
-                Router\refuse(400, 'No file uploaded.');
+                Router\refuse(400, 'You promised pastry and brought an empty plate — no file in the upload.');
             }
             $stored = Site\assetStore($upload['name'], $upload['tmp_name']);
             http_response_code(201);
@@ -289,7 +289,7 @@ try {
             $assetName = substr($path, strlen('site-assets/'));
             $assetPath = Site\assetPath((string)$assetName);
             if ($assetPath === null) {
-                Router\refuse(404, 'No such asset.');
+                Router\refuse(404, 'No such asset on the shelf.');
             }
             header('Content-Type: ' . \Store\mediaMime((string)$assetName));
             header('Content-Length: ' . (string)filesize($assetPath));
@@ -304,26 +304,26 @@ try {
         // ——— plugins (p6): the admin's install lid ———
         case $method === 'GET' && $path === 'plugins':
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             if (!Auth\isAdmin()) {
-                Router\refuse(403, 'Admins only.');
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
             }
             echo json_encode(Plugins\all(), JSON_UNESCAPED_SLASHES);
             break;
 
         case $method === 'PUT' && $path === 'plugins':
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             if (!Auth\isAdmin()) {
-                Router\refuse(403, 'Admins only.');
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
             }
             Auth\assertCsrf();
             $body = json_decode(file_get_contents('php://input') ?: '{}', true);
             $wanted = is_array($body['enabled'] ?? null) ? $body['enabled'] : null;
             if ($wanted === null) {
-                Router\refuse(400, 'Enabled map required.');
+                Router\refuse(400, 'That plugin map is unbaked dough — send a proper enabled map.');
             }
             // Only INSTALLED plugins may be toggled — the lid holds.
             $installed = array_filter(Plugins\all(), fn($p) => !isset($p['error']));
@@ -338,7 +338,7 @@ try {
         // ——— page types (p6-era UX): pre-made, fillable scaffolds from pagetypes/ ———
         case $method === 'GET' && $path === 'pagetypes':
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             $types = [];
             foreach (scandir(dirname(__DIR__) . '/pagetypes') ?: [] as $file) {
@@ -369,10 +369,10 @@ try {
         // ——— account management: admin-only, CSRF-gated ———
         case $method === 'GET' && $path === 'accounts':
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             if (!Auth\isAdmin()) {
-                Router\refuse(403, 'Admins only.');
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
             }
             $accounts = Accounts\all();
             echo json_encode(array_map(
@@ -384,10 +384,10 @@ try {
 
         case $method === 'POST' && $path === 'accounts':
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             if (!Auth\isAdmin()) {
-                Router\refuse(403, 'Admins only.');
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
             }
             Auth\assertCsrf();
             $body = json_decode(file_get_contents('php://input') ?: '{}', true);
@@ -396,7 +396,7 @@ try {
             $role = is_string($body['role'] ?? null) ? $body['role'] : 'editor';
             $email = is_string($body['email'] ?? null) ? trim($body['email']) : '';
             if (strlen($password) < 8) {
-                Router\refuse(400, 'Password must be at least 8 characters.');
+                Router\refuse(400, 'That password is too thin to fold — give it 8+ characters.');
             }
             Accounts\add($user, password_hash($password, PASSWORD_ARGON2ID), $role, $email);
             http_response_code(201);
@@ -405,10 +405,10 @@ try {
 
         case $method === 'PUT' && preg_match('#^account/[a-z0-9][a-z0-9._-]{0,63}$#', $path) === 1:
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             if (!Auth\isAdmin()) {
-                Router\refuse(403, 'Admins only.');
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
             }
             Auth\assertCsrf();
             $target = substr($path, strlen('account/'));
@@ -421,7 +421,7 @@ try {
             $roles = isset($body['role']) && is_string($body['role']) ? $body['role'] : null;
             if ($roles !== null && $roles !== 'admin' && $accounts[$target]['role'] === 'admin'
                 && count(array_filter($accounts, fn($r) => $r['role'] === 'admin')) === 1) {
-                Router\refuse(409, 'Refusing to demote the last admin.');
+                Router\refuse(409, 'Someone has to run the oven — the last admin stays at the pass.');
             }
             if ($roles !== null) {
                 Accounts\setRole($target, $roles);
@@ -431,7 +431,7 @@ try {
             }
             if (is_string($body['password'] ?? null)) {
                 if (strlen($body['password']) < 8) {
-                    Router\refuse(400, 'Password must be at least 8 characters.');
+                    Router\refuse(400, 'That password is too thin to fold — give it 8+ characters.');
                 }
                 Accounts\setHash($target, password_hash($body['password'], PASSWORD_ARGON2ID));
             }
@@ -440,23 +440,23 @@ try {
 
         case $method === 'DELETE' && preg_match('#^account/[a-z0-9][a-z0-9._-]{0,63}$#', $path) === 1:
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             if (!Auth\isAdmin()) {
-                Router\refuse(403, 'Admins only.');
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
             }
             Auth\assertCsrf();
             $target = substr($path, strlen('account/'));
             $accounts = Accounts\all();
             if ($target === Auth\user()) {
-                Router\refuse(409, 'Refusing to delete the account behind this session.');
+                Router\refuse(409, 'You cannot eat your own chair — that account sits behind this session.');
             }
             if (!isset($accounts[$target])) {
                 Router\refuse(404, "No account: {$target}");
             }
             if ($accounts[$target]['role'] === 'admin'
                 && count(array_filter($accounts, fn($r) => $r['role'] === 'admin')) === 1) {
-                Router\refuse(409, 'Refusing to delete the last admin.');
+                Router\refuse(409, 'The last admin keeps the lights on — no eating the baker.');
             }
             Accounts\remove($target);
             echo json_encode(['ok' => true]);
@@ -472,7 +472,7 @@ try {
         // ——— page lifecycle: delete + rename (lock-gated, CSRF-gated) ———
         case $method === 'DELETE' && preg_match('#^page/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
@@ -483,7 +483,7 @@ try {
             break;
         case $method === 'POST' && preg_match('#^page/[a-z0-9-]+/[a-z0-9-]+/rename$#', $path) === 1:
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
@@ -500,7 +500,7 @@ try {
         case $method === 'GET' && $path === 'media':
             // The overlay's media tab: every page's files in one lazy sweep.
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             $allMedia = [];
             foreach (Store\listAll() as $type => $pages) {
@@ -526,21 +526,21 @@ try {
 
         case $method === 'GET' && preg_match('#^media/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             [, $type, $slug] = explode('/', $path);
             echo json_encode(Store\mediaList($type, $slug), JSON_UNESCAPED_SLASHES);
             break;
         case $method === 'POST' && preg_match('#^media/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
             $upload = $_FILES['file'] ?? null;
             if (!is_array($upload) || ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
                 || !is_string($upload['tmp_name']) || !is_string($upload['name'])) {
-                Router\refuse(400, 'No file uploaded.');
+                Router\refuse(400, 'You promised pastry and brought an empty plate — no file in the upload.');
             }
             $stored = Store\mediaStore($type, $slug, $upload['name'], $upload['tmp_name']);
             http_response_code(201);
@@ -550,7 +550,7 @@ try {
             [, $type, $slug, $name] = explode('/', $path);
             $path = Store\mediaPath($type, $slug, (string)$name);
             if ($path === null) {
-                Router\refuse(404, 'No such media.');
+                Router\refuse(404, 'That media crumb is not in the tin.');
             }
             header('Content-Type: ' . Store\mediaMime((string)$name));
             header('Content-Length: ' . (string)filesize($path));
@@ -567,7 +567,7 @@ try {
         // GET — editorial copy (sidecar or published file, whichever freshest in life).
         case $method === 'GET' && preg_match('#^draft/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             [, $type, $slug] = explode('/', $path);
             $raw = Store\readDraft($type, $slug);
@@ -583,7 +583,7 @@ try {
         // PUT — autosave-to-draft lives here. Lock-gated like page writes.
         case $method === 'PUT' && preg_match('#^draft/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
@@ -604,7 +604,7 @@ try {
         // POST — `draft/<t>/<s>/publish` and `/unpublish`. The button behind the glass.
         case $method === 'POST' && preg_match('#^draft/[a-z0-9-]+/[a-z0-9-]+/(publish|unpublish)$#', $path) === 1:
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             Auth\assertCsrf();
             [, $type, $slug, $verb] = explode('/', $path);
@@ -692,7 +692,7 @@ try {
         // Route: POST /api/page/{type}/{slug} — create (unfold) a fresh page; 409 if it exists.
         case $method === 'POST' && preg_match('#^page/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
@@ -707,7 +707,7 @@ try {
             break;
         case $method === 'PUT' && preg_match('#^page/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             if (!Auth\check()) {
-                Router\refuse(401, 'Not authenticated.');
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
@@ -719,9 +719,9 @@ try {
             break;
 
         default:
-            Router\refuse(404, 'Unknown route.');
+            Router\refuse(404, 'No recipe for that route.');
     }
 } catch (Throwable $e) {
     @error_log('[schmarrn-500] ' . get_class($e) . ': ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
-    Router\refuse(500, 'Internal error.');
+    Router\refuse(500, 'Something curdled in the kitchen. The log knows more.');
 }
