@@ -43,6 +43,12 @@ session_set_cookie_params([
     'httponly' => true,
     'samesite' => 'Lax',
 ]);
+// Strict mode: a caller-supplied PHPSESSID is refused and a fresh one minted.
+// Login already regenerates the id (fixation dies there) — this closes the
+// window BEFORE login where a crafted-but-unused id would simply be accepted.
+ini_set('session.use_strict_mode', '1');
+ini_set('session.sid_length', '48');
+ini_set('session.sid_bits_per_character', '6');
 session_start();
 
 function hostProofSessionDir(): void
