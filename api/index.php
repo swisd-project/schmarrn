@@ -36,6 +36,32 @@ require __DIR__ . '/site.php';
 require __DIR__ . '/plugins.php';
 require __DIR__ . '/serve.php'; // public JSON API reuses the serving engine's byte-peeks
 
+/**
+ * The editor leash: published HTML is CLIENT-rendered and stored as-is, so
+ * whatever an account sends becomes the page every visitor executes. A legit
+ * editor render can never contain executable HTML (the module wall + the URL
+ * gate strip it at the source) — so anything executable that arrives is an
+ * editor trying to script the admin's browser. Editors get those parts cut;
+ * admins publish raw (they own the site and its HTML by definition).
+ * Cut, not reject: the rest of the editor's page is honest work.
+ */
+function stripExecutableHtml(string $html): string
+{
+    // <script> blocks — with or without a closing tag (an unclosed opener
+    // would swallow the rest of the page into script-land in the browser).
+    $html = preg_replace('#<script\b[^>]*>.*?</script\s*>#is', '', $html) ?? '';
+    $html = preg_replace('#</?script\b[^>]*>#i', '', $html) ?? '';
+    // Inline event handlers: onclick=, onerror=, onload=, … (word-boundary
+    // keeps prose like "season=" intact).
+    $html = preg_replace('#\s\bon[a-z]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)#i', '', $html) ?? '';
+    // srcdoc hands an iframe a whole executable document of its own.
+    $html = preg_replace('#\s\bsrcdoc\s*=\s*("[^"]*"|\'[^\']*\')#i', '', $html) ?? '';
+    // Script-bearing URLs in the classic attribute slots — the URL gate
+    // already guarantees these never come from a legit render.
+    $html = preg_replace('#\s(?:href|src|data|poster|action|xlink:href)\s*=\s*(["\'])\s*(?:javascript|vbscript|data\s*:\s*text\s*/\s*html)[^"\']*\1#i', '', $html) ?? '';
+    return $html;
+}
+
 $path = Router\pathAfter('/api/');
 $isPublicApi = str_starts_with($path, 'public/');
 
@@ -624,8 +650,11 @@ try {
                 $html = is_string($body['html'] ?? null) ? $body['html'] : '';
                 Store\publish($type, $slug);
                 Cache\drop($type, $slug); // raw + HTML caches (drop() sweeps both)
+                // The leash: editors' publishes get executable HTML stripped
+                // server-side — the client's render is trusted only as far as
+                // a legit render could have produced it. Admins keep raw HTML.
                 if ($html !== '') {
-                    Cache\storeHtml($type, $slug, $html);
+                    Cache\storeHtml($type, $slug, Auth\isAdmin() ? $html : stripExecutableHtml($html));
                 }
                 Lock\acquire($type, $slug, Auth\user());
                 echo json_encode(['ok' => true, 'published' => true]);

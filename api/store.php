@@ -124,6 +124,7 @@ function draftHash(string $type, string $slug): string
 function writeDraft(string $type, string $slug, string $raw, ?string $baseHash = null): string
 {
     assertNonEmpty($raw);
+    assertPageSize($raw);
     assertDistinctFilenameSlug($type, $slug, $raw);
     $dir = pageDir($type, $slug);
     if (!is_dir($dir)) {
@@ -268,6 +269,19 @@ function assertUploadSize(string $tmpPath): void
     }
 }
 
+// Same availability law for page text: an authenticated editor with a botched
+// autosave loop should not be able to park a gigabyte in src/content. 2 MiB of
+// markdown is a novel with pictures — far past any honest page.
+const MAX_PAGE_BYTES = 2_097_152;
+
+/** The write gate every draft/page save passes. 413, same as the upload doors. */
+function assertPageSize(string $raw): void
+{
+    if (strlen($raw) > MAX_PAGE_BYTES) {
+        \Router\refuse(413, 'That draft is a five-tier wedding cake — 2 MiB is what the tin holds.');
+    }
+}
+
 function mediaMime(string $file): string
 {
     $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
@@ -351,6 +365,7 @@ function mediaPath(string $type, string $slug, string $name): ?string
 function write(string $type, string $slug, string $raw): void
 {
     assertNonEmpty($raw);
+    assertPageSize($raw);
     assertDistinctFilenameSlug($type, $slug, $raw);
 
     $dir = pageDir($type, $slug);
