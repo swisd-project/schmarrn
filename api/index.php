@@ -231,6 +231,16 @@ try {
         // Creates the first admin, writes brand settings, and logs the founder in
         // (Auth\login() re-reads the same user/password keys from the body).
         case $method === 'POST' && $path === 'setup':
+            // Setup is check-then-act ("no accounts yet" → mint the admin), so
+            // on a multi-worker host two simultaneous first-setup requests could
+            // both pass the check and both mint an admin. The claim lock makes it
+            // single-file: the second arrival waits, re-checks, sees the oven
+            // hot, and gets the same 403 as everyone after. Released on request
+            // shutdown even through refuse()'s exit.
+            $setupLock = @fopen(__DIR__ . '/cache/setup.lock', 'c');
+            if ($setupLock === false || !flock($setupLock, LOCK_EX)) {
+                Router\refuse(500, 'The kitchen ticket rail jammed — lock write failed.');
+            }
             try {
                 $needed = count(Accounts\all()) === 0;
             } catch (\Throwable) {
@@ -255,6 +265,8 @@ try {
             Accounts\add($user, password_hash($password, PASSWORD_ARGON2ID), 'admin');
             Site\save(['name' => $siteName, 'claim' => $claim, 'logo' => '', 'theme' => $theme, 'home' => '']);
             Auth\login();
+            flock($setupLock, LOCK_UN);
+            fclose($setupLock);
             echo json_encode(['ok' => true, 'user' => Auth\user(), 'role' => Auth\role(), 'csrf' => Auth\csrf()]);
             break;
 

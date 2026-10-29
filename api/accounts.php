@@ -88,6 +88,13 @@ function save(array $accounts): void
         @unlink($tmp);
         \Router\refuse(500, 'The account tin is sealed shut — write failed.');
     }
+    // The store is a PHP file, so opcache may serve the stale compiled copy
+    // to the next request on this process (same-second writes defeat mtime
+    // validation) — a freshly created account then can't log in. Invalidate
+    // immediately; a no-op when opcache is absent.
+    if (function_exists('opcache_invalidate')) {
+        @opcache_invalidate($target, true);
+    }
 }
 
 function assertKnownRole(string $role): void
