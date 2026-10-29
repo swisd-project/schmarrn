@@ -30,5 +30,12 @@ RewriteRule ^ - [F]
 # /api/* → the JSON core via the root front controller.
 RewriteRule ^api(/|$) index.php [L]
 
+# Static assets get a modest cache law (mod_headers, guarded — shared hosts vary).
+# One hour, must-revalidate: assets are NOT content-hashed, so longer caching
+# would serve stale decks/themes after an FTP update.
+<IfModule mod_headers.c>
+  Header set Cache-Control "max-age=3600, must-revalidate" "expr=%{REQUEST_URI} =~ m#^/?(themes|api/assets)/# || %{REQUEST_URI} =~ m#^/?plugins/[a-z0-9-]+/assets/#"
+</IfModule>
+
 # Everything else → the public site.
 RewriteRule ^ index.php [L]

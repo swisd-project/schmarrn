@@ -30,7 +30,7 @@ export interface AccountRef {
 }
 
 let csrf = '';
-export const csrfToken = () => csrf;
+const csrfToken = () => csrf;
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {

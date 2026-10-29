@@ -53,7 +53,7 @@ Requirements on the host: PHP ≥ 8.4, Apache with `.htaccess` honored (`AllowOv
 
 ```
 index.php            front controller: /api/* → core, /_ → dashboard, else the public site
-.htaccess            whitelist law (only _/, themes/, api/assets/, dashboard/, plugins/*/assets/ serve static)
+.htaccess            whitelist law (only _/, themes/, api/assets/, plugins/*/assets/ serve static)
 api/                 the PHP core (api/assets/ ships the committed render/edit bundles)
 themes/              your theme(s)
 pagetypes/           the page-type scaffolds
