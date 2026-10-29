@@ -31,7 +31,7 @@
 │   │   ├── theme.json
 │   │   ├── page.html             # {{placeholders}} incl. {{navHtml}} — str_replace only
 │   │   ├── slide.html
-│   │   └── assets/{bakery.css,deck.js}     # deck.js: measured slide heights + gliding anchors (helper script, slide.html includes it)
+│   │   └── assets/{bakery.css,deck.js}     # deck.js: dots nav + active-slide tracking + hash-following + mid-air guard (companion script, slide.html includes it)
 │   └── atelier/                  # artist presentation theme (slide-first, depth system)
 │       ├── theme.json
 │       ├── page.html
