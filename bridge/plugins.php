@@ -38,8 +38,8 @@ function all(): array
 {
     $state = enabled();
     $plugins = [];
-    foreach (scandir(dirname(__DIR__) . '/plugins') ?: [] as $name) {
-        $dir = dirname(__DIR__) . '/bridge/plugins/' . $name;
+    foreach (scandir(__DIR__ . '/plugins') ?: [] as $name) {
+        $dir = __DIR__ . '/plugins/' . $name;
         if (!is_dir($dir) || str_starts_with($name, '.')) {
             continue;
         }
@@ -162,7 +162,7 @@ function setState(array $enabled): void
 function load(): void
 {
     foreach (enabled() as $name => $on) {
-        $file = dirname(__DIR__) . '/bridge/plugins/' . $name . '/plugin.php';
+        $file = __DIR__ . '/plugins/' . $name . '/plugin.php';
         if (!is_file($file)) {
             @error_log("[schmarrn-plugins] enabled plugin '{$name}' has no plugin.php — skipped.");
             continue;
