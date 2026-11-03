@@ -1,7 +1,7 @@
 <?php
 
 /**
- * 1. Relative path: api/config/auth.php
+ * 1. Relative path: bridge/config/auth.php
  * 2. Description: Auth config TEMPLATE. Copy to auth.local.php and paste your real hash.
  * 3. Generate:  php -r "echo password_hash('your-login-password', PASSWORD_ARGON2ID), PHP_EOL;"
  *    (params: memory_cost 65536, time_cost 4, threads 1 — keep them if unsure)

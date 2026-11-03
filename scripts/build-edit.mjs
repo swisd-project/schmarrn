@@ -1,7 +1,7 @@
 /*
  * 1. Relative path: scripts/build-edit.mjs
  * 2. Description: Builds the live-page editor (src/public/edit.ts) into
- *                 api/assets/edit.esm.js — a committed, self-contained ES module
+ *                 bridge/assets/edit.esm.js — a committed, self-contained ES module
  *                 the serving engine injects ONLY for authenticated sessions.
  *                 No Node on the deploy host; the bundle ships baked.
  * 3. Expects: esbuild (devDependency).
@@ -18,6 +18,6 @@ await build({
   format: 'esm',
   target: 'es2020',
   minify: true,
-  outfile: 'api/assets/edit.esm.js',
+  outfile: 'bridge/assets/edit.esm.js',
   logLevel: 'info'
 });

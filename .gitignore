@@ -6,11 +6,11 @@ build/
 dist/
 
 # PHP cache + runtime
-api/cache/
-api/config/auth.local.php
-api/config/accounts.local.php
-api/config/site.local.php
-api/config/plugins.local.php
+bridge/cache/
+bridge/config/auth.local.php
+bridge/config/accounts.local.php
+bridge/config/site.local.php
+bridge/config/plugins.local.php
 
 # Site content — install-local data (the user's pages, drafts, media). Never repo material.
 src/content/

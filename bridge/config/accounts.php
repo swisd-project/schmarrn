@@ -1,7 +1,7 @@
 <?php
 
 /**
- * 1. Relative path: api/config/accounts.php
+ * 1. Relative path: bridge/config/accounts.php
  * 2. Description: Account store TEMPLATE — ships EMPTY on purpose. A fresh install
  *                 has no known credentials: the first-visit setup wizard creates
  *                 the first admin (and the brand settings) and writes the real

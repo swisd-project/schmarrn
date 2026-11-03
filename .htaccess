@@ -1,5 +1,5 @@
 # Schmarrn front controller rules.
-# The root index.php dispatches: /api/* to the JSON core, everything else to the
+# The root index.php dispatches: /bridge/* to the JSON core, everything else to the
 # public serving engine. Law: ONLY whitelisted static dirs are servable as real
 # files — every other real file or dir on disk is forbidden (no source, content,
 # draft, config or governance leaks, whatever the host layout).
@@ -14,9 +14,9 @@ RewriteRule ^_(/|$) - [L]
 
 # Real files ONLY in the public static whitelist (themes, api/assets — and plugin
 # assets). Plugin CODE is never whitelisted: a direct hit on
-# plugins/<name>/plugin.php must not execute. The front controller itself passes too.
-RewriteCond %{REQUEST_URI} ^/?(themes|api/assets)/ [OR]
-RewriteCond %{REQUEST_URI} ^/?plugins/[a-z0-9-]+/assets/ [OR]
+# bridge/plugins/<name>/plugin.php must not execute. The front controller itself passes too.
+RewriteCond %{REQUEST_URI} ^/?(bridge/assets|bridge/templates)/ [OR]
+RewriteCond %{REQUEST_URI} ^/?bridge/plugins/[a-z0-9-]+/assets/ [OR]
 RewriteCond %{REQUEST_URI} ^/?index\.php$
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
@@ -29,19 +29,19 @@ RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ index.php [L]
 
-# /api/* → the JSON core via the root front controller.
-RewriteRule ^api(/|$) index.php [L]
+# /bridge/* → the JSON core via the root front controller.
+RewriteRule ^bridge(/|$) index.php [L]
 
 # Static assets get a modest cache law (mod_headers, guarded — shared hosts vary).
 # One hour, must-revalidate: assets are NOT content-hashed, so longer caching
 # would serve stale decks/themes after an FTP update.
 <IfModule mod_headers.c>
-  Header set Cache-Control "max-age=3600, must-revalidate" "expr=%{REQUEST_URI} =~ m#^/?(themes|api/assets)/# || %{REQUEST_URI} =~ m#^/?plugins/[a-z0-9-]+/assets/#"
+  Header set Cache-Control "max-age=3600, must-revalidate" "expr=%{REQUEST_URI} =~ m#^/?(bridge/assets|bridge/templates)/# || %{REQUEST_URI} =~ m#^/?bridge/plugins/[a-z0-9-]+/assets/#"
   # Public-page header law. The API sets its own in PHP — scoped out here so
   # headers never double up. `set` (not `always`) keeps one value per table.
   Header set X-Content-Type-Options "nosniff"
   Header set Referrer-Policy "strict-origin-when-cross-origin"
-  Header set X-Frame-Options "SAMEORIGIN" "expr=%{REQUEST_URI} !~ m#^/api(/|$)#"
+  Header set X-Frame-Options "SAMEORIGIN" "expr=%{REQUEST_URI} !~ m#^/bridge(/|$)#"
 </IfModule>
 
 # Everything else → the public site.

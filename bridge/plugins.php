@@ -1,8 +1,8 @@
 <?php
 
 /**
- * 1. Relative path: api/plugins.php
- * 2. Description: The plugin capability contract (p6). Plugins live in plugins/<name>/
+ * 1. Relative path: bridge/plugins.php
+ * 2. Description: The plugin capability contract (p6). Plugins live in bridge/plugins/<name>/
  *                 as manifest (plugin.json) + code (plugin.php). The LID is enforced by
  *                 the core, never by plugin diligence: only manifest-DECLARED
  *                 capabilities are honored, route auth/CSRF is applied HERE before a
@@ -10,7 +10,7 @@
  *                 broken plugin degrades to a log line instead of a dead site.
  *                 Capabilities (v1): template placeholders + API routes. Editor blocks
  *                 are declared in the manifest shape but not yet wired (slice 2).
- * 3. Expects: plugins/ dir at the repo root; state in api/config/plugins.local.php.
+ * 3. Expects: bridge/plugins/ dir at the repo root; state in bridge/config/plugins.local.php.
  * 4. Provides: Plugins\all/enabled/setState/load/placeholderFills/dispatch.
  * 5. SPDX-License-Identifier: MPL-2.0
  * 6. Copyright (c) 2026 Homahuki GmbH
@@ -39,7 +39,7 @@ function all(): array
     $state = enabled();
     $plugins = [];
     foreach (scandir(dirname(__DIR__) . '/plugins') ?: [] as $name) {
-        $dir = dirname(__DIR__) . '/plugins/' . $name;
+        $dir = dirname(__DIR__) . '/bridge/plugins/' . $name;
         if (!is_dir($dir) || str_starts_with($name, '.')) {
             continue;
         }
@@ -162,7 +162,7 @@ function setState(array $enabled): void
 function load(): void
 {
     foreach (enabled() as $name => $on) {
-        $file = dirname(__DIR__) . '/plugins/' . $name . '/plugin.php';
+        $file = dirname(__DIR__) . '/bridge/plugins/' . $name . '/plugin.php';
         if (!is_file($file)) {
             @error_log("[schmarrn-plugins] enabled plugin '{$name}' has no plugin.php — skipped.");
             continue;

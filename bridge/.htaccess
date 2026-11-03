@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MPL-2.0
-# Rewrite /api/* to the front controller (and nothing else — PHP stays at the door).
+# Rewrite /bridge/* to the front controller (and nothing else — PHP stays at the door).
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
@@ -11,6 +11,6 @@
     # Deny direct access to library files.
     RewriteRule ^/(?:router|auth|store|cache)\.php$ - [F,L]
 
-    # Everything under /api goes to the front controller.
-    RewriteRule ^ /api/index.php [L]
+    # Everything under /bridge/ goes to the JSON front controller.
+    RewriteRule ^ /bridge/index.php [L]
 </IfModule>

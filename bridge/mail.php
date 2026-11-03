@@ -1,7 +1,7 @@
 <?php
 
 /**
- * 1. Relative path: api/mail.php
+ * 1. Relative path: bridge/mail.php
  * 2. Description: SMTP mail wrapper around the vendored PHPMailer ("shoulders of giants").
  *                 Real SMTP credentials live in config/mail.local.php (git-ignored);
  *                 config/mail.php is the template. Mail features off when unconfigured.

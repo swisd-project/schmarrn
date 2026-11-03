@@ -41,16 +41,16 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 export function pageCount(): Promise<PageIndex> {
-  return fetch('/api/pages').then((r) => json<PageIndex>(r));
+  return fetch('/bridge/pages').then((r) => json<PageIndex>(r));
 }
 
 // ——— editorial flow ———
-// (The live editor speaks to /api/draft + /api/draft/<t>/<s>/publish directly —
+// (The live editor speaks to /bridge/draft + /bridge/draft/<t>/<s>/publish directly —
 // raw fetch with the X-Base-Hash conflict guard. The dashboard only creates,
 // deletes and renames; the guarded draft save lives in src/public/edit.ts.)
 
 export function login(user: string, password: string): Promise<SessionInfo> {
-  return fetch('/api/login', {
+  return fetch('/bridge/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
@@ -64,11 +64,11 @@ export function login(user: string, password: string): Promise<SessionInfo> {
 }
 
 export function logout(): Promise<void> {
-  return fetch('/api/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken() } }).then(() => undefined);
+  return fetch('/bridge/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken() } }).then(() => undefined);
 }
 
 export function createPage(type: string, slug: string, raw: string): Promise<void> {
-  return fetch(`/api/page/${type}/${slug}`, {
+  return fetch(`/bridge/page/${type}/${slug}`, {
     method: 'POST',
     headers: { 'Content-Type': 'text/markdown', 'X-CSRF-Token': csrfToken() },
     body: raw
@@ -76,14 +76,14 @@ export function createPage(type: string, slug: string, raw: string): Promise<voi
 }
 
 export function deletePage(type: string, slug: string): Promise<void> {
-  return fetch(`/api/page/${type}/${slug}`, {
+  return fetch(`/bridge/page/${type}/${slug}`, {
     method: 'DELETE',
     headers: { 'X-CSRF-Token': csrfToken() }
   }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
 }
 
 export function renamePage(type: string, slug: string, to: string): Promise<string> {
-  return fetch(`/api/page/${type}/${slug}/rename`, {
+  return fetch(`/bridge/page/${type}/${slug}/rename`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
     body: JSON.stringify({ slug: to })
@@ -91,7 +91,7 @@ export function renamePage(type: string, slug: string, to: string): Promise<stri
 }
 
 export function session(): Promise<SessionInfo> {
-  return fetch('/api/session').then(
+  return fetch('/bridge/session').then(
     (r) =>
       json<SessionInfo>(r).then((s) => {
         csrf = s.csrf;
@@ -108,7 +108,7 @@ export interface SetupStatus {
 }
 
 export function setupStatus(): Promise<SetupStatus> {
-  return fetch('/api/setup/status').then((r) => json<SetupStatus>(r));
+  return fetch('/bridge/setup/status').then((r) => json<SetupStatus>(r));
 }
 
 /** Bootstrap the bakery: first admin + brand settings, auto-login on success. */
@@ -119,7 +119,7 @@ export function runSetup(payload: {
   claim?: string;
   theme?: string;
 }): Promise<SessionInfo> {
-  return fetch('/api/setup', {
+  return fetch('/bridge/setup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -143,11 +143,11 @@ export interface SiteSettings {
 }
 
 export function getSiteSettings(): Promise<SiteSettings> {
-  return fetch('/api/site').then((r) => json<SiteSettings>(r));
+  return fetch('/bridge/site').then((r) => json<SiteSettings>(r));
 }
 
 export function saveSiteSettings(settings: SiteSettings): Promise<void> {
-  return fetch('/api/site', {
+  return fetch('/bridge/site', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
     body: JSON.stringify(settings)
@@ -175,12 +175,12 @@ export interface PluginRef {
 }
 
 export function listPlugins(): Promise<readonly PluginRef[]> {
-  return fetch('/api/plugins').then((r) => json<readonly PluginRef[]>(r));
+  return fetch('/bridge/plugins').then((r) => json<readonly PluginRef[]>(r));
 }
 
 /** The whole enabled map in one PUT — only installed plugins survive the core's lid. */
 export function setPlugins(enabled: Readonly<Record<string, boolean>>): Promise<void> {
-  return fetch('/api/plugins', {
+  return fetch('/bridge/plugins', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
     body: JSON.stringify({ enabled })
@@ -190,7 +190,7 @@ export function setPlugins(enabled: Readonly<Record<string, boolean>>): Promise<
 // ——— account management (admin) ———
 
 export function listAccounts(): Promise<readonly AccountRef[]> {
-  return fetch('/api/accounts').then((r) => json<readonly AccountRef[]>(r));
+  return fetch('/bridge/accounts').then((r) => json<readonly AccountRef[]>(r));
 }
 
 export function addAccount(
@@ -199,7 +199,7 @@ export function addAccount(
   role: 'admin' | 'editor',
   email = ''
 ): Promise<void> {
-  return fetch('/api/accounts', {
+  return fetch('/bridge/accounts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
     body: JSON.stringify({ user, password, role, email })
@@ -208,19 +208,19 @@ export function addAccount(
 
 /** Mail (re)issued credentials to the account's email. 503 when SMTP unconfigured. */
 export function inviteAccount(user: string): Promise<void> {
-  return fetch(`/api/account/${encodeURIComponent(user)}/invite`, {
+  return fetch(`/bridge/account/${encodeURIComponent(user)}/invite`, {
     method: 'POST',
     headers: { 'X-CSRF-Token': csrfToken() }
   }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
 }
 
-// (The reset/password endpoints — /api/reset-request, /api/reset-confirm,
-// /api/me/password, PUT /api/account/<u> — stay live in the PHP core as the
+// (The reset/password endpoints — /bridge/reset-request, /bridge/reset-confirm,
+// /bridge/me/password, PUT /bridge/account/<u> — stay live in the PHP core as the
 // self-service feature; their dashboard UI doesn't exist yet. Typed wrappers
 // return when that UI does.)
 
 // ——— page media ———
-// (The live editor talks to /api/media directly; these wrappers exist for the
+// (The live editor talks to /bridge/media directly; these wrappers exist for the
 // dashboard's site-wide media sweep.)
 
 /** One file somewhere on the site — the overlay's media tab sweeps these. */
@@ -233,14 +233,14 @@ export interface SiteMediaRef {
 }
 
 export function listAllMedia(): Promise<readonly SiteMediaRef[]> {
-  return fetch('/api/media').then((r) => json<readonly SiteMediaRef[]>(r));
+  return fetch('/bridge/media').then((r) => json<readonly SiteMediaRef[]>(r));
 }
 
 /** Upload a site-level asset (the logo) — admin, CSRF-gated. Returns its public URL. */
 export function uploadSiteAsset(file: File): Promise<{ name: string; url: string }> {
   const body = new FormData();
   body.append('file', file);
-  return fetch('/api/site-assets', {
+  return fetch('/bridge/site-assets', {
     method: 'POST',
     headers: { 'X-CSRF-Token': csrfToken() },
     body
@@ -248,7 +248,7 @@ export function uploadSiteAsset(file: File): Promise<{ name: string; url: string
 }
 
 export function removeAccount(user: string): Promise<void> {
-  return fetch(`/api/account/${encodeURIComponent(user)}`, {
+  return fetch(`/bridge/account/${encodeURIComponent(user)}`, {
     method: 'DELETE',
     headers: { 'X-CSRF-Token': csrfToken() }
   }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));

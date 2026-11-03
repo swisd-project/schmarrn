@@ -15,7 +15,7 @@ Locked Decisions (Reference)
 
 - Name: Schmarrn (one "m" in Schmarrn, exactly two "r"s — "Schmarrrn" with three is the pancake you eat, not the project you ship).
 - Namespace: `@swisd-project/*` on npm (e.g. shared types). Core stays plain PHP.
-- Architecture: PHP core (`api/`) serves a strict JSON API under `/api` — fetch raw `.md`, save, list, auth, file-based HTML cache. No Markdown parsing in PHP.
+- Architecture: PHP core (`bridge/`) serves a strict JSON API under `/bridge` — fetch raw `.md`, save, list, auth, file-based HTML cache. No Markdown parsing in PHP.
 - Parsing core: `mdms` (`@swisd-project/mdms`) is the sole Markdown→HTML transformer. One renderer everywhere; no `marked`, no `gray-matter` duplicates.
 - Content store: `/src/content/<type>/<slug>/index.md` with YAML frontmatter, validated by one strict Zod schema per content type. Slug-vs-filename mismatch = hard error.
 - Admin dashboard: Svelte(5)/SvelteKit built with `adapter-static`; the built assets are committed/served by the PHP side as static files. Editing model: full-page visual editor — the public page IS the canvas (Automad-style click-to-edit); complex items are edited via save-confirm modals; no two-column textarea|preview layout.
@@ -34,13 +34,13 @@ Locked Decisions (Reference)
 
 Environment
 
-- Local dev: PHP 8.5 built-in server (`php -S`) for `api/`, Vite dev server for `dashboard/`.
+- Local dev: PHP 8.5 built-in server (`php -S`) for `bridge/`, Vite dev server for `dashboard/`.
 - Deploy: FTP upload of one folder (api + built dashboard + content). Writable dirs needed for: cache, per-host sessions, account/file-backed store, uploads (per-host reality, all under the install).
 - Requirements: PHP 8.4+ on deploy (dev on 8.5 — 8.2's security support ends Dec 2026, don't build on it). gd+zip enter only in v2 (see Locked Decisions). No composer, no database, no cron.
 
 Folders
 
-- `api/`     — PHP core: `/api` JSON endpoints, auth, file cache, content store access.
-- `src/`     — SvelteKit dashboard (source); builds to static assets consumed by `api/`.
+- `bridge/`   — PHP core: JSON core under `/bridge`, auth, file cache, content store access. The core's dedicated homes: `bridge/templates/` (theme contract wares) and `bridge/plugins/` (plugin homes, manifest + code, core-lid enforced). Rename 2026-11-03, user call: bots bombard `/api`.
+- `src/`     — SvelteKit dashboard (source); builds to static assets consumed by the core.
 - `src/content/` — the canonical `.md` content tree, one folder per page/post.
 - `MCP/`     — governance files (GOSPEL, BACKLOG, GUIDE, FILETREE).

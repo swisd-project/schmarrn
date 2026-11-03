@@ -1,10 +1,10 @@
 <?php
 
 /**
- * 1. Relative path: api/site.php
+ * 1. Relative path: bridge/site.php
  * 2. Description: Global brand/site settings loader — template defaults, overridden by
  *                 site.local.php (git-ignored). Pure data, no I/O beyond the two files.
- * 3. Expects: api/config/site.php (+ optional site.local.php).
+ * 3. Expects: bridge/config/site.php (+ optional site.local.php).
  * 4. Provides: Site\load(), Site\save() for the setup wizard / settings UI.
  * 5. SPDX-License-Identifier: MPL-2.0
  * 6. Copyright (c) 2026 Homahuki GmbH
@@ -103,7 +103,7 @@ function assetStore(string $originalName, string $tmpPath): array
         \Router\refuse(500, 'Asset storage burned — check the host writable paths.');
     }
     @chmod($target, 0664);
-    return ['name' => $name, 'url' => '/api/site-assets/' . rawurlencode($name)];
+    return ['name' => $name, 'url' => '/bridge/site-assets/' . rawurlencode($name)];
 }
 
 /** The real path of a stored asset, or null when the name is foreign. */

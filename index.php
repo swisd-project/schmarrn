@@ -3,7 +3,7 @@
 /**
  * 1. Relative path: index.php
  * 2. Description: Root front controller — the one public entry point.
- *                 /api/* → the JSON core; real public files (themes/, api/assets/)
+ *                 /bridge/* → the JSON core; real public files (bridge/assets/, bridge/templates/)
  *                 pass through untouched; everything else is the public site.
  *                 Doubles as the php -S router script for dev (`php -S localhost:8080 index.php`).
  * 3. Expects: Apache + mod_rewrite with the shipped .htaccess, or php -S with this file.
@@ -16,9 +16,14 @@ declare(strict_types=1);
 
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 
-// ——— /api/* always belongs to the JSON core, real file or not ———
-if ($path !== '/' && str_starts_with($path, '/api/') && !str_starts_with($path, '/api/assets/')) {
-    require __DIR__ . '/api/index.php';
+// ——— /bridge/* always belongs to the JSON core, real file or not. The three
+// static prefixes inside bridge/ (assets, templates, plugin assets) fall
+// through to the file whitelist below; only JSON routes land at the core.
+if ($path !== '/' && str_starts_with($path, '/bridge/')
+    && !str_starts_with($path, '/bridge/assets/')
+    && !str_starts_with($path, '/bridge/templates/')
+    && !str_starts_with($path, '/bridge/plugins/')) {
+    require __DIR__ . '/bridge/index.php';
     exit;
 }
 
@@ -56,7 +61,7 @@ if (str_starts_with($path, '/_/')) {
 
 // ——— real public files: let the server do its job (php -S router mode) ———
 // Whitelist only: themes, plugin assets, and the fallback render bundle. Plugin
-// CODE is never whitelisted — a direct hit on plugins/<name>/plugin.php would
+// CODE is never whitelisted — a direct hit on bridge/plugins/<name>/plugin.php would
 // execute it outside the front controller. Everything else on disk is none of
 // the visitor's business — it falls through to the public 404.
 if ($path !== '/') {
@@ -76,9 +81,9 @@ if ($path !== '/') {
         if ($fromBuild) {
             $rel = substr($rel, strlen('build/'));
         }
-        if (str_starts_with($rel, 'themes/') || str_starts_with($rel, 'api/assets/')
+        if (str_starts_with($rel, 'bridge/templates/') || str_starts_with($rel, 'bridge/assets/')
             || str_starts_with($rel, '_app/')
-            || preg_match('#^plugins/[a-z0-9-]+/assets/#', $rel) === 1) {
+            || preg_match('#^bridge/plugins/[a-z0-9-]+/assets/#', $rel) === 1) {
             if (PHP_SAPI === 'cli-server' && !$fromBuild) {
                 return false; // php -S serves it with proper MIME
             }
@@ -99,5 +104,5 @@ if ($path !== '/') {
 }
 
 // ——— everything else: the public site ———
-require __DIR__ . '/api/serve.php';
+require __DIR__ . '/bridge/serve.php';
 \Serve\dispatch($path);

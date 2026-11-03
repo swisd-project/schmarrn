@@ -16,35 +16,20 @@
 ├── node_modules/                 # ignored
 ├── .svelte-kit/                  # ignored
 ├── svelte.config.js              # adapter-static, fallback SPA
-├── vite.config.ts                # sveltekit() + /api dev proxy → :8080
+├── vite.config.ts                # sveltekit() + /bridge dev proxy → :8080
 ├── tsconfig.json
 ├── build/                        # built dashboard (ignored)
-├── index.php                     # root front controller: /api/* → core, /_ → 301 /_/ → dashboard SPA (host _/ dir or repo build/), else public site (also php -S router)
-├── .htaccess                     # whitelist law: _/ (dashboard home, mod_dir index), themes/, api/assets/, dashboard/, plugins/<n>/assets/ + index.php
-├── plugins/                      # p6 plugin contract — manifest + code, core-enforced lid
-│   └── hello/                    # demo plugin (copy-me template): placeholder + public/user routes
-│       ├── plugin.json
-│       └── plugin.php
+├── index.php                     # root front controller: /bridge/* → core, /_ → 301 /_/ → dashboard SPA (host _/ dir or repo build/), else public site (also php -S router)
+├── .htaccess                     # whitelist law: _/ (dashboard home, mod_dir index), bridge/templates/, bridge/assets/, dashboard/, bridge/plugins/<n>/assets/ + index.php
 ├── pagetypes/                    # page-type scaffolds: pre-made, fillable pages (blank/landing/gallery/article); :::image slots CLOSE with :::
-├── themes/
-│   ├── bakery/                   # default theme (classical-first; slide.html too)
-│   │   ├── theme.json
-│   │   ├── page.html             # {{placeholders}} incl. {{navHtml}} — str_replace only
-│   │   ├── slide.html
-│   │   └── assets/{bakery.css,deck.js}     # deck.js: dots nav + active-slide tracking + hash-following + mid-air guard (companion script, slide.html includes it)
-│   └── atelier/                  # artist presentation theme (slide-first, depth system)
-│       ├── theme.json
-│       ├── page.html
-│       ├── slide.html
-│       └── assets/{atelier.css,deck.js}   # same helper script, same law
 ├── scripts/
-│   ├── build-fallback.mjs        # esbuild → api/assets/render.esm.js (committed)
-│   ├── build-edit.mjs            # esbuild → api/assets/edit.esm.js (committed live-page editor)
+│   ├── build-fallback.mjs        # esbuild → bridge/assets/render.esm.js (committed)
+│   ├── build-edit.mjs            # esbuild → bridge/assets/edit.esm.js (committed live-page editor)
 │   └── (*.mts)                   # dev probes
-├── api/                          # PHP core — front controller + libs, no framework
+├── bridge/                       # PHP core — front controller + libs, no framework; lives under /bridge (bit-scan prey no longer fed)
 │   ├── .htaccess                 # legacy (root .htaccess is the law now)
 │   ├── index.php                 # JSON routes: login/session, pages, drafts, publish(+html), pagetypes, public API, media, plugins
-│   ├── serve.php                 # public serving engine: dispatch, themes, cached HTML, fallback shell, SEO head, plugin fills, editor injection; styleOf: page frontmatter → GLOBAL site style → theme default
+│   ├── serve.php                 # public serving engine: dispatch, templates, cached HTML, fallback shell, SEO head, plugin fills, editor injection + nav ghost (core-owned data-sm-nav / data-sm-nav-add, editor-only); styleOf: page frontmatter → GLOBAL site style → theme default
 │   ├── site.php                  # brand settings load/save (template < site.local.php) + site assets (.assets/); `style` = GLOBAL template ('' | classical | slide, whitelist-validated)
 │   ├── plugins.php               # p6 capability contract: scan/validate/load/dispatch, state in config/plugins.local.php
 │   ├── router.php
@@ -54,10 +39,24 @@
 │   ├── lock.php                  # write-path lock gates (acquire + assertFreeOrMine; TTL frees cold locks; HTTP lock endpoints retired with the canvas)
 │   ├── store.php                 # content store: list/read/write (atomic), slug discipline
 │   ├── cache.php                 # raw cache + rendered-HTML cache (storeHtml/htmlStale), mtime sentinels
+│   ├── templates/                # the theme contract's dedicated home (was root-level themes/)
+│   │   ├── bakery/               # default theme (classical-first; slide.html too)
+│   │   │   ├── theme.json
+│   │   │   ├── page.html             # {{placeholders}} incl. {{navHtml}} — str_replace only
+│   │   │   ├── slide.html
+│   │   │   └── assets/{bakery.css,deck.js}     # deck.js: dots nav + active-slide tracking + hash-following + mid-air guard (companion script, slide.html includes it)
+│   │   └── atelier/              # artist presentation theme (slide-first, depth system)
+│   │       ├── theme.json
+│   │       ├── page.html
+│   │       ├── slide.html
+│   │       └── assets/{atelier.css,deck.js}   # same helper script, same law
+│   ├── plugins/                  # plugin homes in the core (was root-level plugins/)
+│   │   └── hello/                # demo plugin (copy-me template): placeholder + public/user routes
+│   │       ├── plugin.json
+│   │       └── plugin.php
 │   ├── assets/
 │   │   ├── render.esm.js         # committed fallback render bundle (client-side mdms)
-│   │   └── edit.esm.js           # committed live-page editor bundle (injected only for logged-in sessions)
-│   │   └── design.html           # /design workbench — public style guide, user-steered
+│   │   └── edit.esm.js           # committed live-page editor bundle (injected only for logged-in sessions; carries the nav ghost)
 │   ├── config/
 │   │   ├── auth.php              # TEMPLATE (hash of "changeme")
 │   │   ├── accounts.php          # TEMPLATE

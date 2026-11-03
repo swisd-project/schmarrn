@@ -1,7 +1,7 @@
 <?php
 
 /**
- * 1. Relative path: api/config/mail.php
+ * 1. Relative path: bridge/config/mail.php
  * 2. Description: SMTP config TEMPLATE. Copy to mail.local.php (git-ignored) and fill in.
  * 3. secure: 'tls' (STARTTLS, usual port 587) or 'ssl' (implicit, port 465).
  * 4. Leave host empty in mail.local.php to disable all mail features cleanly.

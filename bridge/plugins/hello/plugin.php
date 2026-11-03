@@ -1,7 +1,7 @@
 <?php
 
 /**
- * 1. Relative path: plugins/hello/plugin.php
+ * 1. Relative path: bridge/plugins/hello/plugin.php
  * 2. Description: Demo plugin — the smallest possible proof of the p6 contract.
  *                 One manifest-declared placeholder (hello_badge) and one
  *                 manifest-declared public route (status). Function naming is the
@@ -27,7 +27,7 @@ function plugin_hello_placeholders(array $ctx): array
     ];
 }
 
-/** Public route: GET /api/plugin/hello/status — the core handled auth already. */
+/** Public route: GET /bridge/plugin/hello/status — the core handled auth already. */
 function plugin_hello_route_status(string $method, array $body): array
 {
     return [

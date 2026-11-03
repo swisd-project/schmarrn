@@ -1,7 +1,7 @@
 <?php
 
 /**
- * 1. Relative path: api/store.php
+ * 1. Relative path: bridge/store.php
  * 2. Description: Content store. One directory per page, index.md inside.
  *                 PHP stores and serves raw markdown — it NEVER parses it.
  * 3. Expects: Content root ../src/content; strict slug/type patterns.

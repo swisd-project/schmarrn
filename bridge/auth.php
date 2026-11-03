@@ -1,7 +1,7 @@
 <?php
 
 /**
- * 1. Relative path: api/auth.php
+ * 1. Relative path: bridge/auth.php
  * 2. Description: Named-account session auth with roles (admin/editor).
  *                 Hashes live in the account store (accounts.php lib); the session
  *                 carries user + role + CSRF token. 24h lifetime, self-managed.

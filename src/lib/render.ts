@@ -24,7 +24,7 @@ export interface RenderContext {
 
 /** Page-local media module URL (v1: served raw through the PHP media route). */
 export function mediaUrl(context: { type: string; slug: string }): (file: string) => string {
-  return (file: string) => `/api/media/${context.type}/${context.slug}/${encodeURIComponent(file)}`;
+  return (file: string) => `/bridge/media/${context.type}/${context.slug}/${encodeURIComponent(file)}`;
 }
 
 export function renderMdms(raw: string, context: RenderContext) {

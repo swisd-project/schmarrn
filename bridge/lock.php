@@ -1,10 +1,10 @@
 <?php
 
 /**
- * 1. Relative path: api/lock.php
+ * 1. Relative path: bridge/lock.php
  * 2. Description: Coarse per-page edit lock — one editor at a time, no distributed math.
  *                 Lock lives in the file cache; TTL heartbeat keeps it warm, silence frees it.
- * 3. Expects: Writable api/cache/ dir.
+ * 3. Expects: Writable bridge/cache/ dir.
  * 4. Provides: acquire(), assertFreeOrMine() — the write-path gates. (The HTTP
  *              lock endpoints retired with the canvas editor; cold locks free
  *              themselves via the TTL check in record().)

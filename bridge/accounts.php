@@ -1,7 +1,7 @@
 <?php
 
 /**
- * 1. Relative path: api/accounts.php
+ * 1. Relative path: bridge/accounts.php
  * 2. Description: File-backed account store — named accounts with roles.
  *                 Real store lives in config/accounts.local.php (git-ignored);
  *                 config/accounts.php is the template (admin/'changeme').

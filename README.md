@@ -2,7 +2,7 @@
 
 A flat-file, headless-ish CMS you dump onto any FTP host and it just runs. No database, no Node on the server, no build step on the host.
 
-- **PHP core** (`api/`) — serves a strict JSON API: raw `.md` read/write, auth, file-based cache.
+- **PHP core** (`bridge/`) — serves a strict JSON API under `/bridge`: raw `.md` read/write, auth, file-based cache. Renamed from `api/` in v1.0.0 (scanner bots hammer the generic prefix; the bridge door isn't on their map).
 - **Svelte dashboard** (`src/`) — SvelteKit + `adapter-static` editor; preview and public rendering share one `parseMdms()` call.
 - **Content** (`src/content/`) — one folder per page/post, `index.md` with strictly validated frontmatter.
 - **Parser** — [`@swisd-project/mdms`](https://github.com/swisd-project/mdms), the sole Markdown→HTML transformer.
@@ -10,8 +10,10 @@ A flat-file, headless-ish CMS you dump onto any FTP host and it just runs. No da
 ## Layout
 
 ```
-api/        PHP core (front controller + /api endpoints)
-src/        SvelteKit dashboard + content tree
+bridge/          PHP core — JSON core under /bridge, plus its dedicated homes:
+                 bridge/templates/ (themes) and bridge/plugins/ (plugins)
+src/             SvelteKit dashboard + content tree
+pagetypes/       page-type scaffolds (blank, landing, gallery, article)
 docs/       theme-contract.md — what themes may assume, enforced by code
 MCP/        GOSPEL (law), BACKLOG (ledger), GUIDE (kinks)
 ```
@@ -24,15 +26,15 @@ From the repo root:
 npm run dev
 ```
 
-starts both via [`concurrently`](https://www.npmjs.com/package/concurrently): the PHP API on `:8080` (blue) and the Vite dashboard on `:5173` (green). Ctrl-C stops both. Solo variants: `npm run dev:api` / `npm run dev:app`.
+starts both via [`concurrently`](https://www.npmjs.com/package/concurrently): the PHP core (`bridge/`) on `:8080` (blue) and the Vite dashboard on `:5173` (green). Ctrl-C stops both. Solo variants: `npm run dev:api` / `npm run dev:app`.
 
-Open **http://localhost:5173** — Vite proxies `/api/*` to `:8080`, so everything lives on one origin. First-run password is `changeme` (template hash; mint a real one, see below).
+Open **http://localhost:5173** — Vite proxies `/bridge/*` to `:8080`, so everything lives on one origin. First-run password is `changeme` (template hash; mint a real one, see below).
 
 Requirements: PHP ≥ 8.4 (dev on 8.5; on Ubuntu/Zorin use `ppa:ondrej/php` → `sudo apt install php8.5-cli php8.5-mbstring php8.5-xml`). VS Code riders: the DEVSENSE "PHP" extension's built-in server is just `php -S` — a PHP binary is required; the repo ships a matching `.vscode/launch.json` profile (F5 → "schmarrn: API") and `.vscode/tasks.json` task `Dev: BOTH`.
 
 ## Reset the admin password
 
-The hash lives in `api/config/auth.local.php` (git-ignored; falls back to `api/config/auth.php` template). Mint one, consciously:
+The hash lives in `bridge/config/auth.local.php` (git-ignored; falls back to `bridge/config/auth.php` template). Mint one, consciously:
 
 ```sh
 php -r "echo password_hash('your-login-password', PASSWORD_ARGON2ID, ['memory_cost' => 65536, 'time_cost' => 4, 'threads' => 1]), PHP_EOL;"
@@ -48,19 +50,19 @@ Note: Pages is static — the `/api` endpoints don't exist there. It's the shell
 
 ## Deploy (FTP — the real thing)
 
-Requirements on the host: **PHP ≥ 8.4.27** (or ≥ 8.3.36 / ≥ 8.2.35 — see the security note below), Apache with `.htaccess` honored (`AllowOverride All`), and three writable paths: `api/config/`, `api/cache/`, `src/content/`. Nothing else — no database, no composer, no Node on the server.
+Requirements on the host: **PHP ≥ 8.4.27** (or ≥ 8.3.36 / ≥ 8.2.35 — see the security note below), Apache with `.htaccess` honored (`AllowOverride All`), and three writable paths: `bridge/config/`, `bridge/cache/`, `src/content/`. Nothing else — no database, no composer, no Node on the server.
 
 > **Security note (PHP2Shell, October 2026):** CVE-2026-109618 / CVE-2026-109619 are unauthenticated remote-code-execution flaws in the PHP core itself (CVSS 9.2, in the CISA Known Exploited catalog). They affect every PHP-based site regardless of application code and are fixed in **PHP 8.4.27, 8.3.36, 8.2.35 and 8.5.12**. Do not deploy Schmarrn — or anything else — on a PHP version older than these. No application-level hardening can substitute for a patched interpreter.
 
 ### What to upload
 
 ```
-index.php            front controller: /api/* → core, /_ → dashboard, else the public site
-.htaccess            whitelist law (only _/, themes/, api/assets/, plugins/*/assets/ serve static)
-api/                 the PHP core (api/assets/ ships the committed render/edit bundles)
-themes/              your theme(s)
+index.php            front controller: /bridge/* → core, /_ → dashboard, else the public site
+.htaccess            whitelist law (only _/, bridge/templates/, bridge/assets/, bridge/plugins/*/assets/ serve static)
+bridge/                 the PHP core (bridge/assets/ ships the committed render/edit bundles)
+bridge/templates/              your theme(s)
 pagetypes/           the page-type scaffolds
-src/content/         your content tree (start with the seeded pages)
+src/content/         your content tree (the shipped seed: one hello-world page)
 _/                   the CONTENTS of build/ — inside a host folder literally named _
 ```
 
@@ -70,14 +72,15 @@ Build the dashboard once, locally:
 npm ci && npm run build
 ```
 
-then upload the **contents of `build/` into a folder named `_`** on the host. Not loose at the root: the built `index.html` would shadow `index.php` via `DirectoryIndex` and put a login wall on your public face. (The editor bundles `api/assets/edit.esm.js` and `render.esm.js` are committed — you only need Node if you change `src/` yourself; then also run `npm run build:edit` / `npm run build:fallback`.)
+then upload the **contents of `build/` into a folder named `_`** on the host. Not loose at the root: the built `index.html` would shadow `index.php` via `DirectoryIndex` and put a login wall on your public face. (The editor bundles `bridge/assets/edit.esm.js` and `render.esm.js` are committed — you only need Node if you change `src/` yourself; then also run `npm run build:edit` / `npm run build:fallback`.)
 
 ### First run
 
 1. Open `https://your-host.example/_/` — the setup wizard appears (site name, theme, admin account).
 2. After setup you land on the public site at `/`. The public face never wears a login form.
 3. Log in any time at `/_/`. Editing happens **on the live page**: click a block → floating menu → edit → save, live instantly. The burger (bottom-right) opens the full-screen overlay: page settings, the site-wide template (admins), ＋ New page from a page-type scaffold, log out.
-4. The dashboard at `/_/` stays management-only: page tree (rename/delete/upload), site settings, accounts, media, plugins.
+4. The **nav is a core entity** — while editing, the menu shows a ghost outline with a `＋` slot: opens a frontmatter modal (title, auto-typed slug; date and tags generated), creates a simple hello-world page and walks you straight into it. Ghosts exist only while editing; published HTML never carries them.
+5. The dashboard at `/_/` stays management-only: page tree (rename/delete/upload), site settings, accounts, media, plugins.
 
 `/_` canonicalizes to `/_/` — the trailing slash is load-bearing.
 

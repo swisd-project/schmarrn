@@ -1,10 +1,10 @@
 <?php
 
 /**
- * 1. Relative path: api/cache.php
+ * 1. Relative path: bridge/cache.php
  * 2. Description: File-based response cache keyed by content mtime sentinel.
  *                 Stores the raw page so repeated public fetches skip disk hits on the source.
- * 3. Expects: Writable api/cache/ directory. Automad-pattern: serve if sentinel matches.
+ * 3. Expects: Writable bridge/cache/ directory. Automad-pattern: serve if sentinel matches.
  * 4. Provides: isFresh(), emit(), drop().
  * 5. SPDX-License-Identifier: MPL-2.0
  * 6. Copyright (c) 2026 Homahuki GmbH

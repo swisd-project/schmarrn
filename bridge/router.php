@@ -1,7 +1,7 @@
 <?php
 
 /**
- * 1. Relative path: api/router.php
+ * 1. Relative path: bridge/router.php
  * 2. Description: Tiny routing helpers. No framework — Schmarrn stays shred-thin.
  * 3. Provides: Path parsing, auth failure response, strict JSON error exit.
  * 4. SPDX-License-Identifier: MPL-2.0

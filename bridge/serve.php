@@ -1,12 +1,12 @@
 <?php
 
 /**
- * 1. Relative path: api/serve.php
+ * 1. Relative path: bridge/serve.php
  * 2. Description: The public serving engine — clean-URL dispatch, theme rendering,
  *                 cached-HTML emission with a client-side fallback shell, 404s, SEO head.
  *                 GOSPEL law: PHP never parses Markdown; it serves what the editor's
  *                 browser rendered, and falls back to a client render when stale.
- * 3. Expects: themes/<name>/ theme contract (theme.json + page.html + assets/),
+ * 3. Expects: bridge/templates/<name>/ theme contract (theme.json + page.html + assets/),
  *             \Cache\ HTML store, \Site\ settings, \Store\ byte-peek discipline.
  * 4. Provides: Serve\dispatch() — the one call the root front controller makes.
  * 5. SPDX-License-Identifier: MPL-2.0
@@ -35,9 +35,6 @@ function dispatch(string $path): never
     if ($path === '') {
         home($site);
     }
-    if ($path === 'design') {
-        design($site);
-    }
     $segments = explode('/', $path);
     if (count($segments) === 1) {
         page('pages', $segments[0], $site);
@@ -46,18 +43,6 @@ function dispatch(string $path): never
         page($segments[0], $segments[1], $site);
     }
     notFound($site);
-}
-
-/** The design workbench — static bytes, public, not content. The system gets steered here. */
-function design(array $site): never
-{
-    $file = __DIR__ . '/assets/design.html';
-    if (!is_file($file)) {
-        notFound($site);
-    }
-    header('Content-Type: text/html; charset=utf-8');
-    readfile($file);
-    exit;
 }
 
 /** The front door: \Site\home slug, else the first published page of "pages". */
@@ -96,10 +81,10 @@ function page(string $type, string $slug, array $site): never
     if (\Auth\check()) {
         $html = '<div data-sm-edit-root data-type="' . htmlspecialchars($type, ENT_QUOTES)
             . '" data-slug="' . htmlspecialchars($slug, ENT_QUOTES) . '"></div>'
-            . "\n" . '<script type="module" src="/api/assets/edit.esm.js"></script>';
+            . "\n" . '<script type="module" src="/bridge/assets/edit.esm.js"></script>';
         $theme = themeTemplate($site, styleOf($type, $slug, $site));
         $title = titleOf($type, $slug, $slug);
-        echo fill($theme, $site, $title, $html, seoHead($title, $site['name'], "{$type}/{$slug}"), $slug, $type);
+        echo fill($theme, $site, $title, $html, seoHead($title, $site['name'], "{$type}/{$slug}"), $slug, $type, true);
         exit;
     }
     $html = \Cache\html($type, $slug);
@@ -126,7 +111,7 @@ function themeDir(array $site): string
     if (preg_match(IDENTIFIER, $name) !== 1) {
         $name = 'bakery';
     }
-    return dirname(__DIR__) . '/themes/' . $name;
+    return __DIR__ . '/templates/' . $name;
 }
 
 /** The theme manifest, or [] when absent/broken — never a fatal for decoration data. */
@@ -157,7 +142,7 @@ function styleOf(string $type, string $slug, array $site): string
 function themeTemplate(array $site, string $style): array
 {
     $dir = themeDir($site);
-    $base = '/themes/' . basename($dir) . '/';
+    $base = '/bridge/templates/' . basename($dir) . '/';
     $candidates = $style === 'slide' ? ['slide.html', 'page.html'] : ['page.html'];
     foreach ($candidates as $candidate) {
         $file = $dir . '/' . $candidate;
@@ -190,7 +175,7 @@ HTML;
 
 /** Fill the theme template. Body HTML is trusted (walled pipeline); everything else escapes.
  *  Plugin placeholders (p6) merge in last — manifest-declared only, values are the plugin's trusted HTML. */
-function fill(array $theme, array $site, string $title, string $bodyHtml, string $seoHead, string $currentSlug = '', string $type = ''): string
+function fill(array $theme, array $site, string $title, string $bodyHtml, string $seoHead, string $currentSlug = '', string $type = '', bool $editing = false): string
 {
     $replacements = [
         '{{siteName}}' => htmlspecialchars($site['name'], ENT_QUOTES),
@@ -206,7 +191,7 @@ function fill(array $theme, array $site, string $title, string $bodyHtml, string
         '{{pageTitle}}' => htmlspecialchars($title, ENT_QUOTES),
         '{{bodyHtml}}' => $bodyHtml,
         '{{seoHead}}' => $seoHead,
-        '{{navHtml}}' => navHtml($site, $currentSlug),
+        '{{navHtml}}' => navHtml($site, $currentSlug, $editing),
         '{{themeBase}}' => htmlspecialchars($theme['base'], ENT_QUOTES),
         '{{year}}' => date('Y'),
     ];
@@ -216,8 +201,12 @@ function fill(array $theme, array $site, string $title, string $bodyHtml, string
     return str_replace(array_keys($replacements), array_values($replacements), $theme['template']);
 }
 
-/** The menu: published pages of "pages" as links, the current one marked. Classical style's spine. */
-function navHtml(array $site, string $currentSlug): string
+/** The menu: published pages of "pages" as links — the navitem entity, core-owned.
+ *  Classical style's spine. In editor mode the nav is also the GHOST: it carries
+ *  data-sm-nav (the core editor outlines it) and a data-sm-nav-add plus that opens
+ *  the new-page modal (edit.esm.js). Ghost exists only while editing — published
+ *  HTML ships without either attribute, and templates never wire nav themselves. */
+function navHtml(array $site, string $currentSlug, bool $editing = false): string
 {
     $items = [];
     foreach (\Store\listAll()['pages'] ?? [] as $candidate) {
@@ -229,13 +218,12 @@ function navHtml(array $site, string $currentSlug): string
         $items[] = '<a href="/' . htmlspecialchars($slug, ENT_QUOTES) . '"' . $current . '>'
             . htmlspecialchars(titleOf('pages', $slug, $slug), ENT_QUOTES) . '</a>';
     }
-    // The design workbench is a standing sub-page: core-served at /design, so the
-    // nav carries it even when it's not a page in the store.
-    $items[] = '<a href="/design">Design</a>';
-    if ($items === []) {
+    if ($items === [] && !$editing) {
         return '';
     }
-    return '<nav class="sm-nav">' . implode('', $items) . '</nav>';
+    $ghost = $editing ? '<span data-sm-nav-add class="sm-nav-add" title="New page">+</span>' : '';
+    return '<nav class="sm-nav"' . ($editing ? ' data-sm-nav' : '') . '>'
+        . implode('', $items) . $ghost . '</nav>';
 }
 
 /** Logo setting → URL. Absolute or root-relative passes through; anything else roots it. */
@@ -287,7 +275,7 @@ function shell(array $site, string $type, string $slug): string
     $title = titleOf($type, $slug, $slug);
     $body = '<div class="sm-fallback" data-schmarrn-root data-type="' . htmlspecialchars($type, ENT_QUOTES)
         . '" data-slug="' . htmlspecialchars($slug, ENT_QUOTES) . '"></div>' . "\n"
-        . '<script type="module" src="/api/assets/render.esm.js"></script>';
+        . '<script type="module" src="/bridge/assets/render.esm.js"></script>';
     return fill($theme, $site, $title, $body, seoHead($title, $site['name'], "{$type}/{$slug}"), $slug, $type);
 }
 

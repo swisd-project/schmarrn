@@ -1,9 +1,9 @@
 <?php
 
 /**
- * 1. Relative path: api/index.php
- * 2. Description: Front controller — the only PHP entry point. Routes /api/*, serves strict JSON.
- * 3. Expects: PHPRouter, a rewrite to this file for /api/* requests (or direct /api/index.php).
+ * 1. Relative path: bridge/index.php
+ * 2. Description: Front controller — the only PHP entry point. Routes /bridge/*, serves strict JSON.
+ * 3. Expects: PHPRouter, a rewrite to this file for /bridge/* requests (or direct /bridge/index.php).
  * 4. Provides: Content store CRUD over raw .md files, session auth, mtime-sentinel file cache.
  * 5. SPDX-License-Identifier: MPL-2.0
  * 6. Copyright (c) 2026 Homahuki GmbH
@@ -62,7 +62,7 @@ function stripExecutableHtml(string $html): string
     return $html;
 }
 
-$path = Router\pathAfter('/api/');
+$path = Router\pathAfter('/bridge/');
 $isPublicApi = str_starts_with($path, 'public/');
 
 header('Content-Type: application/json; charset=utf-8');
@@ -124,7 +124,7 @@ try {
 
         // ——— password flows ———
 
-        // POST /api/me/password — self-service change (authed + knows current).
+        // POST /bridge/me/password — self-service change (authed + knows current).
         case $method === 'POST' && $path === 'me/password':
             if (!Auth\check()) {
                 Router\refuse(401, 'The kitchen door is locked — log in first.');
@@ -150,7 +150,7 @@ try {
             echo json_encode(['ok' => true]);
             break;
 
-        // POST /api/account/<user>/invite — admin (re)issues credentials by mail.
+        // POST /bridge/account/<user>/invite — admin (re)issues credentials by mail.
         case $method === 'POST' && preg_match('#^account/[a-z0-9][a-z0-9._-]{0,63}/invite$#', $path) === 1:
             if (!Auth\check()) {
                 Router\refuse(401, 'The kitchen door is locked — log in first.');
@@ -175,7 +175,7 @@ try {
             echo json_encode(['ok' => true]);
             break;
 
-        // POST /api/reset-request — anonymous self-reset door. Enumeration-proof, rate-limited.
+        // POST /bridge/reset-request — anonymous self-reset door. Enumeration-proof, rate-limited.
         case $method === 'POST' && $path === 'reset-request':
             $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
             Auth\gateLogin($ip);
@@ -193,7 +193,7 @@ try {
             echo json_encode(['ok' => true, 'message' => 'If the account exists and can be mailed, a token is on its way.']);
             break;
 
-        // POST /api/reset-confirm — anonymous: one-time token + new password.
+        // POST /bridge/reset-confirm — anonymous: one-time token + new password.
         case $method === 'POST' && $path === 'reset-confirm':
             $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
             Auth\gateLogin($ip);
@@ -215,7 +215,7 @@ try {
 
         // ——— first-visit setup: the wizard's two doors ———
 
-        // Route: GET /api/setup/status — public.needed = no accounts exist yet;
+        // Route: GET /bridge/setup/status — public.needed = no accounts exist yet;
         // themes = the theme contract's installed wares (dir with a theme.json).
         case $method === 'GET' && $path === 'setup/status':
             try {
@@ -224,7 +224,7 @@ try {
                 $needed = true; // no account store = nothing set up yet
             }
             $themes = [];
-            foreach (glob(dirname(__DIR__) . '/themes/*', GLOB_ONLYDIR) ?: [] as $themeDir) {
+            foreach (glob(__DIR__ . '/templates/*', GLOB_ONLYDIR) ?: [] as $themeDir) {
                 $themeName = basename($themeDir);
                 if (preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*$#', $themeName) === 1 && is_file($themeDir . '/theme.json')) {
                     $themes[] = $themeName;
@@ -233,7 +233,7 @@ try {
             echo json_encode(['needed' => $needed, 'themes' => $themes]);
             break;
 
-        // Route: POST /api/setup — public, but only while the bakery has no accounts.
+        // Route: POST /bridge/setup — public, but only while the bakery has no accounts.
         // Creates the first admin, writes brand settings, and logs the founder in
         // (Auth\login() re-reads the same user/password keys from the body).
         case $method === 'POST' && $path === 'setup':
@@ -265,7 +265,7 @@ try {
                 Router\refuse(400, 'Setup needs the full batter: user, site name and a password of 8+ characters.');
             }
             if (preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*$#', $theme) !== 1
-                || !is_file(dirname(__DIR__) . '/themes/' . $theme . '/theme.json')) {
+                || !is_file(__DIR__ . '/templates/' . $theme . '/theme.json')) {
                 Router\refuse(400, "Unknown theme: {$theme}");
             }
             Accounts\add($user, password_hash($password, PASSWORD_ARGON2ID), 'admin');
@@ -306,7 +306,7 @@ try {
                 Router\refuse(400, 'Every bakery needs a name — site name required.');
             }
             if (preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*$#', $settings['theme']) !== 1
-                || !is_file(dirname(__DIR__) . '/themes/' . $settings['theme'] . '/theme.json')) {
+                || !is_file(__DIR__ . '/templates/' . $settings['theme'] . '/theme.json')) {
                 Router\refuse(400, "Unknown theme: {$settings['theme']}");
             }
             if ($settings['home'] !== '' && preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*$#', $settings['home']) !== 1) {
@@ -410,7 +410,7 @@ try {
             echo json_encode($types, JSON_UNESCAPED_SLASHES);
             break;
 
-        // Plugin API routes: /api/plugin/<name>/<route> — auth/CSRF enforced by the contract.
+        // Plugin API routes: /bridge/plugin/<name>/<route> — auth/CSRF enforced by the contract.
         case preg_match('#^(GET|POST|PUT|DELETE)$#', $method) === 1
             && preg_match('#^plugin/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             [, $pluginName, $pluginRoute] = explode('/', $path);
@@ -564,7 +564,7 @@ try {
                                 'slug' => $slug,
                                 'name' => $file['name'],
                                 'size' => $file['size'],
-                                'url' => "/api/media/{$type}/{$slug}/" . rawurlencode((string)$file['name']),
+                                'url' => "/bridge/media/{$type}/{$slug}/" . rawurlencode((string)$file['name']),
                             ];
                         }
                     } catch (\Throwable) {
@@ -683,7 +683,7 @@ try {
             }
             break;
 
-        // Route: GET /api/page/{type}/{slug} — raw markdown, body passthrough (not JSON).
+        // Route: GET /bridge/page/{type}/{slug} — raw markdown, body passthrough (not JSON).
         case $method === 'GET' && preg_match('#^page/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             [, $type, $slug] = explode('/', $path);
             $raw = Store\read($type, $slug);
@@ -707,7 +707,7 @@ try {
 
         // ——— public JSON API: read-only, per page — Schmarrn doubles as a
         // ——— quick-deploy backend. Anonymous by design; CORS opens wide (GET only).
-        // Route: GET /api/public/{type}/{slug} — title, rendered body HTML (or null
+        // Route: GET /bridge/public/{type}/{slug} — title, rendered body HTML (or null
         // when the cache is stale/missing), sibling pages for menus, page-local files.
         case $method === 'GET' && preg_match('#^public/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             [, $type, $slug] = explode('/', $path);
@@ -730,7 +730,7 @@ try {
                 $files[] = [
                     'name' => $file['name'],
                     'size' => $file['size'],
-                    'url' => "/api/media/{$type}/{$slug}/" . rawurlencode((string)$file['name']),
+                    'url' => "/bridge/media/{$type}/{$slug}/" . rawurlencode((string)$file['name']),
                 ];
             }
             echo json_encode([
@@ -743,7 +743,7 @@ try {
             ], JSON_UNESCAPED_SLASHES);
             break;
 
-        // Route: POST /api/page/{type}/{slug} — create (unfold) a fresh page; 409 if it exists.
+        // Route: POST /bridge/page/{type}/{slug} — create (unfold) a fresh page; 409 if it exists.
         case $method === 'POST' && preg_match('#^page/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             if (!Auth\check()) {
                 Router\refuse(401, 'The kitchen door is locked — log in first.');

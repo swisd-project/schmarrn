@@ -6,7 +6,7 @@ If code and this document disagree, one of them is a bug: fix both or neither.
 
 ## The three serving doors
 
-`api/serve.php` `page()` serves every page through one of three doors. A theme
+`bridge/serve.php` `page()` serves every page through one of three doors. A theme
 must look right and behave right through **all three**:
 
 | Door | Who | Body content | Slides at theme-JS execution |
@@ -17,7 +17,7 @@ must look right and behave right through **all three**:
 
 **Readiness law for theme JavaScript:** never assume your markup exists when
 your script runs. Two of three doors deliver the body *asynchronously*. Scan
-immediately *and* watch (`MutationObserver`) — see `themes/*/assets/deck.js`
+immediately *and* watch (`MutationObserver`) — see `bridge/templates/*/assets/deck.js`
 for the reference implementation (wait, wire, rewire on node replacement,
 teardown via `AbortController`).
 
@@ -28,14 +28,14 @@ theme and style switches apply to cached pages without a re-publish.
 
 - `page.html` — required. The classical template.
 - `slide.html` — optional. Used when a page's style resolves to `slide`;
-  falls back to `page.html` when absent (`themeTemplate()` in `api/serve.php`).
+  falls back to `page.html` when absent (`themeTemplate()` in `bridge/serve.php`).
   A slide template **must** wrap the body in an element with class
-  `slide-stage` — the deck companion keys on it (`themes/*/assets/deck.js`
+  `slide-stage` — the deck companion keys on it (`bridge/templates/*/assets/deck.js`
   scans for `.slide-stage > .sm-slide`), so a slide template without the
   stage silently has no deck.
 - If the configured theme directory is missing or broken, core serves a
   built-in house template — a broken theme degrades, never a dead site.
-- Templates are filled by `fill()` (`api/serve.php`) — the single choke point
+- Templates are filled by `fill()` (`bridge/serve.php`) — the single choke point
   for every serving path (page, shell, 404).
 
 ## Placeholders
@@ -56,7 +56,7 @@ through untouched — a typo is visible text, not a crash.
 `sm-` is the shared namespace between core, the render pipeline, the editor,
 and themes. Ownership:
 
-- **Emitted by core serving** (`api/serve.php`): `sm-nav`, `sm-fallback`,
+- **Emitted by core serving** (`bridge/serve.php`): `sm-nav`, `sm-fallback`,
   `sm-notfound`, `claim`, `logo`.
 - **Emitted by the render pipeline** (`src/lib/modules.ts`): `sm-slide`,
   `sm-module`, `sm-details`, `sm-embed`, `sm-image`, `sm-empty-slot`,
@@ -76,7 +76,7 @@ document and the themes move together.
 
 Core reads exactly one field today: `defaultStyle` (`"slide"` or `"classical"`,
 read by `styleOf()`). A `theme.json` file must exist for the theme to be
-offered at setup and accepted in settings (`api/index.php`).
+offered at setup and accepted in settings (`bridge/index.php`).
 
 ## Assets
 
@@ -93,8 +93,8 @@ offered at setup and accepted in settings (`api/index.php`).
 `classical` and `slide` are the only styles. Their homes, all of which must
 move together when a style is added:
 
-1. `styleOf()` regex — `api/serve.php` (frontmatter `style:` byte-peek)
-2. Site setting validation — `api/site.php` (PUT rejects anything else)
+1. `styleOf()` regex — `bridge/serve.php` (frontmatter `style:` byte-peek)
+2. Site setting validation — `bridge/site.php` (PUT rejects anything else)
 3. Template filenames — `slide.html` / `page.html`
 4. Manifest `defaultStyle` — `theme.json`
 5. Editor selects — `STYLE_OPTIONS` in `src/public/edit.ts` (single home
