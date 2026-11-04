@@ -59,27 +59,26 @@ const EDIT_CSS = `
   outline:2px dashed rgba(0,207,255,.55); outline-offset:2px;
 }
 [data-sm-edit-root]>[data-sm-selected] { outline:3px solid var(--color-neon-blue); outline-offset:3px; }
-/* the ONE management door, user-simplified twice 2026-11-04: "a simple rect with
-   a few menu items that slides in and out" — ONE rect, not a rect that pushes
-   out another rect. The tab itself is the drawer: collapsed it is the thin
-   rect with the grey triangle; clicking it SLIDES it wider and reveals the
-   items inside (overflow-hidden does the revealing — the wall slides, the
-   letters are standing behind it). Height never changes, the rect never
-   leaves the right edge, no other animation exists. White rect, grey font. */
+/* the ONE management door, user-corrected 2026-11-04: the rect follows the
+   size of its children automatically — NO fixed 8.5rem/5.5rem guesses that
+   guillotine the last item. The door sizes itself to its content (auto) and
+   the JS measures the hop, animating width/height so it still slides; after
+   each transition the inline sizes are cleared again, so the rect keeps
+   following its children forever. Center-anchored (translateY(-50%)), so it
+   grows symmetrically and never jumps. White rect, grey font. */
 .sm-admin-root {
-  position:fixed; right:0; top:calc(50% - 2.75rem); width:1.75rem; height:5.5rem; padding:0;
+  position:fixed; right:0; top:50%; transform:translateY(-50%); padding:.45rem;
   overflow:hidden; background:#fff; border:2px solid #e3dccd; border-right:none;
   border-radius:6px 0 0 6px; box-shadow:0 1px 4px rgba(0,0,0,.10);
-  transition:width .15s ease; cursor:pointer;
+  transition:width .15s ease, height .15s ease; cursor:pointer;
   font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size:12.5px;
 }
-.sm-admin-root.open { width:8.5rem; cursor:auto; }
-.sm-admin-tri { display:block; width:0; height:0; margin:.5rem auto 0;
+.sm-admin-root.open { cursor:auto; }
+.sm-admin-tri { display:block; width:0; height:0; margin:.15rem auto .45rem;
   border-top:6px solid transparent; border-bottom:6px solid transparent;
   border-right:7px solid #767676; pointer-events:none;
 }
-.sm-admin-menu { visibility:hidden; display:flex; flex-direction:column; gap:.15rem; padding:.35rem; }
-.sm-admin-root.open .sm-admin-menu { visibility:visible; }
+.sm-admin-menu { display:none; flex-direction:column; gap:.15rem; }
 .sm-admin-menu button {
   display:block; width:100%; text-align:left; white-space:nowrap;
   background:none; border:none; padding:.5rem .65rem; border-radius:4px;
@@ -301,11 +300,33 @@ async function boot(root: HTMLElement): Promise<void> {
     root.setAttribute('aria-expanded', 'false');
     let open = false;
 
-    const toggle = () => {
-      open = !open;
+    /** Natural-size FLIP: the rect auto-sizes to its children; the JS measures
+     *  before/after, animates the hop, then clears the inline sizes so the
+     *  rect keeps following its content forever (no fixed guesses, no clip). */
+    function applyOpen(next: boolean): void {
+      open = next;
       root.classList.toggle('open', open);
       root.setAttribute('aria-expanded', open ? 'true' : 'false');
-    };
+      const fromW = root.offsetWidth;
+      const fromH = root.offsetHeight;
+      menu.style.display = open ? 'flex' : 'none';
+      const toW = root.offsetWidth;
+      const toH = root.offsetHeight;
+      if (fromW === toW && fromH === toH) return; // nothing to slide
+      root.style.transition = 'none';
+      root.style.width = `${fromW}px`;
+      root.style.height = `${fromH}px`;
+      void root.offsetWidth; // commit the start frame before the slide
+      root.style.transition = '';
+      root.style.width = `${toW}px`;
+      root.style.height = `${toH}px`;
+      root.addEventListener('transitionend', () => {
+        root.style.width = '';
+        root.style.height = '';
+      }, { once: true });
+    }
+
+    const toggle = () => applyOpen(!open);
     root.addEventListener('click', toggle);
     root.addEventListener('keydown', (e) => {
       if ((e.key === 'Enter' || e.key === ' ') && (e.target as HTMLElement).closest('button') === null) {
@@ -324,9 +345,6 @@ async function boot(root: HTMLElement): Promise<void> {
         role: 'menuitem',
         onclick: (e) => {
           e.stopPropagation(); // opening Backend is navigation, not a toggle
-          open = false;
-          root.classList.remove('open');
-          root.setAttribute('aria-expanded', 'false');
           window.location.href = backHref(window.location.pathname, window.location.hash);
         }
       }, ['Backend']),
@@ -349,9 +367,7 @@ async function boot(root: HTMLElement): Promise<void> {
 
     document.addEventListener('click', (e) => {
       if (!open || (e.target as HTMLElement).closest('.sm-admin-root') !== null) return;
-      open = false;
-      root.classList.remove('open');
-      root.setAttribute('aria-expanded', 'false');
+      applyOpen(false);
     });
 
     document.addEventListener('click', (e) => {
