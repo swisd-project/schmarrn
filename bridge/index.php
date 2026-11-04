@@ -25,16 +25,16 @@ if (!in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)) {
     ini_set('log_errors', '1');
 }
 
-require __DIR__ . '/router.php';
-require __DIR__ . '/auth.php';
-require __DIR__ . '/accounts.php';
-require __DIR__ . '/mail.php';
-require __DIR__ . '/lock.php';
-require __DIR__ . '/store.php';
-require __DIR__ . '/cache.php';
-require __DIR__ . '/site.php';
-require __DIR__ . '/plugins.php';
-require __DIR__ . '/serve.php'; // public JSON API reuses the serving engine's byte-peeks
+require_once __DIR__ . '/router.php';
+require_once __DIR__ . '/auth.php';      // pulls accounts.php + router.php itself now
+require_once __DIR__ . '/accounts.php';
+require_once __DIR__ . '/mail.php';
+require_once __DIR__ . '/lock.php';
+require_once __DIR__ . '/store.php';
+require_once __DIR__ . '/cache.php';
+require_once __DIR__ . '/site.php';
+require_once __DIR__ . '/plugins.php';
+require_once __DIR__ . '/serve.php'; // public JSON API reuses the serving engine's byte-peeks
 
 /**
  * The editor leash: published HTML is CLIENT-rendered and stored as-is, so

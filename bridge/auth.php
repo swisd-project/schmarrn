@@ -16,6 +16,11 @@ declare(strict_types=1);
 namespace Auth;
 
 // Library files stand alone: each requires its dependencies explicitly.
+// accounts.php is a HARD dependency: Auth validates every session against the
+// account store — a serving path missing this require silently de-authorizes
+// live sessions (real kink, found 2026-11-04: the public front page never
+// injected the editor though /bridge/session said "authenticated").
+require_once __DIR__ . '/accounts.php';
 require_once __DIR__ . '/router.php';
 
 const MAX_ATTEMPTS = 6;
