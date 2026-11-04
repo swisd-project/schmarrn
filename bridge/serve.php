@@ -84,7 +84,7 @@ function page(string $type, string $slug, array $site): never
             . "\n" . '<script type="module" src="/bridge/assets/edit.esm.js"></script>';
         $theme = themeTemplate($site, styleOf($type, $slug, $site));
         $title = titleOf($type, $slug, $slug);
-        echo fill($theme, $site, $title, $html, seoHead($title, $site['name'], "{$type}/{$slug}"), $slug, $type, true);
+        echo fill($theme, $site, $title, $html, seoHead($title, $site['name'], "{$type}/{$slug}"), $slug, $type);
         exit;
     }
     $html = \Cache\html($type, $slug);
@@ -176,7 +176,7 @@ HTML;
 /** Fill the theme template. Body HTML is trusted (walled pipeline); everything else escapes.
  *  Plugin content filters (p6 slice 2) transform the body first; plugin placeholders (p6)
  *  merge in last — manifest-declared only, values are the plugin's trusted HTML. */
-function fill(array $theme, array $site, string $title, string $bodyHtml, string $seoHead, string $currentSlug = '', string $type = '', bool $editing = false): string
+function fill(array $theme, array $site, string $title, string $bodyHtml, string $seoHead, string $currentSlug = '', string $type = ''): string
 {
     /** Plugin content filters (p6 slice 2) transform the stored body HTML — serve-time, live. */
     $bodyHtml = \Plugins\contentFilters(['site' => $site, 'type' => $type, 'slug' => $currentSlug, 'title' => $title], $bodyHtml);
@@ -194,7 +194,7 @@ function fill(array $theme, array $site, string $title, string $bodyHtml, string
         '{{pageTitle}}' => htmlspecialchars($title, ENT_QUOTES),
         '{{bodyHtml}}' => $bodyHtml,
         '{{seoHead}}' => $seoHead,
-        '{{navHtml}}' => navHtml($site, $currentSlug, $editing),
+        '{{navHtml}}' => navHtml($site, $currentSlug),
         '{{themeBase}}' => htmlspecialchars($theme['base'], ENT_QUOTES),
         '{{year}}' => date('Y'),
     ];
@@ -205,11 +205,11 @@ function fill(array $theme, array $site, string $title, string $bodyHtml, string
 }
 
 /** The menu: published pages of "pages" as links — the navitem entity, core-owned.
- *  Classical style's spine. In editor mode the nav is also the GHOST: it carries
- *  data-sm-nav (the core editor outlines it) and a data-sm-nav-add plus that opens
- *  the new-page modal (edit.esm.js). Ghost exists only while editing — published
- *  HTML ships without either attribute, and templates never wire nav themselves. */
-function navHtml(array $site, string $currentSlug, bool $editing = false): string
+ *  Classical style's spine. Plain core nav, same bytes for editors and visitors —
+ *  the in-page nav ghost (data-sm-nav + data-sm-nav-add plus) retired 2026-11-04:
+ *  menu management lives in the dashboard overlay (menu editing is a management
+ *  concern, not a live-canvas one). Templates never wire nav themselves. */
+function navHtml(array $site, string $currentSlug): string
 {
     $items = [];
     foreach (\Store\listAll()['pages'] ?? [] as $candidate) {
@@ -221,12 +221,10 @@ function navHtml(array $site, string $currentSlug, bool $editing = false): strin
         $items[] = '<a href="/' . htmlspecialchars($slug, ENT_QUOTES) . '"' . $current . '>'
             . htmlspecialchars(titleOf('pages', $slug, $slug), ENT_QUOTES) . '</a>';
     }
-    if ($items === [] && !$editing) {
+    if ($items === []) {
         return '';
     }
-    $ghost = $editing ? '<span data-sm-nav-add class="sm-nav-add" title="New page">+</span>' : '';
-    return '<nav class="sm-nav"' . ($editing ? ' data-sm-nav' : '') . '>'
-        . implode('', $items) . $ghost . '</nav>';
+    return '<nav class="sm-nav">' . implode('', $items) . '</nav>';
 }
 
 /** Logo setting → URL. Absolute or root-relative passes through; anything else roots it. */

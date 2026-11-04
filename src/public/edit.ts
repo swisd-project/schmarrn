@@ -56,16 +56,6 @@ const EDIT_CSS = `
   outline:2px dashed rgba(0,207,255,.55); outline-offset:2px;
 }
 [data-sm-edit-root]>[data-sm-selected] { outline:3px solid var(--color-neon-blue); outline-offset:3px; }
-/* nav ghost (core, not a template concern): the nav is data-sm-nav only while
-   editing — published HTML never carries the attribute, so a plain theme render
-   is untouched. The plus reuses the block ghost's dashed neon-blue language. */
-[data-sm-nav] { outline:2px dashed rgba(0,207,255,.45); outline-offset:6px; }
-[data-sm-nav] .sm-nav-add {
-  display:inline-block; margin-left:.5rem; padding:0 .45rem;
-  border:2px dashed rgba(0,207,255,.55); border-radius:4px;
-  color:rgba(0,207,255,.85); font-weight:800; line-height:1.5; cursor:pointer;
-}
-[data-sm-nav] .sm-nav-add:hover { color:#fff; background:rgba(0,207,255,.18); }
 .sm-edit-btn {
   position:fixed; right:1.25rem; bottom:1.25rem; z-index:9998;
   width:3rem; height:3rem; display:grid; place-items:center; gap:0;
@@ -308,11 +298,6 @@ async function boot(root: HTMLElement): Promise<void> {
     });
     for (let i = 0; i < 3; i += 1) burger.append(el('span'));
     document.body.append(burger);
-
-    // The nav ghost: Serve ships data-sm-nav-add only inside the editor nav —
-    // the plus exists in no published byte. Click → frontmatter modal → new page.
-    const navAdd = document.querySelector<HTMLElement>('[data-sm-nav-add]');
-    navAdd?.addEventListener('click', () => openNavItemModal());
 
     document.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
@@ -899,70 +884,6 @@ async function boot(root: HTMLElement): Promise<void> {
       field('Title', title),
       field('Slug', slugInput),
       field('Page type — a pre-made page to fill', typeSelect),
-      err,
-      el('button', { class: 'sm-btn sm-btn-primary', type: 'submit' }, ['Create page'])
-    ]);
-    openModal('New page', form);
-  }
-
-  /** The nav ghost's plus: frontmatter as textfields — date and tags generated,
-   *  body the simple hello-world starter. Core function: creates the page, walks there. */
-  function openNavItemModal(): void {
-    const title = el('input', { class: 'sm-input', placeholder: 'The page title' });
-    const slugInput = el('input', { class: 'sm-input', placeholder: 'the-page-slug' });
-    const err = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:0' });
-
-    // Slug suggestion: types itself from the title until the user lays a hand on it.
-    title.addEventListener('input', () => {
-      if (slugInput.dataset.touched !== undefined) return;
-      slugInput.value = title.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-    });
-    slugInput.addEventListener('input', () => { slugInput.dataset.touched = '1'; });
-
-    const form = el('form', {
-      onsubmit: (e: Event) => {
-        e.preventDefault();
-        const pageTitle = title.value.trim();
-        const nextSlug = slugInput.value.trim();
-        if (pageTitle === '') {
-          err.textContent = 'The title cannot be empty.';
-          err.style.display = '';
-          return;
-        }
-        if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(nextSlug)) {
-          err.textContent = 'Slug: lowercase letters, digits and hyphens only.';
-          err.style.display = '';
-          return;
-        }
-        const lines = [
-          '---',
-          `title: ${JSON.stringify(pageTitle)}`,
-          `slug: ${nextSlug}`,
-          'published: true',
-          'draft: false',
-          `date: ${new Date().toISOString().slice(0, 10)}`,
-          'tags: []',
-          '---'
-        ];
-        const nextRaw = `${lines.join('\n')}\n\n# Hello world\n`;
-        void (async () => {
-          try {
-            await apiJson(`/bridge/page/pages/${nextSlug}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'text/markdown' },
-              body: nextRaw
-            });
-            document.querySelector('.sm-edit-layer')?.remove();
-            window.location.href = `/${nextSlug}`;
-          } catch (e2) {
-            err.textContent = e2 instanceof Error ? e2.message : String(e2);
-            err.style.display = '';
-          }
-        })();
-      }
-    }, [
-      field('Title', title),
-      field('Slug', slugInput),
       err,
       el('button', { class: 'sm-btn sm-btn-primary', type: 'submit' }, ['Create page'])
     ]);

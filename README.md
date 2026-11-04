@@ -80,9 +80,9 @@ then upload the **contents of `build/` into a folder named `_`** on the host. No
 
 1. Open `https://your-host.example/_/` — the setup wizard appears (site name, theme, admin account).
 2. After setup you land on the public site at `/`. The public face never wears a login form.
-3. Log in any time at `/_/`. Editing happens **on the live page**: click a block → floating menu → edit → save, live instantly. The burger (bottom-right) opens the full-screen overlay: page settings, the site-wide template (admins), ＋ New page from a page-type scaffold, log out.
-4. The **nav is a core entity** — while editing, the menu shows a ghost outline with a `＋` slot: opens a frontmatter modal (title, auto-typed slug; date and tags generated), creates a simple hello-world page and walks you straight into it. Ghosts exist only while editing; published HTML never carries them.
-5. The dashboard at `/_/` stays management-only: page tree (rename/delete/upload), site settings, accounts, media, plugins.
+3. Log in any time at `/_/`. Editing happens **on the live page**: click a block → floating menu → edit → save, live instantly. The burger (bottom-right) opens the full-screen overlay with a tab bar — **Contents** (page tree + New page + Upload .md + Media) | **Settings** (site form, admins) | **Plugins & Templates** (enable/disable installed plugins, template inventory, admins) | **Users** (accounts, admins) — plus log out.
+4. The **nav is a plain core nav** — published pages of `pages` as links, identical bytes for editors and visitors. In-page menu editing (the old ghost plus) retired 2026-11-04: menu management lives in the dashboard overlay, not on the live canvas.
+5. The dashboard at `/_/` stays management-only: the overlay tabs above carry everything; picking a page in Contents walks you onto the live page.
 
 `/_` canonicalizes to `/_/` — the trailing slash is load-bearing.
 

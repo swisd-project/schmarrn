@@ -1,7 +1,7 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
-  // a burger opens the full-screen overlay (Pages / Site / Accounts / Media).
-  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, type PluginRef } from '$lib/api';
+  // a burger opens the full-screen overlay (Contents / Settings / Plugins & Templates / Users).
+  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, listTemplates, type PluginRef, type TemplateRef } from '$lib/api';
   import { schemaFor, withDraftFlag } from '$lib/schema';
   import { splitFrontmatter } from '$lib/blocks';
   import { parseMdms } from '@swisd-project/mdms';
@@ -172,9 +172,9 @@
   }
 
   // ——— the burger overlay: Pages / Site / Accounts / Media / Plugins ———
-  type Tab = 'pages' | 'site' | 'accounts' | 'media' | 'plugins';
+  type Tab = 'contents' | 'settings' | 'wares' | 'users';
   let menuOpen = $state(false);
-  let tab = $state<Tab>('pages');
+  let tab = $state<Tab>('contents');
 
   function openMenu() {
     menuOpen = true;
@@ -187,11 +187,15 @@
 
   function showTab(next: Tab) {
     tab = next;
-    if (next === 'media') void loadAllMedia(); // lazy — the tab pays for itself
-    if (next === 'plugins') void loadPlugins();
+    if (next === 'contents') void loadAllMedia(); // the media pane pays for itself (lazy)
+    if (next === 'users') void loadAccounts();
+    if (next === 'wares') {
+      void loadPlugins();
+      void loadTemplates();
+    }
   }
 
-  // ——— plugins tab (admin, lazy) ———
+  // ——— plugins (admin, lazy, part of "Plugins & Templates") ———
   let plugins = $state<readonly PluginRef[]>([]);
   let pluginsBusy = $state(false);
   let pluginsError = $state('');
@@ -246,6 +250,24 @@
       mediaError = e instanceof Error ? e.message : String(e);
     } finally {
       mediaBusy = false;
+    }
+  }
+
+  // ——— templates (theme-contract wares, admin, lazy, part of "Plugins & Templates") ———
+  let templates = $state<readonly TemplateRef[]>([]);
+  let templatesBusy = $state(false);
+  let templatesError = $state('');
+
+  async function loadTemplates() {
+    if (templatesBusy) return;
+    templatesBusy = true;
+    templatesError = '';
+    try {
+      templates = await listTemplates();
+    } catch (e) {
+      templatesError = e instanceof Error ? e.message : String(e);
+    } finally {
+      templatesBusy = false;
     }
   }
 
@@ -524,19 +546,16 @@
     </div>
 
     <nav class="flex gap-2 px-4 pb-4 flex-wrap" aria-label="Menu sections">
-      <button class="btn {tab === 'pages' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('pages')}>Pages</button>
+      <button class="btn {tab === 'contents' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('contents')}>Contents</button>
       {#if role === 'admin'}
-        <button class="btn {tab === 'site' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('site')}>Site</button>
-        <button class="btn {tab === 'accounts' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('accounts')}>Accounts</button>
-      {/if}
-      <button class="btn {tab === 'media' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('media')}>Media</button>
-      {#if role === 'admin'}
-        <button class="btn {tab === 'plugins' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('plugins')}>Plugins</button>
+        <button class="btn {tab === 'settings' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('settings')}>Settings</button>
+        <button class="btn {tab === 'wares' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('wares')}>Plugins & Templates</button>
+        <button class="btn {tab === 'users' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('users')}>Users</button>
       {/if}
     </nav>
 
     <div class="px-4 pb-12 max-w-4xl mx-auto w-full">
-      {#if tab === 'pages'}
+      {#if tab === 'contents'}
         {#if index}
           {#each Object.entries(index) as [type, pages] (type)}
             <section class="mg mb-6">
@@ -589,7 +608,33 @@
           </label>
           {#if uploadError}<p class="alert alert-err m-0" role="alert">{uploadError}</p>{/if}
         </section>
-      {:else if tab === 'site' && role === 'admin'}
+
+        <section class="mg flex flex-col gap-3">
+          <h4 class="mg-h">Media</h4>
+          {#if mediaBusy}
+            <p class="italic text-ink-soft">Sweeping the pantry…</p>
+          {:else if mediaError}
+            <p class="alert alert-err m-0" role="alert">{mediaError}</p>
+          {:else if overlayMedia.length === 0}
+            <p class="m-0 italic text-ink-soft">No media yet — upload lives inside the image and video modals.</p>
+          {:else}
+            {#if mediaNote}<p class="alert alert-ok m-0">{mediaNote}</p>{/if}
+            <div class="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(10rem,1fr))]">
+              {#each overlayMedia as item (item.type + '/' + item.slug + '/' + item.name)}
+                <button class="card text-left" title={`Copy URL — ${item.url}`} onclick={() => copyMediaUrl(item)}>
+                  {#if /\.(png|jpe?g|gif|webp|svg)$/i.test(item.name)}
+                    <img class="w-full aspect-video object-cover" src={item.url} alt={item.name} loading="lazy" />
+                  {:else}
+                    <div class="w-full aspect-video bg-crust grid place-items-center text-xs text-ink-soft">{item.name.split('.').pop()?.toUpperCase()}</div>
+                  {/if}
+                  <span class="text-xs font-bold truncate">{item.name}</span>
+                  <span class="text-xs text-ink-soft truncate">{item.slug}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </section>
+      {:else if tab === 'settings' && role === 'admin'}
         {#if siteSettings}
           <form class="mg flex flex-col gap-3 max-w-md" onsubmit={saveSiteNow}>
             <h4 class="mg-h">Site settings</h4>
@@ -629,7 +674,7 @@
         {:else}
           <p class="italic text-ink-soft">Reaching for the settings…</p>
         {/if}
-      {:else if tab === 'accounts' && role === 'admin'}
+      {:else if tab === 'users' && role === 'admin'}
         <section class="mg mb-6">
           <h4 class="mg-h">Accounts</h4>
           <ul class="list-none p-0 m-0 flex flex-col gap-1">
@@ -663,30 +708,7 @@
           </label>
           <button type="submit" class="btn btn-primary self-start">Add account</button>
         </form>
-      {:else if tab === 'media'}
-        {#if mediaBusy}
-          <p class="italic text-ink-soft">Sweeping the pantry…</p>
-        {:else if mediaError}
-          <p class="alert alert-err" role="alert">{mediaError}</p>
-        {:else if overlayMedia.length === 0}
-          <div class="mg py-12 text-center"><p class="m-0 italic text-ink-soft">No media yet — upload lives inside the image and video modals.</p></div>
-        {:else}
-          {#if mediaNote}<p class="alert alert-ok">{mediaNote}</p>{/if}
-          <div class="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(10rem,1fr))]">
-            {#each overlayMedia as item (item.type + '/' + item.slug + '/' + item.name)}
-              <button class="card text-left" title={`Copy URL — ${item.url}`} onclick={() => copyMediaUrl(item)}>
-                {#if /\.(png|jpe?g|gif|webp|svg)$/i.test(item.name)}
-                  <img class="w-full aspect-video object-cover" src={item.url} alt={item.name} loading="lazy" />
-                {:else}
-                  <div class="w-full aspect-video bg-crust grid place-items-center text-xs text-ink-soft">{item.name.split('.').pop()?.toUpperCase()}</div>
-                {/if}
-                <span class="text-xs font-bold truncate">{item.name}</span>
-                <span class="text-xs text-ink-soft truncate">{item.slug}</span>
-              </button>
-            {/each}
-          </div>
-        {/if}
-      {:else if tab === 'plugins' && role === 'admin'}
+      {:else if tab === 'wares' && role === 'admin'}
         <section class="mg mb-6">
           <h4 class="mg-h">Plugins</h4>
           {#if pluginsBusy && plugins.length === 0}
@@ -729,6 +751,30 @@
           {/if}
           {#if pluginsError && plugins.length > 0}<p class="alert alert-err" role="alert">{pluginsError}</p>{/if}
           {#if pluginsNote}<p class="alert alert-ok">{pluginsNote}</p>{/if}
+        </section>
+        <section class="mg flex flex-col gap-2">
+          <h4 class="mg-h">Templates</h4>
+          {#if templatesBusy && templates.length === 0}
+            <p class="italic text-ink-soft">Reading the bake-shop wall…</p>
+          {:else if templatesError && templates.length === 0}
+            <p class="alert alert-err" role="alert">{templatesError}</p>
+          {:else}
+            <ul class="list-none p-0 m-0 flex flex-col gap-2">
+              {#each templates as template (template.name)}
+                <li class="card">
+                  <p class="m-0 font-bold">
+                    {template.title} <span class="text-xs text-ink-soft">v{template.version}</span>
+                    {#if template.active}<span class="badge badge-live ml-2">active</span>{/if}
+                  </p>
+                  {#if template.description}<p class="m-0 text-sm text-ink-soft">{template.description}</p>{/if}
+                  {#if template.styles.length > 0}
+                    <p class="m-0 text-xs text-ink-soft">styles: {template.styles.join(', ')}</p>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+            <p class="m-0 text-xs text-ink-soft">Install and uninstall come from the Vitrine shelf — planned, not built yet.</p>
+          {/if}
         </section>
       {/if}
     </div>

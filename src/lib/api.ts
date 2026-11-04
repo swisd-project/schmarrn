@@ -187,6 +187,21 @@ export function setPlugins(enabled: Readonly<Record<string, boolean>>): Promise<
   }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
 }
 
+// ——— templates (theme-contract wares, admin inventory) ———
+
+export interface TemplateRef {
+  readonly name: string;
+  readonly title: string;
+  readonly version: string;
+  readonly description: string;
+  readonly styles: readonly string[];
+  readonly active: boolean;
+}
+
+export function listTemplates(): Promise<readonly TemplateRef[]> {
+  return fetch('/bridge/templates').then((r) => json<readonly TemplateRef[]>(r));
+}
+
 // ——— account management (admin) ———
 
 export function listAccounts(): Promise<readonly AccountRef[]> {

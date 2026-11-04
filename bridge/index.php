@@ -410,6 +410,37 @@ try {
             echo json_encode($types, JSON_UNESCAPED_SLASHES);
             break;
 
+        // Route: GET /bridge/templates — the theme contract's installed wares with
+        // their manifest face plus the active flag. Admin-only: the ware inventory
+        // (like the Plugins tab) is the operator's concern, not editors'.
+        case $method === 'GET' && $path === 'templates':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
+            }
+            $activeTheme = \Site\load()['theme'] ?? '';
+            $wares = [];
+            foreach (glob(__DIR__ . '/templates/*', GLOB_ONLYDIR) ?: [] as $themeDir) {
+                $name = basename((string)$themeDir);
+                if (!is_file($themeDir . '/theme.json') || preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*$#', $name) !== 1) {
+                    continue;
+                }
+                $manifest = json_decode((string)file_get_contents($themeDir . '/theme.json'), true);
+                $wares[] = [
+                    'name' => $name,
+                    'title' => is_string($manifest['title'] ?? null) ? $manifest['title'] : $name,
+                    'version' => is_string($manifest['version'] ?? null) ? $manifest['version'] : '0.0.0',
+                    'description' => is_string($manifest['description'] ?? null) ? $manifest['description'] : '',
+                    'styles' => (array)($manifest['styles'] ?? []),
+                    'active' => $activeTheme === $name,
+                ];
+            }
+            usort($wares, fn($a, $b) => strcmp((string)$a['name'], (string)$b['name']));
+            echo json_encode($wares, JSON_UNESCAPED_SLASHES);
+            break;
+
         // Plugin API routes: /bridge/plugin/<name>/<route> — auth/CSRF enforced by the contract.
         case preg_match('#^(GET|POST|PUT|DELETE)$#', $method) === 1
             && preg_match('#^plugin/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:

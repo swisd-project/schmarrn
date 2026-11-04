@@ -28,8 +28,8 @@
 │   └── (*.mts)                   # dev probes
 ├── bridge/                       # PHP core — front controller + libs, no framework; lives under /bridge (bit-scan prey no longer fed)
 │   ├── .htaccess                 # legacy (root .htaccess is the law now)
-│   ├── index.php                 # JSON routes: login/session, pages, drafts, publish(+html), pagetypes, public API, media, plugins
-│   ├── serve.php                 # public serving engine: dispatch, templates, cached HTML, fallback shell, SEO head, plugin fills, editor injection + nav ghost (core-owned data-sm-nav / data-sm-nav-add, editor-only); styleOf: page frontmatter → GLOBAL site style → theme default
+│   ├── index.php                 # JSON routes: login/session, pages, drafts, publish(+html), pagetypes, templates (admin theme inventory), public API, media, plugins
+│   ├── serve.php                 # public serving engine: dispatch, templates, cached HTML, fallback shell, SEO head, plugin fills, editor injection (data-sm-edit-root + edit.esm.js; nav ghost RETIRED 2026-11-04 — navHtml is plain core nav, same bytes for editors and visitors); styleOf: page frontmatter → GLOBAL site style → theme default
 │   ├── site.php                  # brand settings load/save (template < site.local.php) + site assets (.assets/); `style` = GLOBAL template ('' | classical | slide, whitelist-validated)
 │   ├── plugins.php               # p6 capability contract: scan/validate/load/dispatch, state in config/plugins.local.php
 │   ├── router.php
@@ -85,7 +85,7 @@
 │   ├── routes/
 │   │   ├── +layout.svelte        # imports ../lib/app.css (relative — $lib evasion, see GUIDE)
 │   │   ├── +layout.ts            # prerender = true
-│   │   └── +page.svelte          # login/setup + burger overlay (Pages/Site/Accounts/Media/Plugins) — MANAGEMENT-ONLY: picking a page navigates to the live page (canvas retired)
+│   │   └── +page.svelte          # login/setup + burger overlay (Contents | Settings | Plugins & Templates | Users tab bar; Contents merges the page tree + New + Upload .md + Media; wares lists plugins + template inventory) — MANAGEMENT-ONLY: picking a page navigates to the live page (canvas retired)
 │   └── content/                  # install-local user data — GITIGNORED, never committed
 │       ├── pages/                # content types (dirs = types, subdirs = slugs)
 │       │   └── <slug>/index.md   # + .draft.md sidecar + page-local media files
