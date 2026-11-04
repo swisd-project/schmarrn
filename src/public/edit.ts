@@ -16,6 +16,7 @@
 
 import { splitFrontmatter, splitBlocks, joinPage, attr, directiveInner, type Block } from '../lib/blocks';
 import { renderMdms } from '../lib/render';
+import { backHref } from '../lib/back';
 
 // ——— tiny DOM helpers (no framework on the public page) ———
 
@@ -271,15 +272,18 @@ async function boot(root: HTMLElement): Promise<void> {
   let floatMenu: HTMLElement | null = null;
 
   function mountChrome(): void {
-    // The ONE management door (2026-11-04, user order): a fixed admin button at
-    // the right middle. It doesn't re-implement the overlay — it walks to /_,
-    // which auto-opens the tabs when the session is live. Anon never mounts
-    // chrome at all, so this button exists only for bakers.
+    // The ONE management door (2026-11-04, user order after the audit): a fixed
+    // admin button at the right middle. It carries the page it lives on
+    // (?back=<here>) so the overlay's Close returns to THIS page — never a
+    // history guess, never the wrong door. Anon never mounts chrome at all, so
+    // this button exists only for bakers.
     const adminBtn = el('button', {
       class: 'sm-admin-btn',
       title: 'Admin — contents, settings, plugins & templates, users',
       'aria-label': 'Open the admin overlay',
-      onclick: () => (window.location.href = '/_')
+      onclick: () => {
+        window.location.href = backHref(window.location.pathname, window.location.hash);
+      }
     });
     adminBtn.append(el('span'), el('span'), el('span'));
     document.body.append(adminBtn);

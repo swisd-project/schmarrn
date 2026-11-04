@@ -2,6 +2,7 @@
   // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
   // a burger opens the full-screen overlay (Contents / Settings / Plugins & Templates / Users).
   import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, listTemplates, listPagetypes, getDraftRaw, putDraftRaw, publishDraft, type PluginRef, type TemplateRef, type PagetypeRef } from '$lib/api';
+  import { closeTarget } from '$lib/back';
   import { schemaFor, withDraftFlag } from '$lib/schema';
   import { splitFrontmatter } from '$lib/blocks';
   import { renderMdms } from '$lib/render';
@@ -180,6 +181,10 @@
   let menuOpen = $state(false);
   let tab = $state<Tab>('contents');
 
+  /** The dialog takes focus when it mounts (auto-open leaves nothing focused —
+   *  and without it, keyboard flow starts nowhere). Pure desktop manners. */
+  const dialogFocus = (node: HTMLElement) => node.focus();
+
   function openMenu() {
     menuOpen = true;
     if (role === 'admin') void loadSiteSettings(); // warm the site form while the overlay opens
@@ -187,12 +192,14 @@
 
   function closeMenu() {
     menuOpen = false;
-    // THE PAGE comes back: closing the management overlay walks out of /_ to the
-    // page you came from (the admin pill's arrival is a navigation, so history
-    // knows the way home; a fresh history falls back to the front door). Dev
-    // stays inside the SPA — the vite origin's / IS the dashboard.
+    // THE PAGE comes back — deterministically. The pill opened this overlay by
+    // carrying its own page in ?back=; Close walks exactly there. No param
+    // (typed URL, the front door's own ride) → the front door. Dev stays inside
+    // the SPA — the vite origin's / IS the dashboard. Never history.back(): a
+    // restored tab can pass its length check with no real entry to return to
+    // (audited 2026-11-04 — back() no-op = stranded on a blank /_).
     if (import.meta.env.DEV) return;
-    history.length > 1 ? history.back() : (window.location.href = '/');
+    window.location.href = closeTarget(window.location.search);
   }
 
   function showTab(next: Tab) {
@@ -639,10 +646,17 @@
   {/if}
 </main>
 
+<svelte:window onkeydown={(e) => (menuOpen && e.key === 'Escape' ? closeMenu() : null)} />
+
 {#if menuOpen}
+  <!-- Escape lives on WINDOW (see the top-level <svelte:window>): the overlay
+       auto-opens at boot without focus, and a div listener is DEAD until
+       something inside is focused — a keyboard operator trapped in a
+       full-screen overlay is a bug, not a preference. The dialog takes focus
+       itself on mount. -->
   <div class="fixed inset-0 z-40 overflow-auto" role="dialog" aria-modal="true" aria-label="Menu" tabindex="-1"
+    use:dialogFocus
     style="background: linear-gradient(145deg, #fffdf7 0%, #fff8ef 45%, #f9ecd9 100%);"
-    onkeydown={(e) => e.key === 'Escape' && closeMenu()}
   >
     <div class="flex items-center gap-3 px-4 py-3">
       <button class="burger" aria-label="Close menu" onclick={closeMenu}>
