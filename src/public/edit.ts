@@ -4,9 +4,9 @@
  *                 page). PHP injects this bundle ONLY for authenticated sessions,
  *                 wrapped in [data-sm-edit-root]. Interaction model = the pinned
  *                 canvas model, on the real page: click a block → floating menu →
- *                 modal → saved. ONE management overlay law (2026-11-04, user
- *                 order): management lives at /_ and its single burger overlay —
- *                 the editor carries no burger, no page settings, no logout.
+ *                 modal → saved. One management door (2026-11-04, user order): a
+ *                 fixed admin pill at the right middle walks to /_ — the overlay
+ *                 lives there, auto-opened; the editor carries no menu itself.
  * 3. Expects: [data-sm-edit-root] with data-type/data-slug; /api session + draft +
  *             publish + media routes; bridge/assets/edit.esm.js (built, committed).
  * 4. Provides: `npm run build:edit` → bridge/assets/edit.esm.js via scripts/build-edit.mjs.
@@ -56,6 +56,18 @@ const EDIT_CSS = `
   outline:2px dashed rgba(0,207,255,.55); outline-offset:2px;
 }
 [data-sm-edit-root]>[data-sm-selected] { outline:3px solid var(--color-neon-blue); outline-offset:3px; }
+/* the ONE management door: fixed at the right middle — visible the moment you're
+   editing, walks to /_ (which auto-opens the admin overlay when authed). */
+.sm-admin-btn {
+  position:fixed; right:.65rem; top:50%; transform:translateY(-50%); z-index:9998;
+  display:flex; align-items:center; gap:.35rem; padding:.45rem .7rem;
+  background:var(--color-batter); border:2px solid var(--color-ink); border-radius:999px;
+  cursor:pointer; font:inherit; font-weight:800; color:var(--color-ink);
+  box-shadow:var(--raise-mg); transition:box-shadow var(--lift),transform var(--lift);
+}
+.sm-admin-btn:hover { transform:translate(1.5px,-50%); box-shadow:var(--hover-lift); }
+.sm-admin-btn span { display:block; width:.95rem; height:2px; background:var(--color-ink); border-radius:1px; }
+.sm-admin-btn:hover span { background:var(--color-neon-blue); }
 .sm-edit-layer { position:fixed; inset:0; background:rgba(40,25,15,.45); z-index:9999; display:grid; place-items:center; }
 .sm-modal {
   background:var(--color-batter); border-radius:4px; box-shadow:var(--float-shadow);
@@ -259,6 +271,19 @@ async function boot(root: HTMLElement): Promise<void> {
   let floatMenu: HTMLElement | null = null;
 
   function mountChrome(): void {
+    // The ONE management door (2026-11-04, user order): a fixed admin button at
+    // the right middle. It doesn't re-implement the overlay — it walks to /_,
+    // which auto-opens the tabs when the session is live. Anon never mounts
+    // chrome at all, so this button exists only for bakers.
+    const adminBtn = el('button', {
+      class: 'sm-admin-btn',
+      title: 'Admin — contents, settings, plugins & templates, users',
+      'aria-label': 'Open the admin overlay',
+      onclick: () => (window.location.href = '/_')
+    });
+    adminBtn.append(el('span'), el('span'), el('span'));
+    document.body.append(adminBtn);
+
     document.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
       if (floatMenu !== null && target.closest('.sm-float') === null && !target.closest('[data-sm-edit-root]')) {

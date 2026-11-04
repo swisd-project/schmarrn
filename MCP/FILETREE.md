@@ -81,7 +81,7 @@
 │   │   └── app.css               # tokens: crust/batter/raisin/jam
 │   ├── public/
 │   │   ├── fallback.ts           # client fallback renderer → render.esm.js
-│   │   └── edit.ts               # live-page editor, canvas-only since 2026-11-04 (one-management-overlay law: click-to-edit float menu + modals + toast; NO burger, NO page overlay — management lives in the dashboard) → edit.esm.js
+│   │   └── edit.ts               # live-page editor, canvas-only since 2026-11-04 (one-management-overlay law: click-to-edit float menu + modals + toast; the fixed admin pill at the right middle walks to /_ — NO menu of its own) → edit.esm.js
 │   ├── routes/
 │   │   ├── +layout.svelte        # imports ../lib/app.css (relative — $lib evasion, see GUIDE)
 │   │   ├── +layout.ts            # prerender = true

@@ -26,6 +26,9 @@
         authenticated = s.authenticated;
         user = s.user;
         role = s.role;
+        // Arriving at /_ while authed = the admin button sent you here — the ONE
+        // overlay opens itself, no empty state, no second click.
+        if (s.authenticated) openMenu();
       })
       .catch(() => (authenticated = false));
     setupStatus()
