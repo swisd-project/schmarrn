@@ -176,6 +176,10 @@ THE CONFESSED SIN: I had TWO rects (a static tab that stayed put + a second menu
 
 GUILLOTINE CONFESSED: the fixed 1.75×5.5rem drawer CLIPPED the second item (content ≈ 6.3rem > 5.5rem — overflow:hidden did exactly what its name says). FIX: the rect has NO fixed sizes anymore — CSS width/height are auto (shrink-to-fit), so it always equals its children; the slide survives as a measured FLIP in applyOpen(): measure current box → toggle the menu's display (none/flex) → measure the natural target box → commit the start frame → animate width/height to target (.15s, stylesheet transition) → transitionend clears the inline sizes so the rect KEEPS following its children forever (add/remove items tomorrow, it adapts). Center-anchored (top:50% + translateY(-50%)) so growth is symmetric — the rect never jumps, it grows. Collapsed = triangle + padding only (~25px wide); open = whatever the items need. Own-wart caught en route: my edit deleted the triangle append (restored) — and all state changes now flow through ONE applyOpen (open class, aria-expanded, slide); items no longer bother toggling (navigation/reload happens anyway). Bundle rebuilt: transitionend present, strings intact.
 
+## Equal-height drawer 2026-11-04 (user: "the closed rect should be as tall as the opened rect")
+
+HEIGHT LAW SETTLED: the menu stays IN FLOW permanently (display:flex always) and only its VISIBILITY toggles — zero reflow, so the rect's height is the OPEN height from mount onward, pure auto, forever following its children (the previous FLIP animated height too — the closed tab grew vertically = another jump the user never asked for). Only the WIDTH slides now: two widths measured once from real layout (openW = shrink-to-fit auto; closedW = triangle + frame padding/borders), applyOpen sets root.style.width between them (.15s stylesheet transition); items visibility-hidden when closed so no grey letter slivers peek out of the thin tab. Bundle rebuilt (getBoundingClientRect + offsetWidth + 3×visibility byte-verified). The drawer is now: constant full-height white rect at the right middle, thin until clicked, wide while open.
+
 Deferred / graveyard
 ---
 
