@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n api,app -c blue,green \"php -S localhost:8080 index.php\" \"vite dev\"",
+    "dev": "php -S localhost:8080 index.php",
     "dev:app": "vite dev",
     "dev:api": "php -S localhost:8080 index.php",
     "build": "vite build",

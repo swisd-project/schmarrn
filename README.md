@@ -26,11 +26,13 @@ From the repo root:
 npm run dev
 ```
 
-starts both via [`concurrently`](https://www.npmjs.com/package/concurrently): the PHP core (`bridge/`) on `:8080` (blue) and the Vite dashboard on `:5173` (green). Ctrl-C stops both. Solo variants: `npm run dev:api` / `npm run dev:app`.
+starts **one server only**: the PHP core (`bridge/`) on `:8080`. It serves the public site, the JSON API, the live-page editor, **and the dashboard at `/_`** (the built SPA in `build/` — run `npm run build` once after a fresh clone, or when dashboard code changed). One console, one origin, no confusion.
 
-Open **http://localhost:5173** — Vite proxies `/bridge/*` to `:8080`, so everything lives on one origin. First-run password is `changeme` (template hash; mint a real one, see below).
+Use `npm run dev:app` **only** when working on the dashboard UI itself: starts the Vite dev server on `:5173` (proxies `/bridge/*` to `:8080`) for HMR. `npm run dev:api` is the same single PHP server, spelled differently for muscle memory.
 
-Requirements: PHP ≥ 8.4 (dev on 8.5; on Ubuntu/Zorin use `ppa:ondrej/php` → `sudo apt install php8.5-cli php8.5-mbstring php8.5-xml`). VS Code riders: the DEVSENSE "PHP" extension's built-in server is just `php -S` — a PHP binary is required; the repo ships a matching `.vscode/launch.json` profile (F5 → "schmarrn: API") and `.vscode/tasks.json` task `Dev: BOTH`.
+Open **http://localhost:8080/_/** for the dashboard (`npm run build` provides it) and `http://localhost:8080` for the public site — PHP alone, one origin. First-run password is `changeme` (template hash; mint a real one, see below).
+
+Requirements: PHP ≥ 8.4 (dev on 8.5; on Ubuntu/Zorin use `ppa:ondrej/php` → `sudo apt install php8.5-cli php8.5-mbstring php8.5-xml`). VS Code riders: the DEVSENSE "PHP" extension's built-in server is just `php -S` — a PHP binary is required; the repo ships a matching `.vscode/launch.json` profile (F5 → "schmarrn: API") and the `.vscode/tasks.json` task `Dev` (plus an opt-in `Dev: Dashboard UI` for Vite HMR).
 
 ## Reset the admin password
 

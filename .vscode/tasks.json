@@ -1,22 +1,14 @@
 {
-  // SCHMARRN DEV FLOOR — two servers, one proxy.
-  // Task "Dev: API"     → PHP built-in server on :8080 (or DevSense's server: right-click
-  //                       bridge/index.php → "PHP: Serve Project" — then change the Vite proxy
-  //                       target in vite.config.ts to that port).
-  // Task "Dev: Objects" → Vite dev server on :5173, proxying /api to the PHP server.
-  //                       Open http://localhost:5173 — that's the dashboard.
+  // SCHMARRN DEV FLOOR — one server by default (2026-11-04, user call: two is confusing).
+  // Task "Dev" → php -S on :8080. Serves public site, JSON API, live-page editor and the
+  // dashboard at /_/ (built SPA from build/; run npm run build after fresh clone or on
+  // dashboard changes).
+  // Task "Dev: Dashboard UI" → Vite dev server on :5173 (npm run dev:app, proxies /bridge
+  // to :8080). Opt-in ONLY for dashboard-UI work — it needs the PHP server running too.
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Dev: API (php -S :8080)",
-      "type": "shell",
-      "command": "php -S localhost:8080 -t bridge",
-      "isBackground": true,
-      "problemMatcher": [],
-      "options": { "cwd": "${workspaceFolder}" }
-    },
-    {
-      "label": "Dev: Dashboard (vite :5173)",
+      "label": "Dev (php -S :8080)",
       "type": "shell",
       "command": "npm run dev",
       "isBackground": true,
@@ -24,9 +16,12 @@
       "options": { "cwd": "${workspaceFolder}" }
     },
     {
-      "label": "Dev: BOTH",
-      "dependsOn": ["Dev: API (php -S :8080)", "Dev: Dashboard (vite :5173)"],
-      "dependsOrder": "parallel"
+      "label": "Dev: Dashboard UI (vite :5173, opt-in)",
+      "type": "shell",
+      "command": "npm run dev:app",
+      "isBackground": true,
+      "problemMatcher": [],
+      "options": { "cwd": "${workspaceFolder}" }
     }
   ]
 }

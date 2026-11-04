@@ -34,7 +34,7 @@ Locked Decisions (Reference)
 
 Environment
 
-- Local dev: PHP 8.5 built-in server (`php -S`) for `bridge/`, Vite dev server for `dashboard/`.
+- Local dev: PHP 8.5 built-in server (`php -S`) alone on `:8080` — it serves the public site, the API, the live editor AND the dashboard (`/_`, from `build/`). Vite dev is opt-in (`dev:app`) for dashboard-UI HMR only (2026-11-04, user call: "two servers is confusing").
 - Deploy: FTP upload of one folder (api + built dashboard + content). Writable dirs needed for: cache, per-host sessions, account/file-backed store, uploads (per-host reality, all under the install).
 - Requirements: PHP 8.4+ on deploy (dev on 8.5 — 8.2's security support ends Dec 2026, don't build on it). gd+zip enter only in v2 (see Locked Decisions). No composer, no database, no cron.
 
