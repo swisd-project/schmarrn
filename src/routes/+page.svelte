@@ -187,6 +187,12 @@
 
   function closeMenu() {
     menuOpen = false;
+    // THE PAGE comes back: closing the management overlay walks out of /_ to the
+    // page you came from (the admin pill's arrival is a navigation, so history
+    // knows the way home; a fresh history falls back to the front door). Dev
+    // stays inside the SPA — the vite origin's / IS the dashboard.
+    if (import.meta.env.DEV) return;
+    history.length > 1 ? history.back() : (window.location.href = '/');
   }
 
   function showTab(next: Tab) {
@@ -622,12 +628,10 @@
       <span class="ml-auto text-sm text-ink-soft">{user}{#if role} · {role}{/if}</span>
       <button class="btn btn-secondary" onclick={signOut}>Log out</button>
     </header>
-
-    <section class="px-4 pb-8 max-w-6xl mx-auto w-full">
-      <div class="mg py-16 text-center">
-        <p class="m-0 italic text-ink-soft">Pick a shredded piece from the menu — editing happens on the live page.</p>
-      </div>
-    </section>
+    <!-- Behind the overlay there is deliberately NO management view: the overlay
+         IS the authed face of /_ (it auto-opens on a live session), and its Close
+         walks back to the exact page you came from. A second "management page"
+         behind a full-screen overlay is how two kitchens got built — never again. -->
   {/if}
 
   {#if error && authenticated !== false}
@@ -646,7 +650,7 @@
       </button>
       <span class="font-extrabold text-lg tracking-tight">Schmarrn</span>
       <span class="ml-auto text-sm text-ink-soft">{user}{#if role} · {role}{/if}</span>
-      <button class="btn btn-secondary" onclick={closeMenu}>Close</button>
+      <button class="btn btn-secondary" onclick={closeMenu} title="Back to the page">Close</button>
     </div>
 
     <nav class="flex gap-2 px-4 pb-4 flex-wrap" aria-label="Menu sections">
@@ -656,6 +660,7 @@
         <button class="btn {tab === 'wares' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('wares')}>Plugins & Templates</button>
         <button class="btn {tab === 'users' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('users')}>Users</button>
       {/if}
+      <button class="btn btn-secondary ml-auto" onclick={signOut} title="End the session">Log out</button>
     </nav>
 
     <div class="px-4 pb-12 max-w-4xl mx-auto w-full">
