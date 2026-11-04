@@ -68,6 +68,10 @@ User-to-verify / housekeeping
 [user-to-apply] Every anon request mints an empty session file under `bridge/cache/sessions/` (~1,089 piled) — a manual GC sweep at low probability in Auth boot is the candidate fix; not urgent.
 [user-to-apply] Vitrine pushes need the `github-vitrine` ssh alias (per-repo deploy key; schmarrn's key is collar-bound to its own repo).
 
+## THE drawer bug 2026-11-04 (user, thousandth telling: "how hard is it to create a simple drawer?")
+
+THE REAL PARASITE, finally with a body: the width measurement ran BEFORE document.body.append(root) and BEFORE the triangle append — a DETACHED element measures offsetWidth = 0, computed padding = NaN, tri = null → closedW/openW garbage → every style.width write was "0px"/"NaNpx" → INVALID → ignored → width stayed auto → the drawer rendered permanently WIDE and could never collapse. Not a design fight — a mounting-order bug wearing a design argument as a costume. FIX: measure only after mount + full population (append root → getComputedStyle → tri rect → auto → openW → closedW). Bundle rebuilt; front page battery green.
+
 Deferred / graveyard
 ---
 - Aliases: killed (no v1 use-case); composer: never (vendored single libs only); preview-full split: superseded.
