@@ -195,10 +195,13 @@ ${n.comment}`:n.comment}this.doc.range[2]=n.offset;break}default:this.errors.pus
   transition:width .15s ease, height .15s ease; cursor:pointer;
   font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size:12.5px;
 }
+/* closed state: 3\xD7 the natural tab (user order 2026-11-04) \u2014 min-sizes hold
+   the closed box big and centered; open state sizes purely to its children. */
+.sm-admin-root:not(.open) { min-width:4.75rem; min-height:7.5rem; }
 .sm-admin-root.open { cursor:auto; }
 .sm-admin-tri { display:block; width:0; height:0; margin:.15rem auto .45rem;
-  border-top:6px solid transparent; border-bottom:6px solid transparent;
-  border-right:7px solid #767676; pointer-events:none;
+  border-top:18px solid transparent; border-bottom:18px solid transparent;
+  border-right:21px solid #767676; pointer-events:none;
 }
 .sm-admin-menu { display:none; flex-direction:column; gap:.15rem; }
 .sm-admin-menu button {
