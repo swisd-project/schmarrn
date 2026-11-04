@@ -59,35 +59,27 @@ const EDIT_CSS = `
   outline:2px dashed rgba(0,207,255,.55); outline-offset:2px;
 }
 [data-sm-edit-root]>[data-sm-selected] { outline:3px solid var(--color-neon-blue); outline-offset:3px; }
-/* the ONE management door — user-simplified 2026-11-04: "a simple rect with a
-   few menu items that slides in and out. no micro-animations, no in-out jump
-   of the rect." THE LAW: the rect is CONSTANT (never grows, never shrinks,
-   never moves — anchored so its middle stays at 50% while the menu appears
-   below, absolutely positioned so the root's height never changes). Exactly
-   ONE animation exists: the menu slides out from/right to under the rect.
-   White rect, grey font. Nothing else. */
-.sm-admin-root { position:fixed; right:0; top:calc(50% - 2.75rem); z-index:9998; font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; }
-.sm-admin-btn {
-  display:grid; place-items:center; width:1.75rem; height:5.5rem; padding:0;
-  background:#fff; border:2px solid #e3dccd; border-right:none;
-  border-radius:6px 0 0 6px; cursor:pointer;
-  box-shadow:0 1px 4px rgba(0,0,0,.10);
+/* the ONE management door, user-simplified twice 2026-11-04: "a simple rect with
+   a few menu items that slides in and out" — ONE rect, not a rect that pushes
+   out another rect. The tab itself is the drawer: collapsed it is the thin
+   rect with the grey triangle; clicking it SLIDES it wider and reveals the
+   items inside (overflow-hidden does the revealing — the wall slides, the
+   letters are standing behind it). Height never changes, the rect never
+   leaves the right edge, no other animation exists. White rect, grey font. */
+.sm-admin-root {
+  position:fixed; right:0; top:calc(50% - 2.75rem); width:1.75rem; height:5.5rem; padding:0;
+  overflow:hidden; background:#fff; border:2px solid #e3dccd; border-right:none;
+  border-radius:6px 0 0 6px; box-shadow:0 1px 4px rgba(0,0,0,.10);
+  transition:width .15s ease; cursor:pointer;
+  font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size:12.5px;
 }
-.sm-admin-btn .sm-admin-tri {
-  display:block; width:0; height:0;
+.sm-admin-root.open { width:8.5rem; cursor:auto; }
+.sm-admin-tri { display:block; width:0; height:0; margin:.5rem auto 0;
   border-top:6px solid transparent; border-bottom:6px solid transparent;
-  border-right:7px solid #767676;
+  border-right:7px solid #767676; pointer-events:none;
 }
-.sm-admin-menu {
-  position:absolute; top:100%; right:0; margin-top:.35rem; width:8.5rem;
-  display:flex; flex-direction:column; gap:.15rem;
-  background:#fff; border:2px solid #e3dccd; border-radius:6px;
-  box-shadow:0 2px 8px rgba(0,0,0,.12); padding:.35rem;
-  font-size:12.5px;
-  opacity:0; visibility:hidden; transform:translateX(100%);
-  transition:transform .15s ease, opacity .15s ease, visibility .15s;
-}
-.sm-admin-root.open .sm-admin-menu { opacity:1; visibility:visible; transform:translateX(0); }
+.sm-admin-menu { visibility:hidden; display:flex; flex-direction:column; gap:.15rem; padding:.35rem; }
+.sm-admin-root.open .sm-admin-menu { visibility:visible; }
 .sm-admin-menu button {
   display:block; width:100%; text-align:left; white-space:nowrap;
   background:none; border:none; padding:.5rem .65rem; border-radius:4px;
@@ -297,28 +289,31 @@ async function boot(root: HTMLElement): Promise<void> {
   let floatMenu: HTMLElement | null = null;
 
   function mountChrome(): void {
-    // The ONE management door (reworked per user design, 2026-11-04): a crisp
-    // white rect at the right middle. Closed = thin tab + grey triangle
-    // pointing left; click = the tab breathes out a neat side menu (Backend /
-    // Log out, white rect grey font). It carries the page it lives on
-    // (?back=<here>) so the overlay's Close returns to THIS page — never a
-    // history guess. Anon never mounts chrome at all. Outside clicks collapse.
+    // The ONE management door (user-designed twice over, 2026-11-04): ONE rect.
+    // The tab itself is the drawer — click it and it slides wider, revealing
+    // the items inside (overflow-hidden clips; nothing else moves). Items:
+    // Backend (carries ?back=<this page>) and Log out. Outside clicks collapse.
     const root = document.createElement('div');
     root.className = 'sm-admin-root';
+    root.setAttribute('role', 'button');
+    root.setAttribute('tabindex', '0');
+    root.setAttribute('aria-label', 'Admin menu — expand for Backend and Log out');
+    root.setAttribute('aria-expanded', 'false');
     let open = false;
 
-    const handle = el('button', {
-      class: 'sm-admin-btn',
-      title: 'Admin — expand for Backend and Log out',
-      'aria-label': 'Admin menu',
-      onclick: () => {
-        open = !open;
-        root.classList.toggle('open', open);
-        handle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    const toggle = () => {
+      open = !open;
+      root.classList.toggle('open', open);
+      root.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+    root.addEventListener('click', toggle);
+    root.addEventListener('keydown', (e) => {
+      if ((e.key === 'Enter' || e.key === ' ') && (e.target as HTMLElement).closest('button') === null) {
+        e.preventDefault();
+        toggle();
       }
     });
-    handle.setAttribute('aria-expanded', 'false');
-    handle.append(el('span', { class: 'sm-admin-tri' }));
+    root.append(el('span', { class: 'sm-admin-tri' }));
 
     const menu = document.createElement('div');
     menu.className = 'sm-admin-menu';
@@ -327,35 +322,36 @@ async function boot(root: HTMLElement): Promise<void> {
       el('button', {
         type: 'button',
         role: 'menuitem',
-        onclick: () => {
+        onclick: (e) => {
+          e.stopPropagation(); // opening Backend is navigation, not a toggle
           open = false;
           root.classList.remove('open');
-          handle.setAttribute('aria-expanded', 'false');
+          root.setAttribute('aria-expanded', 'false');
           window.location.href = backHref(window.location.pathname, window.location.hash);
         }
       }, ['Backend']),
       el('button', {
         type: 'button',
         role: 'menuitem',
-        onclick: async () => {
+        onclick: async (e) => {
+          e.stopPropagation();
           try {
             await apiJson('/bridge/logout', { method: 'POST' });
           } catch {
             // the session dies server-side anyway — leave the page regardless
           }
-          document.querySelector('.sm-edit-layer')?.remove();
           window.location.reload();
         }
       }, ['Log out'])
     );
-    root.append(handle, menu); // the rect, then the (absolutely positioned) sliding list under it
+    root.append(menu);
     document.body.append(root);
 
     document.addEventListener('click', (e) => {
       if (!open || (e.target as HTMLElement).closest('.sm-admin-root') !== null) return;
       open = false;
       root.classList.remove('open');
-      handle.setAttribute('aria-expanded', 'false');
+      root.setAttribute('aria-expanded', 'false');
     });
 
     document.addEventListener('click', (e) => {
