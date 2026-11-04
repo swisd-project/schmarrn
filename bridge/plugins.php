@@ -112,6 +112,16 @@ function validate(string $name, array $manifest): array|string
         }
     }
 
+    // Content filters (p6 slice 2): serve-time page transforms. The key IS the function
+    // name's tail: entry "drunken_monk_page" → plugin_drunken_monk_page(). The lid here:
+    // entry must start with the plugin's own underscored name — no cross-plugin hijinks.
+    $contentFilters = [];
+    foreach ((array)($caps['contentFilters'] ?? []) as $key) {
+        if (is_string($key) && str_starts_with($key, prefix($name) . '_') && preg_match('/^[a-z0-9_]+$/', $key) === 1) {
+            $contentFilters[] = $key;
+        }
+    }
+
     return [
         'name' => $name,
         'title' => $title,
@@ -120,6 +130,7 @@ function validate(string $name, array $manifest): array|string
         'placeholders' => $placeholders,
         'routes' => $routes,
         'editorBlocks' => $editorBlocks,
+        'contentFilters' => $contentFilters,
     ];
 }
 
@@ -212,6 +223,39 @@ function placeholderFills(array $ctx): array
         }
     }
     return $fills;
+}
+
+/**
+ * Apply enabled plugins' manifest-declared contentFilters to stored page HTML
+ * (p6 slice 2 — serve-time page transforms, after the save-time mdms render).
+ * Runs in manifest order per plugin, plugins by name; a broken filter degrades
+ * to a log line and the HTML passes through unchanged — never a dead page.
+ * ctx: ['site' => array, 'type' => string, 'slug' => string, 'title' => string]
+ */
+function contentFilters(array $ctx, string $html): string
+{
+    $installed = all();
+    foreach (enabled() as $name => $on) {
+        foreach ($installed as $plugin) {
+            if (($plugin['name'] ?? null) === $name && isset($plugin['contentFilters'])) {
+                foreach ($plugin['contentFilters'] as $key) {
+                    $fn = 'plugin_' . $key;
+                    if (!function_exists($fn)) {
+                        continue;
+                    }
+                    try {
+                        $out = (string)$fn($ctx, $html);
+                    } catch (\Throwable $e) {
+                        @error_log("[schmarrn-plugins] '{$name}' content filter '{$key}' failed: {$e->getMessage()}");
+                        continue;
+                    }
+                    $html = $out;
+                }
+                break;
+            }
+        }
+    }
+    return $html;
 }
 
 /** Dispatch a plugin API route. Auth + CSRF are enforced HERE, per the manifest. Never returns. */

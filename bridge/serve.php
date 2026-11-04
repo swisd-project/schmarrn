@@ -174,9 +174,12 @@ HTML;
 }
 
 /** Fill the theme template. Body HTML is trusted (walled pipeline); everything else escapes.
- *  Plugin placeholders (p6) merge in last — manifest-declared only, values are the plugin's trusted HTML. */
+ *  Plugin content filters (p6 slice 2) transform the body first; plugin placeholders (p6)
+ *  merge in last — manifest-declared only, values are the plugin's trusted HTML. */
 function fill(array $theme, array $site, string $title, string $bodyHtml, string $seoHead, string $currentSlug = '', string $type = '', bool $editing = false): string
 {
+    /** Plugin content filters (p6 slice 2) transform the stored body HTML — serve-time, live. */
+    $bodyHtml = \Plugins\contentFilters(['site' => $site, 'type' => $type, 'slug' => $currentSlug, 'title' => $title], $bodyHtml);
     $replacements = [
         '{{siteName}}' => htmlspecialchars($site['name'], ENT_QUOTES),
         '{{claim}}' => htmlspecialchars($site['claim'], ENT_QUOTES),

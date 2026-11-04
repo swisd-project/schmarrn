@@ -40,7 +40,7 @@ Environment
 
 Folders
 
-- `bridge/`   — PHP core: JSON core under `/bridge`, auth, file cache, content store access. The core's dedicated homes: `bridge/templates/` (theme contract wares) and `bridge/plugins/` (plugin homes, manifest + code, core-lid enforced). Rename 2026-11-03, user call: bots bombard `/api`.
+- `bridge/`   — PHP core: JSON core under `/bridge`, auth, file cache, content store access. The core's dedicated homes: `bridge/templates/` (theme contract wares) and `bridge/plugins/` (plugin homes, manifest + code, core-lid enforced). Rename 2026-11-03, user call: bots bombard `/api`. Plugin capability contract (p6): slice 1 = template placeholders + API routes; slice 2 (2026-11-04, user-approved in session) = serve-time `contentFilters` over stored bodyHtml — manifest-declared namespaced keys, applied in `Serve\fill()` after the save-time render, broken filter = log line + untouched HTML (fails open, never a dead page).
 - `src/`     — SvelteKit dashboard (source); builds to static assets consumed by the core.
 - `src/content/` — the canonical `.md` content tree, one folder per page/post.
 - `MCP/`     — governance files (GOSPEL, BACKLOG, GUIDE, FILETREE).

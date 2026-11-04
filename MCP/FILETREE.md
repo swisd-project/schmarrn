@@ -51,7 +51,10 @@
 │   │       ├── slide.html
 │   │       └── assets/{atelier.css,deck.js}   # same helper script, same law
 │   ├── plugins/                  # plugin homes in the core (was root-level plugins/)
-│   │   └── hello/                # demo plugin (copy-me template): placeholder + public/user routes
+│   │   ├── hello/                # demo plugin (copy-me template): placeholder + public/user routes
+│   │   │   ├── plugin.json
+│   │   │   └── plugin.php
+│   │   └── drunken-monk/         # first real plugin: machine-generated payloads in md (```drunken-monk fence, monk banner + base64url envelope) — serve-time filter decodes → style|script|html, provenance comment replaces the fence; fails open to the visible notice; admin routes encode/decode mint payloads
 │   │       ├── plugin.json
 │   │       └── plugin.php
 │   ├── assets/
