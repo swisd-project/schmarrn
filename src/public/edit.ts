@@ -4,9 +4,11 @@
  *                 page). PHP injects this bundle ONLY for authenticated sessions,
  *                 wrapped in [data-sm-edit-root]. Interaction model = the pinned
  *                 canvas model, on the real page: click a block → floating menu →
- *                 modal → saved. One management door (2026-11-04, user order): a
- *                 fixed admin pill at the right middle walks to /_ — the overlay
- *                 lives there, auto-opened; the editor carries no menu itself.
+ *                 modal → saved. One management door (user-designed 2026-11-04): a
+ *                 crisp white rect at the right middle — collapsed it is a thin
+ *                 tab with a grey triangle; click expands a neat side menu with
+ *                 Backend (opens the admin overlay, carrying this page) and
+ *                 Log out. The editor carries no overlay of its own.
  * 3. Expects: [data-sm-edit-root] with data-type/data-slug; /api session + draft +
  *             publish + media routes; bridge/assets/edit.esm.js (built, committed).
  * 4. Provides: `npm run build:edit` → bridge/assets/edit.esm.js via scripts/build-edit.mjs.
@@ -57,18 +59,38 @@ const EDIT_CSS = `
   outline:2px dashed rgba(0,207,255,.55); outline-offset:2px;
 }
 [data-sm-edit-root]>[data-sm-selected] { outline:3px solid var(--color-neon-blue); outline-offset:3px; }
-/* the ONE management door: fixed at the right middle — visible the moment you're
-   editing, walks to /_ (which auto-opens the admin overlay when authed). */
+/* the ONE management door, reworked 2026-11-04 (user design): a crisp white
+   rect at the right middle. Collapsed: thin, with a grey triangle pointing
+   left ("expand me"). Open: it breathes out a neat side menu — Backend and
+   Log out — white rect, grey font. No batter, no neon: it is a door handle,
+   not a decoration. */
+.sm-admin-root { position:fixed; right:0; top:50%; transform:translateY(-50%); z-index:9998; display:flex; align-items:center; justify-content:flex-end; font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; }
 .sm-admin-btn {
-  position:fixed; right:.65rem; top:50%; transform:translateY(-50%); z-index:9998;
-  display:flex; align-items:center; gap:.35rem; padding:.45rem .7rem;
-  background:var(--color-batter); border:2px solid var(--color-ink); border-radius:999px;
-  cursor:pointer; font:inherit; font-weight:800; color:var(--color-ink);
-  box-shadow:var(--raise-mg); transition:box-shadow var(--lift),transform var(--lift);
+  display:grid; place-items:center; width:1.75rem; height:5.5rem; padding:0;
+  background:#fff; border:2px solid #e3dccd; border-right:none;
+  border-radius:6px 0 0 6px; cursor:pointer;
+  box-shadow:0 1px 4px rgba(0,0,0,.10); transition:width .15s ease;
 }
-.sm-admin-btn:hover { transform:translate(1.5px,-50%); box-shadow:var(--hover-lift); }
-.sm-admin-btn span { display:block; width:.95rem; height:2px; background:var(--color-ink); border-radius:1px; }
-.sm-admin-btn:hover span { background:var(--color-neon-blue); }
+.sm-admin-root.open .sm-admin-btn { height:2rem; }
+.sm-admin-btn .sm-admin-tri {
+  display:block; width:0; height:0;
+  border-top:6px solid transparent; border-bottom:6px solid transparent;
+  border-right:7px solid #767676; transition:transform .15s ease;
+}
+.sm-admin-root.open .sm-admin-btn .sm-admin-tri { transform:rotate(180deg); }
+.sm-admin-menu {
+  display:none; flex-direction:column; gap:.15rem; margin-right:.45rem;
+  background:#fff; border:2px solid #e3dccd; border-radius:6px;
+  box-shadow:0 2px 10px rgba(0,0,0,.12); padding:.35rem; min-width:8rem;
+  font-size:12.5px;
+}
+.sm-admin-root.open .sm-admin-menu { display:flex; }
+.sm-admin-menu button {
+  display:block; width:100%; text-align:left; white-space:nowrap;
+  background:none; border:none; padding:.5rem .65rem; border-radius:4px;
+  font:inherit; font-size:12.5px; font-weight:600; color:#767676; cursor:pointer;
+}
+.sm-admin-menu button:hover { background:#f4efe6; color:#4f4a42; }
 .sm-edit-layer { position:fixed; inset:0; background:rgba(40,25,15,.45); z-index:9999; display:grid; place-items:center; }
 .sm-modal {
   background:var(--color-batter); border-radius:4px; box-shadow:var(--float-shadow);
@@ -272,21 +294,66 @@ async function boot(root: HTMLElement): Promise<void> {
   let floatMenu: HTMLElement | null = null;
 
   function mountChrome(): void {
-    // The ONE management door (2026-11-04, user order after the audit): a fixed
-    // admin button at the right middle. It carries the page it lives on
+    // The ONE management door (reworked per user design, 2026-11-04): a crisp
+    // white rect at the right middle. Closed = thin tab + grey triangle
+    // pointing left; click = the tab breathes out a neat side menu (Backend /
+    // Log out, white rect grey font). It carries the page it lives on
     // (?back=<here>) so the overlay's Close returns to THIS page — never a
-    // history guess, never the wrong door. Anon never mounts chrome at all, so
-    // this button exists only for bakers.
-    const adminBtn = el('button', {
+    // history guess. Anon never mounts chrome at all. Outside clicks collapse.
+    const root = document.createElement('div');
+    root.className = 'sm-admin-root';
+    let open = false;
+
+    const handle = el('button', {
       class: 'sm-admin-btn',
-      title: 'Admin — contents, settings, plugins & templates, users',
-      'aria-label': 'Open the admin overlay',
+      title: 'Admin — expand for Backend and Log out',
+      'aria-label': 'Admin menu',
       onclick: () => {
-        window.location.href = backHref(window.location.pathname, window.location.hash);
+        open = !open;
+        root.classList.toggle('open', open);
+        handle.setAttribute('aria-expanded', open ? 'true' : 'false');
       }
     });
-    adminBtn.append(el('span'), el('span'), el('span'));
-    document.body.append(adminBtn);
+    handle.setAttribute('aria-expanded', 'false');
+    handle.append(el('span', { class: 'sm-admin-tri' }));
+
+    const menu = document.createElement('div');
+    menu.className = 'sm-admin-menu';
+    menu.setAttribute('role', 'menu');
+    menu.append(
+      el('button', {
+        type: 'button',
+        role: 'menuitem',
+        onclick: () => {
+          open = false;
+          root.classList.remove('open');
+          handle.setAttribute('aria-expanded', 'false');
+          window.location.href = backHref(window.location.pathname, window.location.hash);
+        }
+      }, ['Backend']),
+      el('button', {
+        type: 'button',
+        role: 'menuitem',
+        onclick: async () => {
+          try {
+            await apiJson('/bridge/logout', { method: 'POST' });
+          } catch {
+            // the session dies server-side anyway — leave the page regardless
+          }
+          document.querySelector('.sm-edit-layer')?.remove();
+          window.location.reload();
+        }
+      }, ['Log out'])
+    );
+    root.append(menu, handle); // flex row: menu left, handle pinned to the right edge
+    document.body.append(root);
+
+    document.addEventListener('click', (e) => {
+      if (!open || (e.target as HTMLElement).closest('.sm-admin-root') !== null) return;
+      open = false;
+      root.classList.remove('open');
+      handle.setAttribute('aria-expanded', 'false');
+    });
 
     document.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
