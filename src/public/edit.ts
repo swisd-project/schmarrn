@@ -4,9 +4,9 @@
  *                 page). PHP injects this bundle ONLY for authenticated sessions,
  *                 wrapped in [data-sm-edit-root]. Interaction model = the pinned
  *                 canvas model, on the real page: click a block → floating menu →
- *                 modal → saved. The burger (bottom-right) opens the page overlay:
- *                 settings (title/slug/style/date/tags — save PUBLISHES, so the
- *                 "served as" switch is instant), manage link, logout.
+ *                 modal → saved. ONE management overlay law (2026-11-04, user
+ *                 order): management lives at /_ and its single burger overlay —
+ *                 the editor carries no burger, no page settings, no logout.
  * 3. Expects: [data-sm-edit-root] with data-type/data-slug; /api session + draft +
  *             publish + media routes; bridge/assets/edit.esm.js (built, committed).
  * 4. Provides: `npm run build:edit` → bridge/assets/edit.esm.js via scripts/build-edit.mjs.
@@ -56,30 +56,7 @@ const EDIT_CSS = `
   outline:2px dashed rgba(0,207,255,.55); outline-offset:2px;
 }
 [data-sm-edit-root]>[data-sm-selected] { outline:3px solid var(--color-neon-blue); outline-offset:3px; }
-.sm-edit-btn {
-  position:fixed; right:1.25rem; bottom:1.25rem; z-index:9998;
-  width:3rem; height:3rem; display:grid; place-items:center; gap:0;
-  background:var(--color-batter); border:none; border-radius:4px; cursor:pointer;
-  box-shadow:var(--raise-mg); transition:box-shadow var(--lift),transform var(--lift);
-}
-.sm-edit-btn:hover { transform:translateY(-2px); box-shadow:var(--hover-lift); }
-.sm-edit-btn span { display:block; width:1.25rem; height:2px; background:var(--color-ink); margin:5px 0; }
 .sm-edit-layer { position:fixed; inset:0; background:rgba(40,25,15,.45); z-index:9999; display:grid; place-items:center; }
-.sm-edit-overlay {
-  position:fixed; inset:0; z-index:9999; overflow:auto;
-  background:linear-gradient(145deg,#fffdf7,var(--color-batter) 45%,#f9ecd9);
-  display:flex; justify-content:center; align-items:flex-start;
-  padding:3rem 1.25rem 4rem;
-  color:var(--color-ink); font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size:14px;
-}
-.sm-edit-overlay-inner { width:min(34rem,100%); display:flex; flex-direction:column; gap:1rem; }
-.sm-edit-head { display:flex; justify-content:space-between; align-items:center; }
-.sm-edit-head h2 { margin:0; font-size:20px; font-weight:800; }
-.sm-section {
-  background:#fffdf7; border-radius:4px; box-shadow:var(--raise-mg);
-  padding:1rem 1.25rem; display:flex; flex-direction:column; gap:.7rem;
-}
-.sm-section h3 { margin:0; font-size:15px; font-weight:800; }
 .sm-modal {
   background:var(--color-batter); border-radius:4px; box-shadow:var(--float-shadow);
   width:min(34rem,92vw); max-height:84vh; overflow:auto;
@@ -145,12 +122,6 @@ textarea.sm-input { resize:vertical; min-height:8rem; font-family:ui-monospace,m
 `;
 
 // ——— state ———
-
-// The style enum, ONE home in the editor (page style select + site global
-// select both render from this). The canonical law lives in
-// docs/theme-contract.md — core validates the same two values in site.php
-// and styleOf(); never add a style without touching every home listed there.
-const STYLE_OPTIONS = [['', 'theme default'], ['classical', 'classical'], ['slide', 'slide']] as const;
 
 const root = document.querySelector<HTMLElement>('[data-sm-edit-root]');
 if (root !== null) void boot(root);
@@ -283,22 +254,11 @@ async function boot(root: HTMLElement): Promise<void> {
     }
   }
 
-  // ——— chrome: burger, overlay, float menu, modals, toast ———
+  // ——— chrome: float menu, modals, toast ———
 
-  let burger: HTMLButtonElement | null = null;
-  let panel: HTMLElement | null = null;
   let floatMenu: HTMLElement | null = null;
 
   function mountChrome(): void {
-    burger = el('button', {
-      class: 'sm-edit-btn',
-      title: 'Page menu — settings, manage, logout',
-      'aria-label': 'Page menu',
-      onclick: () => (panel === null ? openOverlay() : closeOverlay())
-    });
-    for (let i = 0; i < 3; i += 1) burger.append(el('span'));
-    document.body.append(burger);
-
     document.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
       if (floatMenu !== null && target.closest('.sm-float') === null && !target.closest('[data-sm-edit-root]')) {
@@ -308,7 +268,6 @@ async function boot(root: HTMLElement): Promise<void> {
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         deselect();
-        closeOverlay();
       }
     });
 
@@ -650,244 +609,6 @@ async function boot(root: HTMLElement): Promise<void> {
     deselect();
     document.querySelector('.sm-edit-layer')?.remove();
     void saveAndPublish(joinPage(splitFrontmatter(raw), blocks), { reload: false });
-  }
-
-  // ——— the burger overlay: FULL SCREEN, houses page settings + site template + new page ———
-
-  function peek(key: string): string {
-    const m = new RegExp(`^${key}:\\s*(.*)$`, 'm').exec(splitFrontmatter(raw).frontmatter);
-    return m?.[1]?.trim().replace(/^["']|["']$/g, '') ?? '';
-  }
-
-  function openOverlay(): void {
-    if (panel !== null) return;
-    const title = el('input', { class: 'sm-input', value: peek('title') });
-    const slugInput = el('input', { class: 'sm-input', value: peek('slug') });
-    const style = el('select', { class: 'sm-input' });
-    for (const [value, label] of STYLE_OPTIONS) {
-      const option = el('option', { value }, [label]);
-      if (peek('style') === value) option.setAttribute('selected', '');
-      style.append(option);
-    }
-    const date = el('input', { class: 'sm-input', type: 'date', value: peek('date') });
-    const tags = el('input', { class: 'sm-input', value: peek('tags').replace(/^\[|\]$/g, '') });
-    const err = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:0' });
-
-    const settingsForm = el('form', {
-      onsubmit: (e: Event) => {
-        e.preventDefault();
-        const nextSlug = slugInput.value.trim();
-        if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(nextSlug)) {
-          err.textContent = 'Slug: lowercase letters, digits and hyphens only.';
-          err.style.display = '';
-          return;
-        }
-        if (title.value.trim() === '') {
-          err.textContent = 'The title cannot be empty.';
-          err.style.display = '';
-          return;
-        }
-        const tagList = tags.value.split(',').map((t) => t.trim()).filter(Boolean);
-        const lines = [
-          '---',
-          `title: ${JSON.stringify(title.value.trim())}`,
-          `slug: ${nextSlug}`,
-          `published: ${peek('published') === 'false' ? 'false' : 'true'}`,
-          `draft: ${peek('draft') === 'true' ? 'true' : 'false'}`,
-          `date: ${date.value !== '' ? date.value : new Date().toISOString().slice(0, 10)}`,
-          `tags: [${tagList.map((t) => JSON.stringify(t)).join(', ')}]`
-        ];
-        if (style.value !== '') lines.push(`style: ${style.value}`);
-        lines.push('---');
-        const next = `${lines.join('\n')}\n\n${currentBody()}`;
-        const navigate = nextSlug !== slug
-          ? (type === 'pages' ? `/${nextSlug}` : `/${type}/${nextSlug}`)
-          : undefined;
-        closeOverlay();
-        void saveAndPublish(next, { reload: navigate === undefined, navigate });
-      }
-    }, [
-      field('Title', title),
-      field('Slug', slugInput),
-      field('Served as (this page only — the site template lives below)', style),
-      field('Date', date),
-      field('Tags (comma-separated)', tags),
-      err,
-      el('button', { class: 'sm-btn sm-btn-primary', type: 'submit', style: 'align-self:flex-start' }, ['Save + publish'])
-    ]);
-
-    const overlay = el('div', { class: 'sm-edit-overlay', role: 'dialog', 'aria-modal': 'true' });
-    const inner = el('div', { class: 'sm-edit-overlay-inner' });
-    inner.append(el('div', { class: 'sm-edit-head' }, [
-      el('h2', {}, ['Page settings']),
-      el('button', { class: 'sm-btn sm-btn-secondary', onclick: () => closeOverlay() }, ['×'])
-    ]));
-    inner.append(el('div', { class: 'sm-section' }, [settingsForm]));
-
-    // Admins get the SITE dial here — the global template, no backend trip.
-    if (role === 'admin') {
-      const siteStyle = el('select', { class: 'sm-input' });
-      for (const [value, label] of STYLE_OPTIONS) {
-        siteStyle.append(el('option', { value }, [label]));
-      }
-      const siteErr = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:0' });
-      const siteSection = el('div', { class: 'sm-section' }, [
-        el('h3', {}, ['Site — the template for the WHOLE site']),
-        field('Template (every page, site-wide)', siteStyle),
-        siteErr,
-        el('button', {
-          class: 'sm-btn sm-btn-primary',
-          type: 'button',
-          style: 'align-self:flex-start',
-          onclick: async () => {
-            try {
-              const current = await apiJson<Record<string, string>>('/bridge/site');
-              await apiJson('/bridge/site', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...current, style: siteStyle.value })
-              });
-              siteErr.className = 'sm-alert sm-alert-ok';
-              siteErr.textContent = 'Saved — the whole site serves this template now.';
-              siteErr.style.display = '';
-              window.location.reload();
-            } catch (e) {
-              siteErr.className = 'sm-alert sm-alert-err';
-              siteErr.textContent = e instanceof Error ? e.message : String(e);
-              siteErr.style.display = '';
-            }
-          }
-        }, ['Save site template'])
-      ]);
-      void fetch('/bridge/site')
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`API ${r.status}`))))
-        .then((s: Record<string, string>) => {
-          siteStyle.value = s.style ?? '';
-        })
-        .catch(() => {
-          siteStyle.value = '';
-        });
-      inner.append(siteSection);
-    }
-
-    // The actions row: new page (the plus), logout, and the deep backend for the rest.
-    // The actions row: new page (the plus) and log out. NO backend link — the
-    // user's law: the overlay houses what the day needs; deep admin (accounts,
-    // media, plugins, logo) stays at /_ by URL only, never dangled here.
-    const actions = el('div', { class: 'sm-section' }, [
-      el('h3', {}, ['Anything else?']),
-      el('div', { style: 'display:flex;gap:.5rem;flex-wrap:wrap' }, [
-        el('button', { class: 'sm-btn sm-btn-primary', onclick: () => openNewPage() }, ['＋ New page']),
-        el('button', {
-          class: 'sm-btn sm-btn-secondary',
-          onclick: async () => {
-            try {
-              await apiJson('/bridge/logout', { method: 'POST' });
-            } finally {
-              window.location.reload();
-            }
-          }
-        }, ['Log out'])
-      ])
-    ]);
-    inner.append(actions);
-    overlay.append(inner);
-    // Click somewhere on the bg → the overlay goes away.
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) closeOverlay();
-    });
-    document.body.append(overlay);
-    panel = overlay;
-  }
-
-  function closeOverlay(): void {
-    panel?.remove();
-    panel = null;
-  }
-
-  // ——— the plus: a new page from a page-type scaffold ———
-
-  interface PageType {
-    readonly name: string;
-    readonly title: string;
-    readonly body: string;
-  }
-
-  let pageTypes: readonly PageType[] = [];
-
-  function openNewPage(): void {
-    const title = el('input', { class: 'sm-input', placeholder: 'The page title' });
-    const slugInput = el('input', { class: 'sm-input', placeholder: 'the-page-slug' });
-    const typeSelect = el('select', { class: 'sm-input' });
-    const err = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:0' });
-
-    void apiJson<readonly PageType[]>('/bridge/pagetypes')
-      .then((types) => {
-        pageTypes = types;
-        for (const t of types) typeSelect.append(el('option', { value: t.name }, [t.title]));
-      })
-      .catch((e: unknown) => {
-        err.textContent = e instanceof Error ? e.message : String(e);
-        err.style.display = '';
-      });
-
-    const form = el('form', {
-      onsubmit: (e: Event) => {
-        e.preventDefault();
-        const nextSlug = slugInput.value.trim();
-        const pageTitle = title.value.trim();
-        if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(nextSlug)) {
-          err.textContent = 'Slug: lowercase letters, digits and hyphens only.';
-          err.style.display = '';
-          return;
-        }
-        if (pageTitle === '') {
-          err.textContent = 'The title cannot be empty.';
-          err.style.display = '';
-          return;
-        }
-        const scaffold = pageTypes.find((t) => t.name === typeSelect.value);
-        const body = scaffold !== undefined ? scaffold.body : '';
-        const lines = [
-          '---',
-          `title: ${JSON.stringify(pageTitle)}`,
-          `slug: ${nextSlug}`,
-          'published: true',
-          'draft: false',
-          `date: ${new Date().toISOString().slice(0, 10)}`,
-          'tags: []',
-          '---'
-        ];
-        const nextRaw = `${lines.join('\n')}\n\n${body}`.trimEnd() + '\n';
-        void (async () => {
-          try {
-            await fetch(`/bridge/page/pages/${nextSlug}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'text/markdown', 'X-CSRF-Token': csrf },
-              body: nextRaw
-            }).then(async (r) => {
-              if (!r.ok) {
-                const body = (await r.json().catch(() => null)) as { error?: string } | null;
-                throw new Error(body?.error ?? `API ${r.status}`);
-              }
-            });
-            document.querySelector('.sm-edit-layer')?.remove();
-            closeOverlay();
-            window.location.href = `/${nextSlug}`;
-          } catch (e2) {
-            err.textContent = e2 instanceof Error ? e2.message : String(e2);
-            err.style.display = '';
-          }
-        })();
-      }
-    }, [
-      field('Title', title),
-      field('Slug', slugInput),
-      field('Page type — a pre-made page to fill', typeSelect),
-      err,
-      el('button', { class: 'sm-btn sm-btn-primary', type: 'submit' }, ['Create page'])
-    ]);
-    openModal('New page', form);
   }
 
   // ——— toast ———

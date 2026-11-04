@@ -32,10 +32,15 @@ export interface AccountRef {
 let csrf = '';
 const csrfToken = () => csrf;
 
+/** Status-code-preserving error message out of any body shape (JSON {error} or text). */
+async function apiError(res: Response): Promise<Error> {
+  const body = (await res.json().catch(() => null)) as { error?: string } | null;
+  return new Error(body?.error ?? res.statusText);
+}
+
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `API ${res.status}`);
+    throw await apiError(res);
   }
   return res.json() as Promise<T>;
 }
@@ -45,9 +50,10 @@ export function pageCount(): Promise<PageIndex> {
 }
 
 // ——— editorial flow ———
-// (The live editor speaks to /bridge/draft + /bridge/draft/<t>/<s>/publish directly —
-// raw fetch with the X-Base-Hash conflict guard. The dashboard only creates,
-// deletes and renames; the guarded draft save lives in src/public/edit.ts.)
+// The dashboard overlay is the ONE management surface (2026-11-04, user order:
+// one burger — the editor carries no burger/panel of its own anymore). Draft
+// reads/writes + publish live here under the same X-Base-Hash conflict guard the
+// editor used; page locks self-expire (TTL 120s) — no release route, by design.
 
 export function login(user: string, password: string): Promise<SessionInfo> {
   return fetch('/bridge/login', {
@@ -88,6 +94,42 @@ export function renamePage(type: string, slug: string, to: string): Promise<stri
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
     body: JSON.stringify({ slug: to })
   }).then((r) => json<{ ok: boolean; slug: string }>(r).then((b) => b.slug));
+}
+
+/** Page-type scaffolds (pagetypes/*.md): the New-page modal's pre-made fills. */
+export interface PagetypeRef {
+  readonly name: string;
+  readonly title: string;
+  readonly body: string;
+}
+
+export function listPagetypes(): Promise<readonly PagetypeRef[]> {
+  return fetch('/bridge/pagetypes').then((r) => json<readonly PagetypeRef[]>(r));
+}
+
+/** Raw editorial copy + its fingerprint (the X-Base-Hash the next write must echo). */
+export function getDraftRaw(type: string, slug: string): Promise<{ raw: string; hash: string }> {
+  return fetch(`/bridge/draft/${type}/${slug}`).then(async (r) => {
+    if (!r.ok) throw await apiError(r);
+    return { raw: await r.text(), hash: r.headers.get('X-Content-Hash') ?? '' };
+  });
+}
+
+export function putDraftRaw(type: string, slug: string, raw: string, baseHash: string): Promise<string> {
+  return fetch(`/bridge/draft/${type}/${slug}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'text/markdown', 'X-CSRF-Token': csrfToken(), 'X-Base-Hash': baseHash },
+    body: raw
+  }).then((r) => json<{ ok: boolean; hash: string }>(r).then((b) => b.hash));
+}
+
+/** Publish: the client's rendered HTML rides along and lands in the cache. */
+export function publishDraft(type: string, slug: string, html: string): Promise<void> {
+  return fetch(`/bridge/draft/${type}/${slug}/publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({ html })
+  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
 }
 
 export function session(): Promise<SessionInfo> {

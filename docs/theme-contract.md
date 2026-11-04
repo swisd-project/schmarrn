@@ -97,8 +97,10 @@ move together when a style is added:
 2. Site setting validation — `bridge/site.php` (PUT rejects anything else)
 3. Template filenames — `slide.html` / `page.html`
 4. Manifest `defaultStyle` — `theme.json`
-5. Editor selects — `STYLE_OPTIONS` in `src/public/edit.ts` (single home
-   inside the editor; it feeds both the page style and the global style)
+5. Dashboard selects — hardcoded options shared across the site form and the
+   per-page settings modal in `src/routes/+page.svelte` (`STYLE_OPTIONS` const;
+   the editor's own copy died 2026-11-04 with the burger overlay — one overlay,
+   one selection surface)
 
 Precedence in `styleOf()`: page frontmatter → site global setting → manifest
 default → `classical`.

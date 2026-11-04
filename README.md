@@ -80,7 +80,7 @@ then upload the **contents of `build/` into a folder named `_`** on the host. No
 
 1. Open `https://your-host.example/_/` — the setup wizard appears (site name, theme, admin account).
 2. After setup you land on the public site at `/`. The public face never wears a login form.
-3. Log in any time at `/_/`. Editing happens **on the live page**: click a block → floating menu → edit → save, live instantly. The burger (bottom-right) opens the full-screen overlay with a tab bar — **Contents** (page tree + New page + Upload .md + Media) | **Settings** (site form, admins) | **Plugins & Templates** (enable/disable installed plugins, template inventory, admins) | **Users** (accounts, admins) — plus log out.
+3. Log in any time at `/_/`. Editing happens **on the live page**: click a block → floating menu → edit → save, live instantly — and nothing else: the live page carries no burger and no management panel. When you are logged in and open `/_`, the ONE full-screen overlay opens from the burger (top-left) with a tab bar — **Contents** (page tree + New page from a page-type scaffold + Upload .md + Media + per-page settings ✑) | **Settings** (site form, admins) | **Plugins & Templates** (enable/disable installed plugins, template inventory, admins) | **Users** (accounts, admins) — plus log out.
 4. The **nav is a plain core nav** — published pages of `pages` as links, identical bytes for editors and visitors. In-page menu editing (the old ghost plus) retired 2026-11-04: menu management lives in the dashboard overlay, not on the live canvas.
 5. The dashboard at `/_/` stays management-only: the overlay tabs above carry everything; picking a page in Contents walks you onto the live page.
 

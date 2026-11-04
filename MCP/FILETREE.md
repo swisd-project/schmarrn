@@ -81,11 +81,11 @@
 │   │   └── app.css               # tokens: crust/batter/raisin/jam
 │   ├── public/
 │   │   ├── fallback.ts           # client fallback renderer → render.esm.js
-│   │   └── edit.ts               # live-page editor (burger overlay, click-to-edit, new-page modal) → edit.esm.js
+│   │   └── edit.ts               # live-page editor, canvas-only since 2026-11-04 (one-management-overlay law: click-to-edit float menu + modals + toast; NO burger, NO page overlay — management lives in the dashboard) → edit.esm.js
 │   ├── routes/
 │   │   ├── +layout.svelte        # imports ../lib/app.css (relative — $lib evasion, see GUIDE)
 │   │   ├── +layout.ts            # prerender = true
-│   │   └── +page.svelte          # login/setup + burger overlay (Contents | Settings | Plugins & Templates | Users tab bar; Contents merges the page tree + New + Upload .md + Media; wares lists plugins + template inventory) — MANAGEMENT-ONLY: picking a page navigates to the live page (canvas retired)
+│   │   └── +page.svelte          # login/setup + burger overlay (Contents | Settings | Plugins & Templates | Users tab bar) — the ONE management surface: Contents = page tree + New (page-type scaffolds) + Upload .md + Media + per-page settings ✑ (title/serve-as/date/tags/draft, guarded draft save + publish) ; Settings = site form; wares = plugins + template inventory; picking a page navigates to the live page
 │   └── content/                  # install-local user data — GITIGNORED, never committed
 │       ├── pages/                # content types (dirs = types, subdirs = slugs)
 │       │   └── <slug>/index.md   # + .draft.md sidecar + page-local media files

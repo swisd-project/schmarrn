@@ -1,9 +1,10 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
   // a burger opens the full-screen overlay (Contents / Settings / Plugins & Templates / Users).
-  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, listTemplates, type PluginRef, type TemplateRef } from '$lib/api';
+  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, listTemplates, listPagetypes, getDraftRaw, putDraftRaw, publishDraft, type PluginRef, type TemplateRef, type PagetypeRef } from '$lib/api';
   import { schemaFor, withDraftFlag } from '$lib/schema';
   import { splitFrontmatter } from '$lib/blocks';
+  import { renderMdms } from '$lib/render';
   import { parseMdms } from '@swisd-project/mdms';
   import type { PageIndex, AccountRef } from '$lib/types';
   import type { SiteMediaRef } from '$lib/api';
@@ -332,14 +333,25 @@
     }
   }
 
-  // ——— new page → modal: title, slug, draft-vs-publish (blog left for plugin-land) ———
-  let newModal = $state<null | { title: string; slug: string; asDraft: boolean }>(null);
+  // ——— new page → modal: title, slug, a page-type scaffold, draft-vs-publish ———
+  let pagetypes = $state<readonly PagetypeRef[]>([]);
+  let newModal = $state<null | { title: string; slug: string; scaffold: string; asDraft: boolean }>(null);
   let creating = $state(false);
   let newError = $state('');
 
   function openNew() {
     newError = '';
-    newModal = { title: '', slug: '', asDraft: false };
+    newModal = { title: '', slug: '', scaffold: 'article', asDraft: false };
+    void loadPagetypes(); // scaffolds pay for themselves — lazy load on modal open
+  }
+
+  async function loadPagetypes() {
+    if (pagetypes.length > 0) return; // fetched once per visit, refreshed by reload
+    try {
+      pagetypes = await listPagetypes();
+    } catch (e) {
+      newError = e instanceof Error ? e.message : String(e);
+    }
   }
 
   async function saveNew(event: SubmitEvent) {
@@ -352,7 +364,8 @@
       const today = new Date().toISOString().slice(0, 10);
       // JSON.stringify quotes the title — YAML-hostile colons stay harmless.
       const frontmatter = `---\ntitle: ${JSON.stringify(m.title)}\nslug: ${m.slug}\npublished: true\ndraft: ${m.asDraft}\ndate: ${today}\ntags: []\n---`;
-      await createPage('pages', m.slug, `${frontmatter}\n\n\n`);
+      const scaffold = pagetypes.find((p) => p.name === m.scaffold);
+      await createPage('pages', m.slug, `${frontmatter}\n\n${scaffold?.body ?? ''}`.trimEnd() + '\n');
       refreshIndex();
       select('pages', m.slug); // onto the live page — fill it there
       newModal = null;
@@ -474,6 +487,94 @@
       renameError = e instanceof Error ? e.message : String(e);
     }
   }
+
+  // ——— page settings: per-page frontmatter, ported from the retired editor burger ———
+  // The ONE overlay law (2026-11-04): the dashboard carries the page's title,
+  // serve-as, date, tags and draft state. published/published flags are preserved
+  // verbatim (publish/unpublish toggles stay a deliberate act, not a side effect);
+  // baking reuses the editor's own path — PUT draft under the X-Base-Hash guard +
+  // publish with the client-rendered body. Slug changes stay with rename (✎), so
+  // no URL surgery happens behind a settings form's back.
+  const STYLE_OPTIONS = [['', 'theme default'], ['classical', 'classical'], ['slide', 'slide']] as const;
+
+  let pageSettings = $state<null | {
+    type: string;
+    slug: string;
+    published: boolean;
+    title: string;
+    asDraft: boolean;
+    date: string;
+    tags: string;
+    style: string;
+    baseRaw: string;
+    hash: string;
+    saving: boolean;
+    error: string;
+  }>(null);
+
+  async function openPageSettings(type: string, slug: string) {
+    try {
+      const { raw, hash } = await getDraftRaw(type, slug);
+      const { frontmatter } = splitFrontmatter(raw);
+      const peek = (key: string): string =>
+        new RegExp(`^${key}:\\s*(.*)$`, 'm').exec(frontmatter)?.[1]?.trim().replace(/^["']|["']$/g, '') ?? '';
+      pageSettings = {
+        type,
+        slug,
+        published: peek('published') !== 'false', // an absent published flag IS published
+        title: peek('title'),
+        asDraft: peek('draft') === 'true',
+        date: peek('date'),
+        tags: peek('tags').replace(/^\[|\]$/g, ''),
+        style: peek('style'),
+        baseRaw: raw,
+        hash,
+        saving: false,
+        error: ''
+      };
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function savePageSettings(event: SubmitEvent) {
+    event.preventDefault();
+    const s = pageSettings;
+    if (s === null || s.saving) return;
+    if (s.title.trim() === '') {
+      s.error = 'The title cannot be empty.';
+      return;
+    }
+    s.saving = true;
+    s.error = '';
+    try {
+      const body = splitFrontmatter(s.baseRaw).body;
+      const tagList = s.tags.split(',').map((t) => t.trim()).filter(Boolean);
+      const lines = [
+        '---',
+        `title: ${JSON.stringify(s.title.trim())}`,
+        `slug: ${s.slug}`,
+        `published: ${s.published ? 'true' : 'false'}`,
+        `draft: ${s.asDraft ? 'true' : 'false'}`,
+        `date: ${s.date !== '' ? s.date : new Date().toISOString().slice(0, 10)}`,
+        `tags: [${tagList.map((t) => JSON.stringify(t)).join(', ')}]`
+      ];
+      if (s.style !== '') lines.push(`style: ${s.style}`);
+      lines.push('---');
+      const nextRaw = `${lines.join('\n')}\n\n${body}`.trimEnd() + '\n';
+      await putDraftRaw(s.type, s.slug, nextRaw, s.hash);
+      // Baking only makes sense for a live page — draft-born pages wait for the
+      // regular publish path (frontmatter flags ride verbatim, store-side).
+      if (s.published) {
+        await publishDraft(s.type, s.slug, renderMdms(nextRaw, { type: s.type, slug: s.slug }).fullHtml);
+      }
+      refreshIndex();
+      pageSettings = null;
+    } catch (e) {
+      s.error = e instanceof Error ? e.message : String(e);
+      s.saving = false;
+    }
+  }
 </script>
 
 <main class="min-h-screen">
@@ -590,6 +691,7 @@
                         {#if page.hasDraft}<span class="badge badge-live ml-2">edits</span>{/if}
                       </button>
                       <button class="btn-ghost" title="Rename" onclick={() => startRename(type, page.slug)}>✎</button>
+                      <button class="btn-ghost" title="Page settings" onclick={() => openPageSettings(type, page.slug)}>✑</button>
                       <button class="btn-ghost danger" title="Delete" onclick={() => removePage(type, page.slug)}>×</button>
                     {/if}
                   </li>
@@ -827,6 +929,50 @@
   </div>
 {/if}
 
+{#if pageSettings}
+  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50" role="dialog" aria-modal="true" aria-label="Page settings">
+    <form class="modal-card" onsubmit={savePageSettings}>
+      <header class="modal-head">
+        <h3>Settings — {pageSettings.type}/{pageSettings.slug}</h3>
+        <button type="button" class="close-x" onclick={() => (pageSettings = null)}>×</button>
+      </header>
+
+      <label class="field">
+        <span>Title</span>
+        <input class="input" bind:value={pageSettings.title} required />
+      </label>
+      <fieldset class="border border-dashed border-line p-2 flex flex-col gap-1 text-sm">
+        <legend class="text-xs text-ink-soft px-1">Serve this page as</legend>
+        <label class="check"><input type="radio" bind:group={pageSettings.asDraft} value={false} /> Published — visible to the public</label>
+        <label class="check"><input type="radio" bind:group={pageSettings.asDraft} value={true} /> Draft — editors only until published</label>
+      </fieldset>
+      <label class="field">
+        <span>Template <span class="hint">(this page only — a "Served as" here overrides the site-wide one)</span></span>
+        <select class="input" bind:value={pageSettings.style}>
+          {#each STYLE_OPTIONS as [value, label] (value)}
+            <option value={value}>{label}</option>
+          {/each}
+        </select>
+      </label>
+      <label class="field">
+        <span>Date</span>
+        <input class="input" type="date" bind:value={pageSettings.date} />
+      </label>
+      <label class="field">
+        <span>Tags (comma-separated)</span>
+        <input class="input" bind:value={pageSettings.tags} />
+      </label>
+
+      <p class="text-xs text-ink-soft m-0">Save writes the draft under the same conflict guard the editor used; a published page bakes live with the rendered body. Slug changes belong to the ✎ rename, not here.</p>
+      {#if pageSettings.error}<p class="alert alert-err m-0" role="alert">{pageSettings.error}</p>{/if}
+      <footer class="modal-foot">
+        <button type="button" class="btn btn-secondary" onclick={() => (pageSettings = null)}>Cancel</button>
+        <button type="submit" class="btn btn-primary" disabled={pageSettings.saving}>{pageSettings.saving ? 'Baking…' : 'Save + bake'}</button>
+      </footer>
+    </form>
+  </div>
+{/if}
+
 {#if newModal}
   <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50" role="dialog" aria-modal="true" aria-label="New page">
     <form class="modal-card" onsubmit={saveNew}>
@@ -843,6 +989,14 @@
         <span>Slug (URL)</span>
         <input class="input" bind:value={newModal.slug} required pattern="[a-z0-9]+(-[a-z0-9]+)*"
           title="lowercase letters, digits, hyphens" placeholder="my-tart" />
+      </label>
+      <label class="field">
+        <span>Fill from a page type</span>
+        <select class="input" bind:value={newModal.scaffold}>
+          {#each pagetypes as p (p.name)}
+            <option value={p.name}>{p.title}</option>
+          {/each}
+        </select>
       </label>
 
       <fieldset class="border border-dashed border-line p-2 flex flex-col gap-1 text-sm">
