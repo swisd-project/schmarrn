@@ -176,10 +176,6 @@ THE CONFESSED SIN: I had TWO rects (a static tab that stayed put + a second menu
 
 GUILLOTINE CONFESSED: the fixed 1.75×5.5rem drawer CLIPPED the second item (content ≈ 6.3rem > 5.5rem — overflow:hidden did exactly what its name says). FIX: the rect has NO fixed sizes anymore — CSS width/height are auto (shrink-to-fit), so it always equals its children; the slide survives as a measured FLIP in applyOpen(): measure current box → toggle the menu's display (none/flex) → measure the natural target box → commit the start frame → animate width/height to target (.15s, stylesheet transition) → transitionend clears the inline sizes so the rect KEEPS following its children forever (add/remove items tomorrow, it adapts). Center-anchored (top:50% + translateY(-50%)) so growth is symmetric — the rect never jumps, it grows. Collapsed = triangle + padding only (~25px wide); open = whatever the items need. Own-wart caught en route: my edit deleted the triangle append (restored) — and all state changes now flow through ONE applyOpen (open class, aria-expanded, slide); items no longer bother toggling (navigation/reload happens anyway). Bundle rebuilt: transitionend present, strings intact.
 
-## The closed door 3× 2026-11-04 (user: "make the closed rect 3 times as large")
-
-Pure geometry note: the CLOSED state now holds min-width 4.75rem × min-height 7.5rem (≈3× the natural ~25×40px tab) via .sm-admin-root:not(.open) — min-sizes, so the open state still sizes purely to its children (the auto-size law of the previous row stands; no void padding when expanded). The triangle scaled ×3 with the tab (18/18/21 border legs) so it doesn't read as a flea. FLIP slide measures from the bigger closed box — untouched logic.
-
 Deferred / graveyard
 ---
 
