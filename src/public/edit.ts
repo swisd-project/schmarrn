@@ -300,27 +300,6 @@ async function boot(root: HTMLElement): Promise<void> {
     root.setAttribute('aria-expanded', 'false');
     let open = false;
 
-    /** The drawer's two widths, measured ONCE from real layout (frame padding +
-     *  border included). Height is NEVER touched — the menu stays in flow and
-     *  only its visibility toggles, so the closed rect is exactly as tall as
-     *  the opened one and keeps following its children automatically. */
-    const rootStyle = getComputedStyle(root);
-    const framePad = parseFloat(rootStyle.paddingLeft) + parseFloat(rootStyle.paddingRight)
-      + parseFloat(rootStyle.borderLeftWidth) + parseFloat(rootStyle.borderRightWidth);
-    root.style.width = 'auto';
-    const openW = root.offsetWidth;
-    const tri = root.querySelector<HTMLElement>('.sm-admin-tri');
-    const closedW = Math.ceil(tri !== null ? tri.getBoundingClientRect().width : 7)
-      + framePad;
-    root.style.width = `${closedW}px`;
-
-    function applyOpen(next: boolean): void {
-      open = next;
-      root.classList.toggle('open', open);
-      root.setAttribute('aria-expanded', open ? 'true' : 'false');
-      root.style.width = `${open ? openW : closedW}px`; // height: never
-    }
-
     const toggle = () => applyOpen(!open);
     root.addEventListener('click', toggle);
     root.addEventListener('keydown', (e) => {
@@ -359,6 +338,28 @@ async function boot(root: HTMLElement): Promise<void> {
     );
     root.append(menu);
     document.body.append(root);
+
+    // Measure ONLY after the drawer is mounted and fully populated — the
+    // previous build measured a DETACHED element (offsetWidth 0, computed
+    // padding NaN, triangle not yet appended) and wrote "0px"/"NaNpx" widths,
+    // which the browser ignored → the door was born wide and never collapsed.
+    // The drawer's two widths, measured once from real layout: height is NEVER
+    // touched (menu stays in flow, visibility toggles) so closed = opened tall.
+    const rootStyle = getComputedStyle(root);
+    const framePad = parseFloat(rootStyle.paddingLeft) + parseFloat(rootStyle.paddingRight)
+      + parseFloat(rootStyle.borderLeftWidth) + parseFloat(rootStyle.borderRightWidth);
+    const tri = root.querySelector<HTMLElement>('.sm-admin-tri');
+    const closedW = Math.ceil(tri !== null ? tri.getBoundingClientRect().width : 7) + framePad;
+    root.style.width = 'auto';
+    const openW = root.offsetWidth;
+    root.style.width = `${closedW}px`;
+
+    function applyOpen(next: boolean): void {
+      open = next;
+      root.classList.toggle('open', open);
+      root.setAttribute('aria-expanded', open ? 'true' : 'false');
+      root.style.width = `${open ? openW : closedW}px`; // height: never
+    }
 
     document.addEventListener('click', (e) => {
       if (!open || (e.target as HTMLElement).closest('.sm-admin-root') !== null) return;
