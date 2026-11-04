@@ -199,6 +199,7 @@ ${n.comment}`:n.comment}this.doc.range[2]=n.offset;break}default:this.errors.pus
   border-top:6px solid transparent; border-bottom:6px solid transparent;
   border-right:7px solid #767676; pointer-events:none;
 }
+.sm-admin-root.open .sm-admin-tri { transform:rotate(180deg); } /* open = points right (state flip, no tween) */
 .sm-admin-menu { visibility:hidden; display:flex; flex-direction:column; gap:.15rem; }
 .sm-admin-root.open .sm-admin-menu { visibility:visible; }
 .sm-admin-menu button {
