@@ -60,16 +60,17 @@ const EDIT_CSS = `
 }
 [data-sm-edit-root]>[data-sm-selected] { outline:3px solid var(--color-neon-blue); outline-offset:3px; }
 /* the ONE management door, reworked 2026-11-04 (user design): a crisp white
-   rect at the right middle. Collapsed: thin, with a grey triangle pointing
-   left ("expand me"). Open: it breathes out a neat side menu — Backend and
-   Log out — white rect, grey font. No batter, no neon: it is a door handle,
-   not a decoration. */
-.sm-admin-root { position:fixed; right:0; top:50%; transform:translateY(-50%); z-index:9998; display:flex; align-items:center; justify-content:flex-end; font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; }
+   rect pinned ALWAYS to the right edge of the dom (right:0), sitting ON TOP of
+   its list: collapsed it is a thin tab with a grey triangle pointing left
+   ("expand me"); open, the tab breathes DOWN into a neat column menu — Backend
+   and Log out — white rect, grey font. No batter, no neon: it is a door
+   handle, not a decoration. */
+.sm-admin-root { position:fixed; right:0; top:50%; transform:translateY(-50%); z-index:9998; display:flex; flex-direction:column; align-items:flex-end; font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; }
 .sm-admin-btn {
   display:grid; place-items:center; width:1.75rem; height:5.5rem; padding:0;
   background:#fff; border:2px solid #e3dccd; border-right:none;
   border-radius:6px 0 0 6px; cursor:pointer;
-  box-shadow:0 1px 4px rgba(0,0,0,.10); transition:width .15s ease;
+  box-shadow:0 1px 4px rgba(0,0,0,.10); transition:width .15s ease, height .15s ease;
 }
 .sm-admin-root.open .sm-admin-btn { height:2rem; }
 .sm-admin-btn .sm-admin-tri {
@@ -79,9 +80,9 @@ const EDIT_CSS = `
 }
 .sm-admin-root.open .sm-admin-btn .sm-admin-tri { transform:rotate(180deg); }
 .sm-admin-menu {
-  display:none; flex-direction:column; gap:.15rem; margin-right:.45rem;
+  display:none; flex-direction:column; gap:.15rem; margin-top:.35rem;
   background:#fff; border:2px solid #e3dccd; border-radius:6px;
-  box-shadow:0 2px 10px rgba(0,0,0,.12); padding:.35rem; min-width:8rem;
+  box-shadow:0 2px 10px rgba(0,0,0,.12); padding:.35rem; min-width:8.5rem;
   font-size:12.5px;
 }
 .sm-admin-root.open .sm-admin-menu { display:flex; }
@@ -345,7 +346,7 @@ async function boot(root: HTMLElement): Promise<void> {
         }
       }, ['Log out'])
     );
-    root.append(menu, handle); // flex row: menu left, handle pinned to the right edge
+    root.append(handle, menu); // column: the rect ON TOP, the list of items under it
     document.body.append(root);
 
     document.addEventListener('click', (e) => {
