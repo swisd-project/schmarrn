@@ -8,9 +8,11 @@
 
 export const backParam = 'back';
 
-/** The pill's ride: open the overlay, carrying the page it was born on. */
-export function backHref(pathname: string, hash = ''): string {
-  return `/_?${backParam}=${encodeURIComponent(pathname + hash)}`;
+/** The drawer's ride: open the overlay, carrying the page it was born on —
+ *  and optionally the tab to land on (contents|settings|wares|users). */
+export function backHref(pathname: string, hash = '', tab = ''): string {
+  const tabPart = tab !== '' ? `&tab=${encodeURIComponent(tab)}` : '';
+  return `/_?${backParam}=${encodeURIComponent(pathname + hash)}${tabPart}`;
 }
 
 /**

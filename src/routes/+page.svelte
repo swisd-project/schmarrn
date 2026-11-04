@@ -27,9 +27,17 @@
         authenticated = s.authenticated;
         user = s.user;
         role = s.role;
-        // Arriving at /_ while authed = the admin button sent you here — the ONE
-        // overlay opens itself, no empty state, no second click.
-        if (s.authenticated) openMenu();
+        // Arriving at /_ while authed = the drawer sent you here — the ONE
+        // overlay opens itself, pre-selected on the carried ?tab= (editors
+        // are pinned to Contents; admins get all four).
+        if (s.authenticated) {
+          const wanted = new URLSearchParams(window.location.search).get('tab') ?? '';
+          const allowed: readonly Tab[] = s.role === 'admin'
+            ? ['contents', 'settings', 'wares', 'users']
+            : ['contents'];
+          if ((allowed as readonly string[]).includes(wanted)) showTab(wanted as Tab);
+          openMenu();
+        }
       })
       .catch(() => (authenticated = false));
     setupStatus()

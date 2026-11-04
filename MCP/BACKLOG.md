@@ -72,6 +72,10 @@ User-to-verify / housekeeping
 
 THE REAL PARASITE, finally with a body: the width measurement ran BEFORE document.body.append(root) and BEFORE the triangle append — a DETACHED element measures offsetWidth = 0, computed padding = NaN, tri = null → closedW/openW garbage → every style.width write was "0px"/"NaNpx" → INVALID → ignored → width stayed auto → the drawer rendered permanently WIDE and could never collapse. Not a design fight — a mounting-order bug wearing a design argument as a costume. FIX: measure only after mount + full population (append root → getComputedStyle → tri rect → auto → openW → closedW). Bundle rebuilt; front page battery green.
 
+## The drawer carries the tabs 2026-11-04 (user: "add the tabs from the overlay as nav items")
+
+The drawer's items ARE the overlay's tabs: Contents | Settings | Plugins & Templates | Users (admin-only tabs hidden for editors) + Log out last — "Backend" retired. Each item opens /_?back=<page>&tab=<tab>; the overlay's session boot reads ?tab and showTab()s pre-selected (role-guarded — editors pinned to Contents). back.ts grew the optional tab param; node battery 16/16 (tab + tab+hash cases added). Builds green, svelte-check 0/0.
+
 Deferred / graveyard
 ---
 - Aliases: killed (no v1 use-case); composer: never (vendored single libs only); preview-full split: superseded.

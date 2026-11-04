@@ -297,7 +297,7 @@ async function boot(root: HTMLElement): Promise<void> {
     root.className = 'sm-admin-root';
     root.setAttribute('role', 'button');
     root.setAttribute('tabindex', '0');
-    root.setAttribute('aria-label', 'Admin menu — expand for Backend and Log out');
+    root.setAttribute('aria-label', 'Admin drawer — overlay tabs and Log out');
     root.setAttribute('aria-expanded', 'false');
     let open = false;
 
@@ -314,15 +314,22 @@ async function boot(root: HTMLElement): Promise<void> {
     const menu = document.createElement('div');
     menu.className = 'sm-admin-menu';
     menu.setAttribute('role', 'menu');
-    menu.append(
-      el('button', {
+    // The drawer's items ARE the overlay's tabs — each opens /_ pre-selected
+    // on that tab (editors only get Contents; admin tabs stay admin-only).
+    const TAB_ITEMS: readonly (readonly [string, string])[] = role === 'admin'
+      ? [['contents', 'Contents'], ['settings', 'Settings'], ['wares', 'Plugins & Templates'], ['users', 'Users']]
+      : [['contents', 'Contents']];
+    for (const [tab, label] of TAB_ITEMS) {
+      menu.append(el('button', {
         type: 'button',
         role: 'menuitem',
         onclick: (e) => {
-          e.stopPropagation(); // opening Backend is navigation, not a toggle
-          window.location.href = backHref(window.location.pathname, window.location.hash);
+          e.stopPropagation(); // opening the overlay is navigation, not a toggle
+          window.location.href = backHref(window.location.pathname, window.location.hash, tab);
         }
-      }, ['Backend']),
+      }, [label]));
+    }
+    menu.append(
       el('button', {
         type: 'button',
         role: 'menuitem',
