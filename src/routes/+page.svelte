@@ -220,6 +220,35 @@
     }
   }
 
+  // ——— the drawer (dashboard twin of the editor's door): same rect, items switch tabs in place ———
+  const DOOR_TABS: readonly { tab: Tab; label: string }[] = [
+    { tab: 'contents', label: 'Contents' },
+    { tab: 'settings', label: 'Settings' },
+    { tab: 'wares', label: 'Plugins & Templates' },
+    { tab: 'users', label: 'Users' }
+  ];
+  const allowedTabs = $derived(DOOR_TABS.filter((t) => role === 'admin' || t.tab === 'contents'));
+  let drawerOpen = $state(false);
+
+  /** Measured widths, same law as the editor's door (src/public/edit.ts): the
+   *  menu stays in flow (height = open height always), only the width slides;
+   *  sizes are measured from real mounted layout, never guessed. */
+  function drawer(node: HTMLElement, open: boolean) {
+    const cs = getComputedStyle(node);
+    const framePad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
+      + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
+    node.style.width = 'auto';
+    const openW = node.offsetWidth;
+    const tri = node.querySelector<HTMLElement>('.sm-admin-tri');
+    const closedW = Math.ceil(tri !== null ? tri.getBoundingClientRect().width : 7) + framePad;
+    node.style.width = `${open ? openW : closedW}px`;
+    return {
+      update(next: boolean) {
+        node.style.width = `${next ? openW : closedW}px`;
+      }
+    };
+  }
+
   // ——— plugins (admin, lazy, part of "Plugins & Templates") ———
   let plugins = $state<readonly PluginRef[]>([]);
   let pluginsBusy = $state(false);
@@ -643,6 +672,37 @@
       <span class="ml-auto text-sm text-ink-soft">{user}{#if role} · {role}{/if}</span>
       <button class="btn btn-secondary" onclick={signOut}>Log out</button>
     </header>
+
+    <!-- the drawer: same door as the live page — items switch the overlay's tabs in place -->
+    <div
+      class="sm-admin-root"
+      class:open={drawerOpen}
+      role="button"
+      tabindex="0"
+      aria-label="Admin drawer — overlay tabs and Log out"
+      aria-expanded={drawerOpen}
+      use:drawer={drawerOpen}
+      onclick={(e) => {
+        if ((e.target as HTMLElement).closest('button') !== null) return;
+        drawerOpen = !drawerOpen;
+      }}
+      onkeydown={(e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && (e.target as HTMLElement).closest('button') === null) {
+          e.preventDefault();
+          drawerOpen = !drawerOpen;
+        }
+      }}
+    >
+      <span class="sm-admin-tri"></span>
+      <div class="sm-admin-menu" role="menu">
+        {#each allowedTabs as t (t.tab)}
+          <button type="button" role="menuitem" onclick={(e) => { e.stopPropagation(); showTab(t.tab); drawerOpen = false; }}>
+            {t.label}
+          </button>
+        {/each}
+        <button type="button" role="menuitem" onclick={(e) => { e.stopPropagation(); signOut(); }}>Log out</button>
+      </div>
+    </div>
     <!-- Behind the overlay there is deliberately NO management view: the overlay
          IS the authed face of /_ (it auto-opens on a live session), and its Close
          walks back to the exact page you came from. A second "management page"
@@ -655,6 +715,9 @@
 </main>
 
 <svelte:window onkeydown={(e) => (menuOpen && e.key === 'Escape' ? closeMenu() : null)} />
+<svelte:document onclick={(e) => {
+  if (drawerOpen && (e.target as HTMLElement).closest('.sm-admin-root') === null) drawerOpen = false;
+}} />
 
 {#if menuOpen}
   <!-- Escape lives on WINDOW (see the top-level <svelte:window>): the overlay

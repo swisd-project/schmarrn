@@ -76,6 +76,10 @@ THE REAL PARASITE, finally with a body: the width measurement ran BEFORE documen
 
 The drawer's items ARE the overlay's tabs: Contents | Settings | Plugins & Templates | Users (admin-only tabs hidden for editors) + Log out last — "Backend" retired. Each item opens /_?back=<page>&tab=<tab>; the overlay's session boot reads ?tab and showTab()s pre-selected (role-guarded — editors pinned to Contents). back.ts grew the optional tab param; node battery 16/16 (tab + tab+hash cases added). Builds green, svelte-check 0/0.
 
+## The drawer retained on the overlay 2026-11-04 (user: "retain the drawer menu on the overlay")
+
+The dashboard gets the same door: +page.svelte renders .sm-admin-root in the authed view (z-45 — above the z-40 overlay, below the z-50 modals), CSS twin in app.css (the editor's door styles copied verbatim). Differences by surface: the drawer's tab items SWITCH TABS IN PLACE (showTab + drawer closes — no navigation, no ?back dance; the overlay is already home) and Log out = signOut() (SPA login wall). Same measured-width law (use:drawer action, sizes from real mounted layout), same outside-click collapse (svelte:document), same keyboard toggle. Builds green, svelte-check 0/0.
+
 Deferred / graveyard
 ---
 - Aliases: killed (no v1 use-case); composer: never (vendored single libs only); preview-full split: superseded.
