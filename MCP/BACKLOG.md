@@ -164,6 +164,10 @@ The round pill drawer was replaced with an EDGE DOOR: .sm-admin-root fixed right
 
 GEOMETRY CORRECTION on the expanding door: the root became a COLUMN (flex-direction:column, align-items:flex-end, still right:0 top:50%) — the collapsed rect is ALWAYS flush with the right edge (border-right:none keeps it seamless against the viewport) and sits ON TOP of its list; the menu (margin-top .35rem, min-width 8.5rem) hangs DOWNWARD beneath the handle, its right edge aligned with the rect's. DOM order flipped back to [handle, menu] (the row-era comment died with the row). Bundle rebuilt (build:edit) and the CSS/domo order byte-verified. Everything else (triangle flip, outside-click collapse, carried ?back= homecoming, logout) untouched.
 
+## The admin door, SIMPLIFIED 2026-11-04 (user: "stop overdoing it. no fancy shit. a simple rect with a few menu items that slides in and out. no micro-animations, no in-out jump of the rect")
+
+FANCY EXCISED, audit-clean: (1) the in-out JUMP died — the rect never changes size or position again (the old .open height 2rem morph + triangle rotate are deleted byte-verified, 0 leftovers in the bundle); root anchors top:calc(50% - 2.75rem) so the rect's middle stays at 50% while the menu (position:absolute top:100% right:0 width:8.5rem) appears BELOW without touching the root's own height — the rect CANNOT move because nothing it depends on changes. (2) exactly ONE motion remains: the menu slides (translateX 100% → 0 with opacity + visibility, .15s ease) out from / back to under the rect's right edge — fixed-position subtree adds no scrollable overflow, so the off-screen closed state can't flash a horizontal scrollbar. (3) the triangle never rotates (it just points left, permanently — the door's shape IS the affordance). Everything else (Carried ?back= homecoming, logout, outside-click collapse, aria) untouched; bundle rebuilt. LESSON: user said expansion, I built choreography — chrome reads menus, not staged theater; the second request means the design needed LAWS, and the simplification is now written in the CSS comment itself.
+
 Deferred / graveyard
 ---
 

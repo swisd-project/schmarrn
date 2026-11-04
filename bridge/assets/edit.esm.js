@@ -181,33 +181,35 @@ ${n.comment}`:n.comment}this.doc.range[2]=n.offset;break}default:this.errors.pus
   outline:2px dashed rgba(0,207,255,.55); outline-offset:2px;
 }
 [data-sm-edit-root]>[data-sm-selected] { outline:3px solid var(--color-neon-blue); outline-offset:3px; }
-/* the ONE management door, reworked 2026-11-04 (user design): a crisp white
-   rect pinned ALWAYS to the right edge of the dom (right:0), sitting ON TOP of
-   its list: collapsed it is a thin tab with a grey triangle pointing left
-   ("expand me"); open, the tab breathes DOWN into a neat column menu \u2014 Backend
-   and Log out \u2014 white rect, grey font. No batter, no neon: it is a door
-   handle, not a decoration. */
-.sm-admin-root { position:fixed; right:0; top:50%; transform:translateY(-50%); z-index:9998; display:flex; flex-direction:column; align-items:flex-end; font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; }
+/* the ONE management door \u2014 user-simplified 2026-11-04: "a simple rect with a
+   few menu items that slides in and out. no micro-animations, no in-out jump
+   of the rect." THE LAW: the rect is CONSTANT (never grows, never shrinks,
+   never moves \u2014 anchored so its middle stays at 50% while the menu appears
+   below, absolutely positioned so the root's height never changes). Exactly
+   ONE animation exists: the menu slides out from/right to under the rect.
+   White rect, grey font. Nothing else. */
+.sm-admin-root { position:fixed; right:0; top:calc(50% - 2.75rem); z-index:9998; font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; }
 .sm-admin-btn {
   display:grid; place-items:center; width:1.75rem; height:5.5rem; padding:0;
   background:#fff; border:2px solid #e3dccd; border-right:none;
   border-radius:6px 0 0 6px; cursor:pointer;
-  box-shadow:0 1px 4px rgba(0,0,0,.10); transition:width .15s ease, height .15s ease;
+  box-shadow:0 1px 4px rgba(0,0,0,.10);
 }
-.sm-admin-root.open .sm-admin-btn { height:2rem; }
 .sm-admin-btn .sm-admin-tri {
   display:block; width:0; height:0;
   border-top:6px solid transparent; border-bottom:6px solid transparent;
-  border-right:7px solid #767676; transition:transform .15s ease;
+  border-right:7px solid #767676;
 }
-.sm-admin-root.open .sm-admin-btn .sm-admin-tri { transform:rotate(180deg); }
 .sm-admin-menu {
-  display:none; flex-direction:column; gap:.15rem; margin-top:.35rem;
+  position:absolute; top:100%; right:0; margin-top:.35rem; width:8.5rem;
+  display:flex; flex-direction:column; gap:.15rem;
   background:#fff; border:2px solid #e3dccd; border-radius:6px;
-  box-shadow:0 2px 10px rgba(0,0,0,.12); padding:.35rem; min-width:8.5rem;
+  box-shadow:0 2px 8px rgba(0,0,0,.12); padding:.35rem;
   font-size:12.5px;
+  opacity:0; visibility:hidden; transform:translateX(100%);
+  transition:transform .15s ease, opacity .15s ease, visibility .15s;
 }
-.sm-admin-root.open .sm-admin-menu { display:flex; }
+.sm-admin-root.open .sm-admin-menu { opacity:1; visibility:visible; transform:translateX(0); }
 .sm-admin-menu button {
   display:block; width:100%; text-align:left; white-space:nowrap;
   background:none; border:none; padding:.5rem .65rem; border-radius:4px;
