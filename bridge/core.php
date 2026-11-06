@@ -44,7 +44,7 @@ namespace Core;
 require_once __DIR__ . '/router.php';
 
 const RELEASES_URL = 'https://api.github.com/repos/swisd-project/schmarrn/releases/latest';
-const TAGS_URL = 'https://api.github.com/repos/swisd-project/schmarrn/tags';
+const TAGS_URL = 'https://api.github.com/repos/swisd-project/schmarrn/tags?per_page=100';
 const PACKET_URL = 'https://codeload.github.com/swisd-project/schmarrn/zip/refs/tags/';
 const VERSION_FILE = __DIR__ . '/CORE-VERSION';
 const BLANK_FILE = __DIR__ . '/cache/core-blank';
@@ -132,26 +132,41 @@ function assetIn(array $release): ?string
 }
 
 /**
- * The newest version GitHub announces: a release first (releases/latest —
- * drafts and prereleases filtered by GitHub itself), the tag list as the
- * fallback (highest semver of the names). The PACKET rides the release's own
- * zip ASSET when the release ships one — the asset is the only place a built
- * dashboard (build/) can travel in; a tag's codeload zip is source alone.
- * latest null = the source is dark.
+ * The newest version the updater sees — the SEMVER MAX over the RELEASES
+ * list, never `releases/latest` alone (that endpoint is creation-ordered;
+ * it also hides nothing: a version without a release does not exist to the
+ * update line — the v1.2.5 lesson, 2026-11-07: a tag cut without its release
+ * made rigs claim versions GitHub couldn't serve). The packet rides the
+ * winning release's zip ASSET when it ships one. The TAG LIST answers only
+ * when no release exists at all (the pre-release era fallback). latest null
+ * = the source is dark.
  */
 function announce(): array
 {
     $tag = null;
-    $asset = null; // the release's own packet URL, when it ships one
-    $raw = httpGet(RELEASES_URL);
+    $asset = null;
+    $raw = httpGet(str_replace('/releases/latest', '/releases?per_page=100', RELEASES_URL));
     if ($raw !== null) {
-        $release = json_decode((string)$raw, true);
-        if (is_array($release) && is_string($release['tag_name'] ?? null)) {
-            $tag = (string)$release['tag_name'];
-            $asset = assetIn($release);
+        $list = json_decode((string)$raw, true);
+        if (is_array($list)) {
+            foreach ($list as $release) {
+                if (!is_array($release) || !is_string($release['tag_name'] ?? null)) {
+                    continue;
+                }
+                $name = (string)$release['tag_name'];
+                if (preg_match('/^v?(\d+(?:\.\d+){0,3})$/', $name) !== 1) {
+                    continue; // junk in the release hat — not a version
+                }
+                if ($tag === null || version_compare(ltrim($name, 'v'), ltrim($tag, 'v')) === 1) {
+                    $tag = $name;
+                    $asset = assetIn($release); // the winner's own asset, or null
+                }
+            }
         }
-    } else {
-        // the first GET went dark — the plain tag list may still answer
+    }
+
+    if ($tag === null) {
+        // no releases at all — the pre-release era: the tag list may still answer
         $raw = httpGet(TAGS_URL);
         if ($raw !== null) {
             $list = json_decode((string)$raw, true);
@@ -168,6 +183,7 @@ function announce(): array
             }
         }
     }
+
     if ($tag === null) {
         return ['latest' => null, 'packet' => null, 'error' => 'GitHub does not answer — the core\'s newest version is unknown from here.'];
     }
@@ -566,7 +582,7 @@ function update(string $source = 'hub'): array
         }
         $latest = (string)$ann['latest'];
         if (version_compare(ltrim($latest, 'v'), $from) !== 1) {
-            \Router\refuse(409, "The core is already on {$from} — GitHub's newest version is {$latest}.");
+            \Router\refuse(409, "The core is already on {$from} — the newest RELEASED version is {$latest}." . (version_compare(ltrim($latest, 'v'), $from) === -1 ? ' The floor outran the release line — cut the release for the version this host carries.' : ''));
         }
         $to = ltrim($latest, 'v'); // the announced word without the tag's vanity prefix
         $scratch = scratchDir();

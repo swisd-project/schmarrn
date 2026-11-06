@@ -37,6 +37,7 @@ Environment
 - Local dev: PHP 8.5 built-in server (`php -S`) alone on `:8080` — it serves the public site, the API, the live editor AND the dashboard (`/_`, from `build/`). Vite dev is opt-in (`dev:app`) for dashboard-UI HMR only (2026-11-04, user call: "two servers is confusing").
 - Deploy: FTP upload of one folder (api + built dashboard + content). Writable dirs needed for: cache, per-host sessions, account/file-backed store, uploads (per-host reality, all under the install).
 - Requirements: PHP 8.4+ on deploy (dev on 8.5 — 8.2's security support ends Dec 2026, don't build on it). gd+zip enter only in v2 (see Locked Decisions). No composer, no database, no cron.
+- The PORT LAW (2026-11-07, user-mandated after a live dev session was killed under them): a running session is SACRED. Never kill a process on a port the agent did not start — `fuser -k` against a foreign port is forbidden; if a port must move and it isn't ours, ASK. A new dev server auto-steps to the next free port instead: `npm run dev` → `scripts/dev-serve.sh [start-port]` (default 8080), which KNOCKS (a /dev/tcp TCP probe — harmless) and never kicks.
 
 Releases & Versioning (2026-11-06, user law)
 
@@ -44,6 +45,7 @@ Releases & Versioning (2026-11-06, user law)
 - When asking, STATE THE CURRENT VERSION (read `bridge/CORE-VERSION`, cross-check `package.json`) and ASK HOW TO INCREMENT (major/minor/patch) — the agent never picks the number alone.
 - A go for push means commit + tag + push AND the release steps (bump, tag, asset zip) ONLY when the user granted release permission; a push-go alone stays a push-go. One permission never implies the other.
 - The release asset: GitHub's zipball is source-only (`build/` is git-ignored), so a release moves the dashboard ONLY when it wears the asset zip — `npm run build && scripts/ship-release.sh vX.Y.Z`, then attach `schmarrn-<version>.zip` to the release on GitHub (the maintainer's hand). The core self-update prefers the release's zip asset and falls back to the codeload zipball (code without the face).
+- A TAG IS CUT ONLY TOGETHER WITH ITS RELEASE (2026-11-07, the v1.2.5 lesson): the version floor must never outrun the newest release — an unreleased tag made a rig claim a version GitHub couldn't serve, and the updater's world broke. The updater follows the RELEASES list (semver max, `Core\announce()`); the tag list answers only when no release exists at all (pre-release era fallback).
 
 The Admin Drawer & /_ Mode (2026-11-07, user-designed — the sidebar quest's verdict)
 

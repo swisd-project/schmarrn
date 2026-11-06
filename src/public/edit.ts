@@ -424,7 +424,7 @@ async function boot(root: HTMLElement): Promise<void> {
       openW = door.offsetWidth;
       door.style.width = `${open ? openW : closedW}px`;
     };
-    door.style.width = `${closedW}px`;
+    measure(); // the mount measurement — the old inline law, now a verb
 
     function applyOpen(next: boolean): void {
       open = next;

@@ -580,10 +580,24 @@
   let coreError = $state('');
   let coreNote = $state('');
 
+  /** Semver-greater-than over dotted numbers — the verdict compares VERSIONS;
+   *  a string inequality made the pill scream "Update available" forever
+   *  while the server rightly refused (2026-11-07, seen live on 1.2.5/1.2.3). */
+  function versionGreater(a: string, b: string): boolean {
+    const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
+    const pb = b.split('.').map((n) => parseInt(n, 10) || 0);
+    for (let i = 0; i < 3; i++) {
+      const x = pa[i] ?? 0;
+      const y = pb[i] ?? 0;
+      if (x !== y) return x > y;
+    }
+    return false;
+  }
+
   // ——— the updates verdicts (below the state they read) ———
   const templateUpdates = $derived(vitrine.filter((w) => w.kind === 'template' && w.state === 'update' && w.missing.length === 0));
   const pluginUpdates = $derived(vitrine.filter((w) => w.kind === 'plugin' && w.state === 'update' && w.missing.length === 0));
-  const coreUpdateAvailable = $derived(core !== null && core.latest !== null && core.latest !== core.current);
+  const coreUpdateAvailable = $derived(core !== null && core.latest !== null && versionGreater(core.latest, core.current));
   const updatesAvailable = $derived(coreUpdateAvailable || templateUpdates.length > 0 || pluginUpdates.length > 0);
 
   async function loadCore() {

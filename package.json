@@ -1,12 +1,12 @@
 {
   "name": "schmarrn-dashboard",
   "private": true,
-  "version": "1.2.5",
+  "version": "1.2.6",
   "type": "module",
   "scripts": {
-    "dev": "php -S localhost:8080 index.php",
+    "dev": "bash scripts/dev-serve.sh",
     "dev:app": "vite dev",
-    "dev:api": "php -S localhost:8080 index.php",
+    "dev:api": "bash scripts/dev-serve.sh",
     "build": "vite build",
     "build:fallback": "node scripts/build-fallback.mjs",
     "build:edit": "node scripts/build-edit.mjs",
