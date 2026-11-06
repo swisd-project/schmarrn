@@ -300,10 +300,26 @@ function mediaMime(string $file): string
     };
 }
 
-function mediaList(string $type, string $slug): array
+/** Page-local media: the page dir itself, or one validated sub-folder of it
+ *  (the dedicated homes of specialized editors — e.g. stop-motion's frames). */
+function mediaDir(string $type, string $slug, string $folder = ''): string
+{
+    $dir = pageDir($type, $slug);
+    if ($folder !== '') {
+        if (preg_match('/^[a-z0-9][a-z0-9-]*$/', $folder) !== 1) {
+            \Router\refuse(400, 'That folder name is unbaked dough.'); }
+        $dir .= '/' . $folder;
+    }
+    return $dir;
+}
+
+function mediaList(string $type, string $slug, string $folder = ''): array
 {
     assertPageExists($type, $slug);
-    $dir = pageDir($type, $slug);
+    $dir = mediaDir($type, $slug, $folder);
+    if (!is_dir($dir)) {
+        return []; // an empty folder is an empty tray, not an error
+    }
     $files = [];
     foreach (scandir($dir) ?: [] as $name) {
         if (in_array($name, ['.', '..', 'index.md'], true) || str_starts_with($name, '.') || str_ends_with($name, '.tmp')) {
@@ -319,8 +335,19 @@ function mediaList(string $type, string $slug): array
     return $files;
 }
 
+/** Immutable against overwrite — but a file may LEAVE: deletion is not rewriting.
+ *  The immutability law keeps history honest; deletion is the editor's hand, named
+ *  and CSRF-gated at the route. */
+function mediaDelete(string $type, string $slug, string $name, string $folder = ''): void
+{
+    $path = mediaPath($type, $slug, $name, $folder);
+    if ($path === null || !@unlink($path)) {
+        \Router\refuse(404, 'That media crumb is not in the tin.');
+    }
+}
+
 /** Immutable by law: an existing filename is never overwritten — the upload gets a fresh prefix. */
-function mediaStore(string $type, string $slug, string $originalName, string $tmpPath): array
+function mediaStore(string $type, string $slug, string $originalName, string $tmpPath, string $folder = ''): array
 {
     assertUploadSize($tmpPath);
     assertPageExists($type, $slug);
@@ -335,7 +362,10 @@ function mediaStore(string $type, string $slug, string $originalName, string $tm
     if ($stem === '') {
         $stem = 'file';
     }
-    $dir = pageDir($type, $slug);
+    $dir = mediaDir($type, $slug, $folder);
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
+        \Router\refuse(500, 'The media folder would not rise — check the host writable paths.');
+    }
     // Same-second uploads collide otherwise — a dash of entropy keeps immutability honest.
     $name = date('Ymd-His') . '-' . bin2hex(random_bytes(3)) . '-' . $stem . '.' . $ext;
     $target = $dir . '/' . $name;
@@ -345,15 +375,18 @@ function mediaStore(string $type, string $slug, string $originalName, string $tm
     return ['name' => $name, 'size' => filesize($target), 'mtime' => filemtime($target)];
 }
 
-/** Contained read: the file must literally live inside the page dir, no ../ games. */
-function mediaPath(string $type, string $slug, string $name): ?string
+/** Contained read: the file must literally live inside the page dir (or its validated sub-folder), no ../ games. */
+function mediaPath(string $type, string $slug, string $name, string $folder = ''): ?string
 {
     assertIdentifier($type, 'type');
     assertIdentifier($slug, 'slug');
     if (preg_match('/^[A-Za-z0-9._-]+$/', $name) !== 1 || str_starts_with($name, '.')) {
         return null;
     }
-    $dir = realpath(pageDir($type, $slug));
+    $dir = realpath(mediaDir($type, $slug, $folder));
+    if ($dir === false) {
+        return null; // no such folder — no such file
+    }
     $path = realpath($dir . '/' . $name);
     if ($dir === false || $path === false || !str_starts_with($path, $dir . DIRECTORY_SEPARATOR)) {
         return null;

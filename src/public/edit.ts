@@ -169,6 +169,9 @@ async function boot(root: HTMLElement): Promise<void> {
   let raw = '';
   let baseHash = '';
   let blocks: Block[] = [];
+  // The plugins' canvas insertables (p6 editorBlocks) — lazily fetched with
+  // the page. Load failure leaves an empty shelf, never a dead editor.
+  let pluginBlocks: readonly { name: string; label: string; template: string; modal: string }[] = [];
   let selected: number | null = null;
   let busy = false;
   let hadDraft = false;
@@ -205,6 +208,18 @@ async function boot(root: HTMLElement): Promise<void> {
     blocks = splitBlocks(splitFrontmatter(raw).body);
     renderBody();
     mountChrome();
+    // The plugins' menu row rides the same boot — off, it stays quiet.
+    void fetch('/bridge/editor-blocks')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((defs) => {
+        pluginBlocks = Array.isArray(defs)
+          ? defs.filter((d: unknown): d is { name: string; label: string; template: string; modal: string } =>
+              !!d && typeof d === 'object'
+              && typeof (d as { name?: unknown }).name === 'string'
+              && typeof (d as { label?: unknown }).label === 'string'
+              && typeof (d as { template?: unknown }).template === 'string')
+          : [];      })
+      .catch(() => { pluginBlocks = []; });
     if (hadDraft) toast('warn', 'An unpublished draft exists — saving here replaces it with the published page + your edit.');
   }
 
@@ -229,6 +244,13 @@ async function boot(root: HTMLElement): Promise<void> {
     for (const block of blocks) {
       const holder = el('div', { 'data-sm-block': '1' });
       holder.innerHTML = renderMdms(block.source, context).fullHtml;
+      // The plugin fences speak their own preview: a ```stop-motion block
+      // wears its animated stage in the canvas — the md keeps the config,
+      // the editor keeps an honest live monitor of the published behaviour.
+      const fenceCode = holder.querySelector('code[class*="language-stop-motion"]');
+      if (fenceCode !== null && fenceCode.textContent !== null && fenceCode.textContent.trim() !== '') {
+        mountStopPreview(holder, fenceCode.textContent.trim());
+      }
       root.append(holder);
     }
     selected = null;
@@ -293,23 +315,23 @@ async function boot(root: HTMLElement): Promise<void> {
     // The tab itself is the drawer — click it and it slides wider, revealing
     // the items inside (overflow-hidden clips; nothing else moves). Items:
     // Backend (carries ?back=<this page>) and Log out. Outside clicks collapse.
-    const root = document.createElement('div');
-    root.className = 'sm-admin-root';
-    root.setAttribute('role', 'button');
-    root.setAttribute('tabindex', '0');
-    root.setAttribute('aria-label', 'Admin drawer — overlay tabs and Log out');
-    root.setAttribute('aria-expanded', 'false');
+    const door = document.createElement('div');
+    door.className = 'sm-admin-root';
+    door.setAttribute('role', 'button');
+    door.setAttribute('tabindex', '0');
+    door.setAttribute('aria-label', 'Admin drawer — overlay tabs and Log out');
+    door.setAttribute('aria-expanded', 'false');
     let open = false;
 
     const toggle = () => applyOpen(!open);
-    root.addEventListener('click', toggle);
-    root.addEventListener('keydown', (e) => {
+    door.addEventListener('click', toggle);
+    door.addEventListener('keydown', (e) => {
       if ((e.key === 'Enter' || e.key === ' ') && (e.target as HTMLElement).closest('button') === null) {
         e.preventDefault();
         toggle();
       }
     });
-    root.append(el('span', { class: 'sm-admin-tri' }));
+    door.append(el('span', { class: 'sm-admin-tri' }));
 
     const menu = document.createElement('div');
     menu.className = 'sm-admin-menu';
@@ -344,8 +366,8 @@ async function boot(root: HTMLElement): Promise<void> {
         }
       }, ['Log out'])
     );
-    root.append(menu);
-    document.body.append(root);
+    door.append(menu);
+    document.body.append(door);
 
     // Measure ONLY after the drawer is mounted and fully populated — the
     // previous build measured a DETACHED element (offsetWidth 0, computed
@@ -353,20 +375,20 @@ async function boot(root: HTMLElement): Promise<void> {
     // which the browser ignored → the door was born wide and never collapsed.
     // The drawer's two widths, measured once from real layout: height is NEVER
     // touched (menu stays in flow, visibility toggles) so closed = opened tall.
-    const rootStyle = getComputedStyle(root);
-    const framePad = parseFloat(rootStyle.paddingLeft) + parseFloat(rootStyle.paddingRight)
-      + parseFloat(rootStyle.borderLeftWidth) + parseFloat(rootStyle.borderRightWidth);
-    const tri = root.querySelector<HTMLElement>('.sm-admin-tri');
+    const doorStyle = getComputedStyle(door);
+    const framePad = parseFloat(doorStyle.paddingLeft) + parseFloat(doorStyle.paddingRight)
+      + parseFloat(doorStyle.borderLeftWidth) + parseFloat(doorStyle.borderRightWidth);
+    const tri = door.querySelector<HTMLElement>('.sm-admin-tri');
     const closedW = Math.ceil(tri !== null ? tri.getBoundingClientRect().width : 7) + framePad;
-    root.style.width = 'auto';
-    const openW = root.offsetWidth;
-    root.style.width = `${closedW}px`;
+    door.style.width = 'auto';
+    const openW = door.offsetWidth;
+    door.style.width = `${closedW}px`;
 
     function applyOpen(next: boolean): void {
       open = next;
-      root.classList.toggle('open', open);
-      root.setAttribute('aria-expanded', open ? 'true' : 'false');
-      root.style.width = `${open ? openW : closedW}px`; // height: never
+      door.classList.toggle('open', open);
+      door.setAttribute('aria-expanded', open ? 'true' : 'false');
+      door.style.width = `${open ? openW : closedW}px`; // height: never
     }
 
     document.addEventListener('click', (e) => {
@@ -382,6 +404,9 @@ async function boot(root: HTMLElement): Promise<void> {
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
+        // Escape first dismisses the open editor modal (one Escape = one door),
+        // then deselects — an open layer never survives the key.
+        document.querySelector('.sm-edit-layer')?.remove();
         deselect();
       }
     });
@@ -396,7 +421,20 @@ async function boot(root: HTMLElement): Promise<void> {
         showFloatMenu(click.clientX, click.clientY, null, true);
         return;
       }
-      select([...root.children].indexOf(holder), click);
+      const index = [...root.children].indexOf(holder);
+      const block = blocks[index];
+      // A fence the plugins own gets its own modal: a ```stop-motion text
+      // block opens the frames manager, not the raw text box (block marked).
+      if (block?.kind === 'text' && /^```stop-motion\b/.test(block.source)) {
+        selected = index;
+        [...root.children].forEach((child, i) => {
+          if (i === index) child.setAttribute('data-sm-selected', '1');
+          else child.removeAttribute('data-sm-selected');
+        });
+        openStopMotionModal(index, false);
+        return;
+      }
+      select(index, click);
     });
   }
 
@@ -446,6 +484,18 @@ async function boot(root: HTMLElement): Promise<void> {
       el('button', { onclick: () => openModuleModal(insertAt, 'more', true) }, ['Fold'])
     ]);
     menu.append(add, addMore);
+    // ——— the plugins' row (p6 editorBlocks): manifest-declared insertables of
+    // ——— every enabled plugin, labeled from the manifest, inserted as md
+    // ——— templates the author shapes in the text modal.
+    if (pluginBlocks.length > 0) {
+      const addPlugins = el('div', { class: `sm-float-row${isEmpty ? '' : ' sm-float-add'}` }, [
+        el('span', { style: 'font-size:11px;opacity:.7;align-self:center' }, ['Plugins:']),
+      ...pluginBlocks.map((def) =>
+      el('button', { title: def.name, onclick: () => (def.modal === 'stop-motion' ? openStopMotionModal(insertAt, true) : openTextModal(insertAt, true, def.template, def.label)) }, [def.label])
+    )
+      ]);
+      menu.append(addPlugins);
+    }
     // Keep the menu on-screen.
     const left = Math.min(x, window.innerWidth - 240);
     const top = Math.min(y + 8, window.innerHeight - 120);
@@ -474,6 +524,10 @@ async function boot(root: HTMLElement): Promise<void> {
   // ——— modals ———
 
   function openModal(title: string, form: HTMLFormElement): { overlay: HTMLElement; close: () => void } {
+    // ONE modal at a time: an old layer left behind would go invisible-evil
+    // and eat clicks forever (found by the stress probe — reopened modals
+    // stacked, the hidden one won the pointer). Replacement is the law.
+    document.querySelector('.sm-edit-layer')?.remove();
     const overlay = el('div', { class: 'sm-edit-layer', role: 'dialog', 'aria-modal': 'true' });
     const card = el('div', { class: 'sm-modal' });
     const head = el('div', { class: 'sm-modal-head' }, [
@@ -499,8 +553,173 @@ async function boot(root: HTMLElement): Promise<void> {
     return el('label', { class: 'sm-field' }, [el('span', {}, [label]), input]);
   }
 
-  function openTextModal(index: number, isNew = false): void {
-    const value = isNew ? 'New text — double the recipe.' : (blocks[index]?.source ?? '');
+  /** The canvas preview mirror: swap the fence's code block for the stage the
+   *  public page serves (same classes, same march, gaps ignored client-side —
+   *  the monitor shows the folder's truth, the md keeps the config). */
+  function mountStopPreview(holder: HTMLElement, payload: string): void {
+    let cfg: { files?: unknown; dir?: unknown; fps?: unknown } = {};
+    try { cfg = JSON.parse(payload) as typeof cfg; } catch { return; }
+    const files = Array.isArray(cfg.files) ? (cfg.files as unknown[]).filter((f): f is string => typeof f === 'string') : [];
+    if (files.length < 2) return; // not yet a stage — the code stays
+    const fps = typeof cfg.fps === 'number' && cfg.fps > 0 && cfg.fps <= 30 ? cfg.fps : 8;
+    const dir = typeof cfg.dir === 'string' && /^[a-z0-9][a-z0-9-]*$/.test(cfg.dir) ? cfg.dir : ''; // fence says or none — the filter's law
+    const seq = document.querySelectorAll('style[data-sm-sm-preview]').length;
+
+    if (document.querySelector('style[data-sm-sm-preview]') === null) {
+      document.head.append(el('style', { 'data-sm-sm-preview': '1' }, [
+        '.stop-motion-stage{position:relative;display:block;max-width:100%;margin:1rem 0}'
+        + '.stop-motion-stage img{position:absolute;inset:0;width:100%;height:auto;display:block;margin:0}'
+        + '.stop-motion-stage img[data-sm-lead]{position:static}'
+        + '@media (prefers-reduced-motion: reduce){.stop-motion-stage img{animation:none!important}}'
+      ]));
+    }
+    const dur = (files.length / fps).toFixed(4);
+    const stage = el('span', { class: 'stop-motion-stage', role: 'img', 'aria-label': 'stop-motion preview, ' + files.length + ' frames' });
+    files.forEach((file, i) => {
+      const img = document.createElement('img');
+      img.className = 'stop-motion-frame';
+      if (i === 0) img.setAttribute('data-sm-lead', '');
+      img.loading = i === 0 ? 'eager' : 'lazy';
+      img.decoding = 'async';
+      img.style.animation = `sm-editor-march-${seq} ${dur}s step-end infinite`;
+      img.style.animationDelay = `-${(i / fps).toFixed(4)}s`;
+      img.src = `/bridge/media/${context.type}/${context.slug}/` + (dir !== '' ? encodeURIComponent(dir) + '/' : '') + encodeURIComponent(file);
+      stage.append(img);
+    });
+    document.head.append(el('style', { 'data-sm-sm-preview': String(seq + 1), 'data-sm-sm-keyframes': '' }, [
+      `@keyframes sm-editor-march-${seq}{0%{opacity:1}`
+      + (100 / files.length).toFixed(4) + '%{opacity:1}' + (100 / files.length).toFixed(4) + '%{opacity:0}100%{opacity:0}}'
+    ]));
+    holder.replaceChildren(stage);
+  }
+
+  // ——— the stop-motion block modal (p6 editorBlocks, mode 'stop-motion') ———  // Frames live in the page's dedicated stop-motion/ folder. The modal lists
+  // FILENAMES only (numeric order — last run of digits, zero padding + gaps
+  // agnostic), uploads multiply, deletes extract; Save writes the fence with
+  // the explicit ordered file list. No previews — a file is a name here.
+
+  const SM_MEDIA = 'stop-motion';
+
+  /** The frame rank: the LAST run of digits decides the order; ties fall back
+   *  to the name. 'frame-02.png' < 'frame-10.png'; '0001-x.jpg' fine; the
+   *  missing 03 in the middle offends nobody — gaps are honest. */
+  function frameRank(name: string): number {
+    const m = /(\d+)(?=[^\d]*$)/.exec(name); // last digit run — zero padding + gaps agnostic
+    return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+  }
+  function sortFrames(names: readonly string[]): string[] {
+    return [...names].sort((a, b) => frameRank(a) - frameRank(b) || a.localeCompare(b));
+  }
+
+  function parseStopFence(source: string): { files: string[]; dir: string; fps: number } {
+    const m = /^```stop-motion\s*\n([\s\S]*?)\n```/.exec(source.trim());
+    let cfg: Record<string, unknown> = {};
+    try { cfg = m ? (JSON.parse(m[1]) as Record<string, unknown>) : {}; } catch { cfg = {}; }
+    return {
+      files: Array.isArray(cfg.files) ? (cfg.files as unknown[]).filter((f): f is string => typeof f === 'string') : [],
+      dir: typeof cfg.dir === 'string' && /^[a-z0-9][a-z0-9-]*$/.test(cfg.dir) ? cfg.dir : SM_MEDIA,
+      fps: typeof cfg.fps === 'number' && cfg.fps > 0 && cfg.fps <= 30 ? cfg.fps : 8
+    };
+  }
+
+  function openStopMotionModal(index: number, isNew: boolean): void {
+    let folderNames: string[] = [];
+    let fps = isNew ? 8 : parseStopFence(blocks[index]?.source ?? '').fps;
+
+    const frameList = el('div', { class: 'sm-media-list', style: 'flex-direction:column;max-height:16rem' });
+    const err = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:.2rem 0' });
+    const fpsBox = el('input', { class: 'sm-input', type: 'number', min: '0.5', max: '30', step: '0.5', style: 'max-width:9rem' });
+    fpsBox.value = String(fps);
+    const upload = el('input', { class: 'sm-input', type: 'file', accept: '.png,.jpg,.jpeg,.webp,.gif', multiple: true, style: 'padding:.25rem' }) as HTMLInputElement;
+
+    async function refresh(): Promise<void> {
+      try {
+        folderNames = (await apiJson<readonly { name: string }[]>(`/bridge/media/${type}/${slug}?folder=${SM_MEDIA}`)).map((f) => f.name);
+      } catch (e) {
+        err.textContent = e instanceof Error ? e.message : String(e);
+        err.style.display = '';
+        return;
+      }
+      err.style.display = 'none';
+      frameList.replaceChildren(...sortFrames(folderNames).map((name) =>
+        el('div', { style: 'display:flex;align-items:center;gap:.4rem' }, [
+          el('code', { style: 'font-size:12px' }, [name]),
+          el('button', {
+            class: 'sm-btn sm-btn-danger',
+            type: 'button',
+            title: `Delete ${name} from the folder`,
+            onclick: async () => {
+              try {
+                await fetch(`/bridge/media/${type}/${slug}/${encodeURIComponent(name)}?folder=${SM_MEDIA}`, {
+                  method: 'DELETE', headers: { 'X-CSRF-Token': csrf }
+                });
+              } finally {
+                await refresh();
+              }
+            }
+          }, ['delete'])
+        ])
+      ));
+      if (sortFrames(folderNames).length === 0) {
+        frameList.append(el('p', { style: 'font-size:12px;opacity:.7;margin:0' }, ['No frames yet — upload files named with continuous numbers (01-0n), gaps tolerated.']));
+      }
+    }
+
+    const form = el('form', {
+      onsubmit: (ev: Event) => {
+        ev.preventDefault();
+        const parsedFps = parseFloat(fpsBox.value);
+        const files = sortFrames(folderNames);
+        if (files.length < 2) {
+          err.textContent = 'A shutter needs at least two frames — upload images first.';
+          err.style.display = '';
+          return;
+        }
+        if (!Number.isFinite(parsedFps) || parsedFps < 0.5 || parsedFps > 30) {
+          err.textContent = 'The frame speed is a number between 0.5 and 30 fps.';
+          err.style.display = '';
+          return;
+        }
+        err.style.display = 'none';
+        const fence = '```stop-motion\n' + JSON.stringify({ files, dir: SM_MEDIA, fps: parsedFps }, null, 0) + '\n```';
+        writeBlock(index, { kind: 'text', source: fence }, isNew);
+      }
+    }, [
+      el('p', { class: 'sm-alert sm-alert-ok', style: 'margin:0 0 .5rem' }, [
+        `Frames live in the page's ${SM_MEDIA}/ folder. Ordered by their continuous number (01-0n, gaps tolerated — filenames only, no previews).`
+      ]),
+      el('div', { style: 'margin:0;display:flex;gap:.4rem;align-items:center;flex-wrap:wrap' }, [
+        upload,
+        el('button', {
+          class: 'sm-btn', type: 'button',
+          onclick: async () => {
+            err.style.display = 'none';
+            for (const file of upload.files ?? []) {
+              try {
+                const body = new FormData();
+                body.append('file', file);
+                await fetch(`/bridge/media/${type}/${slug}?folder=${SM_MEDIA}`, {
+                  method: 'POST', headers: { 'X-CSRF-Token': csrf }, body
+                });
+              } catch { /* the row keeps the failure note honest below */ }
+            }
+            upload.value = '';
+            await refresh();
+          }
+        }, ['Upload'])
+      ]),
+      frameList,
+      field('Frame speed (fps)', fpsBox),
+      err,
+      el('div', { style: 'display:flex;justify-content:flex-end;gap:.5rem' }, [
+        el('button', { class: 'sm-btn sm-btn-primary', type: 'submit' }, [isNew ? 'Add block' : 'Save'])
+      ])
+    ]);
+    openModal(isNew ? 'Add Stop Motion' : 'Edit Stop Motion', form);
+    void refresh();
+  }
+
+  function openTextModal(index: number, isNew = false, initial = '', label = ''): void {    const value = isNew ? (initial !== '' ? initial : 'New text — double the recipe.') : (blocks[index]?.source ?? '');
     const area = el('textarea', { class: 'sm-input' });
     area.value = value;
     const err = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:0' });
@@ -522,7 +741,7 @@ async function boot(root: HTMLElement): Promise<void> {
         el('button', { class: 'sm-btn sm-btn-primary', type: 'submit' }, [isNew ? 'Add block' : 'Save'])
       ])
     ]);
-    openModal(isNew ? 'Add text block' : 'Edit text block', form);
+    openModal(isNew ? (initial !== '' && label !== '' ? `Add ${label}` : 'Add text block') : 'Edit text block', form);
   }
 
   async function openModuleModal(index: number, forcedName?: string, isNew = false): Promise<void> {

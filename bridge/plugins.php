@@ -105,10 +105,30 @@ function validate(string $name, array $manifest): array|string
         ];
     }
 
+    // Editor blocks (p6): manifest-declared canvas insertables, namespaced like
+    // placeholders. Two shapes: bare strings (wired with plugin defaults) or
+    // {name,label,template} — template = the md the editor inserts, then the
+    // author shapes it in the text modal. Everything foreign is refused here.
     $editorBlocks = [];
     foreach ((array)($caps['editorBlocks'] ?? []) as $block) {
-        if (is_string($block) && str_starts_with($block, $name . '_') && preg_match('/^[a-z0-9_-]+$/', $block) === 1) {
-            $editorBlocks[] = $block; // declared now, wired in slice 2
+        if (is_string($block) && str_starts_with($block, prefix($name) . '_') && preg_match('/^[a-z0-9_-]+$/', $block) === 1) {
+            $editorBlocks[] = $block;
+        } elseif (is_array($block)
+            && is_string($block['name'] ?? null)
+            && str_starts_with((string)$block['name'], prefix($name) . '_')
+            && preg_match('/^[a-z0-9_-]+$/', (string)$block['name']) === 1
+            && is_string($block['label'] ?? null) && trim($block['label']) !== ''
+            && is_string($block['template'] ?? null) && strlen($block['template']) <= 4000
+            && trim($block['template']) !== ''
+        ) {
+            $editorBlocks[] = [
+                'name' => (string)$block['name'],
+                'label' => trim((string)$block['label']),
+                'template' => (string)$block['template'],
+                'modal' => is_string($block['modal'] ?? null)
+                    && preg_match('/^[a-z][a-z-]{0,31}$/', (string)$block['modal']) === 1
+                    ? (string)$block['modal'] : '',
+            ];
         }
     }
 
