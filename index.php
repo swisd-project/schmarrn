@@ -16,6 +16,24 @@ declare(strict_types=1);
 
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 
+// ——— the core's blanko window: while the self-update holds the knife, every
+// load except the operation itself (/bridge/core…) answers with a blank
+// plate — a first load during the swap never sees a half-swapped 404. Public
+// site and dashboard shell eat the plate; the API answers 503 JSON. ———
+if (is_file(__DIR__ . '/bridge/cache/core-blank') && !str_starts_with($path, '/bridge/core')) {
+    require_once __DIR__ . '/bridge/core.php';
+    if (str_starts_with($path, '/bridge/')) {
+        http_response_code(503);
+        header('Content-Type: application/json');
+        header('Retry-After: 30');
+        exit(json_encode(['error' => \Core\blankoNote()]));
+    }
+    http_response_code(503);
+    header('Content-Type: text/html; charset=utf-8');
+    header('Retry-After: 30');
+    exit(\Core\blanko());
+}
+
 // ——— /bridge/* always belongs to the JSON core, real file or not. The three
 // static prefixes inside bridge/ (assets, templates, plugin assets) fall
 // through to the file whitelist below; only JSON routes land at the core.

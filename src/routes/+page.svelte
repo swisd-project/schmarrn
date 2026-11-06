@@ -1,7 +1,7 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
   // a burger opens the full-screen overlay (Contents / Settings / Plugins & Templates / Users).
-  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, listTemplates, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef } from '$lib/api';
+  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, listTemplates, activateTemplate, deleteTemplate, coreStatus, uploadCorePacket, runCoreUpdate, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef } from '$lib/api';
   import { closeTarget } from '$lib/back';
   import { schemaFor, withDraftFlag } from '$lib/schema';
   import { splitFrontmatter } from '$lib/blocks';
@@ -218,6 +218,7 @@
       void loadPlugins();
       void loadTemplates();
       void loadWares();
+      void loadCore();
     }
   }
 
@@ -365,6 +366,7 @@
   let templates = $state<readonly TemplateRef[]>([]);
   let templatesBusy = $state(false);
   let templatesError = $state('');
+  let templatesNote = $state('');
 
   async function loadTemplates() {
     if (templatesBusy) return;
@@ -376,6 +378,101 @@
       templatesError = e instanceof Error ? e.message : String(e);
     } finally {
       templatesBusy = false;
+    }
+  }
+
+  /** The shelf's face for one installed template — undefined when the registry is dark. */
+  function vitrineTemplateWare(name: string): WareRef | undefined {
+    return vitrine.find((w) => w.kind === 'template' && w.name === name);
+  }
+
+  async function activateTemplateNow(template: TemplateRef) {
+    if (templatesBusy) return;
+    templatesBusy = true;
+    templatesError = '';
+    templatesNote = '';
+    try {
+      await activateTemplate(template.name);
+      templates = await listTemplates();
+      // The settings form caches its copy — the theme switch reaches it here.
+      if (siteSettings !== null) siteSettings = { ...siteSettings, theme: template.name };
+      templatesNote = `${template.title} is the live theme now.`;
+    } catch (e) {
+      templatesError = e instanceof Error ? e.message : String(e);
+    } finally {
+      templatesBusy = false;
+    }
+  }
+
+  async function deleteTemplateNow(template: TemplateRef) {
+    if (templatesBusy) return;
+    templatesBusy = true;
+    templatesError = '';
+    templatesNote = '';
+    try {
+      await deleteTemplate(template.name);
+      templates = await listTemplates();
+      await loadWares(true); // the shelf re-reads: a deleted update face becomes installable again
+      templatesNote = `${template.title} left the shelf — deleted.`;
+    } catch (e) {
+      templatesError = e instanceof Error ? e.message : String(e);
+    } finally {
+      templatesBusy = false;
+    }
+  }
+
+  // ——— the core's self-update (admin, part of "Plugins & Templates") ———
+  let core = $state<{ current: string; latest: string | null; error: string; localVersion: string | null } | null>(null);
+  let coreBusy = $state(false);
+  let coreError = $state('');
+  let coreNote = $state('');
+
+  async function loadCore() {
+    if (coreBusy) return;
+    coreBusy = true;
+    coreError = '';
+    try {
+      const st = await coreStatus();
+      core = { current: st.current, latest: st.latest, error: st.error ?? '', localVersion: st.localVersion ?? null };
+    } catch (e) {
+      coreError = e instanceof Error ? e.message : String(e);
+    } finally {
+      coreBusy = false;
+    }
+  }
+
+  async function parkCorePacketNow(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || coreBusy) return;
+    coreBusy = true;
+    coreError = '';
+    coreNote = '';
+    try {
+      const parked = await uploadCorePacket(file);
+      coreNote = `Parked: a local packet announcing v${parked.version} — the knife can ride from the shelf now.`;
+      await loadCore();
+    } catch (e) {
+      coreError = e instanceof Error ? e.message : String(e);
+    } finally {
+      coreBusy = false;
+      input.value = ''; // the same file can be re-parked without a browser ruse
+    }
+  }
+
+  async function updateCoreNow(source: 'hub' | 'local' = 'hub') {
+    if (coreBusy) return;
+    coreBusy = true;
+    coreError = '';
+    coreNote = '';
+    try {
+      const done = await runCoreUpdate(source);
+      await loadCore();
+      coreNote = `${done.note} Reload the page — the dashboard you are wearing is from ${done.from}.`;
+    } catch (e) {
+      coreError = e instanceof Error ? e.message : String(e);
+    } finally {
+      coreBusy = false;
     }
   }
 
@@ -887,6 +984,7 @@
         {#if siteSettings}
           <form class="mg flex flex-col gap-3 max-w-md" onsubmit={saveSiteNow}>
             <h4 class="mg-h">Site settings</h4>
+            <p class="m-0 text-xs text-ink-soft">The live template (theme) hangs in Plugins &amp; Templates now — activate it there.</p>
             <label class="field"><span>Site name</span><input class="input" bind:value={siteSettings.name} required /></label>
             <label class="field"><span>Claim</span><input class="input" bind:value={siteSettings.claim} /></label>
             <label class="field">
@@ -896,13 +994,6 @@
                 <input class="hidden" type="file" accept="image/*" onchange={onLogoPick} disabled={siteBusy} />
                 {siteBusy ? 'Uploading…' : 'Upload logo…'}
               </label>
-            </label>
-            <label class="field"><span>Theme</span>
-              <select class="input" bind:value={siteSettings.theme}>
-                {#each setupThemes as theme (theme)}
-                  <option value={theme}>{theme}</option>
-                {/each}
-              </select>
             </label>
             <label class="field"><span>Template <span class="hint">(the whole site — a page's own "Served as" overrides)</span></span>
               <select class="input" bind:value={siteSettings.style}>
@@ -1064,18 +1155,54 @@
           {:else}
             <ul class="list-none p-0 m-0 flex flex-col gap-2">
               {#each templates as template (template.name)}
-                <li class="card">
-                  <p class="m-0 font-bold">
-                    {template.title} <span class="text-xs text-ink-soft">v{template.version}</span>
-                    {#if template.active}<span class="badge badge-live ml-2">active</span>{/if}
-                  </p>
-                  {#if template.description}<p class="m-0 text-sm text-ink-soft">{template.description}</p>{/if}
-                  {#if template.styles.length > 0}
-                    <p class="m-0 text-xs text-ink-soft">styles: {template.styles.join(', ')}</p>
-                  {/if}
+                {@const ware = vitrineTemplateWare(template.name)}
+                <li class="card flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="m-0 font-bold">
+                      {template.title} <span class="text-xs text-ink-soft">v{template.version}</span>
+                      {#if template.active}<span class="badge badge-live ml-2">active</span>{/if}
+                    </p>
+                    {#if template.description}<p class="m-0 text-sm text-ink-soft">{template.description}</p>{/if}
+                    {#if template.styles.length > 0}
+                      <p class="m-0 text-xs text-ink-soft">styles: {template.styles.join(', ')}</p>
+                    {/if}
+                    {#if ware && ware.state === 'update'}
+                      <p class="m-0 text-xs text-ink-soft">installed: v{ware.installedVersion} — update available</p>
+                    {/if}
+                  </div>
+                  <div class="flex shrink-0 items-start gap-2">
+                    {#if ware && ware.state === 'update'}
+                      <button
+                        class="btn btn-secondary"
+                        disabled={templatesBusy || vitrineBusy}
+                        onclick={() => installWareByName(ware)}
+                      >
+                        {#if templatesBusy || vitrineBusy}…{:else}Update{/if}
+                      </button>
+                    {/if}
+                    {#if template.active}
+                      <span class="text-xs text-ink-soft self-center text-right">live — activate another before deleting</span>
+                    {:else}
+                      <button
+                        class="btn btn-primary"
+                        disabled={templatesBusy}
+                        onclick={() => activateTemplateNow(template)}
+                      >
+                        {#if templatesBusy}…{:else}Activate{/if}
+                      </button>
+                      <button
+                        class="btn-ghost danger"
+                        title="Delete template"
+                        disabled={templatesBusy}
+                        onclick={() => deleteTemplateNow(template)}
+                      >×</button>
+                    {/if}
+                  </div>
                 </li>
               {/each}
             </ul>
+            {#if templatesError && templates.length > 0}<p class="alert alert-err" role="alert">{templatesError}</p>{/if}
+            {#if templatesNote}<p class="alert alert-ok">{templatesNote}</p>{/if}
             <h4 class="mg-h mg-sub">From the Vitrine</h4>
             {#if vitrineDark}
               <p class="alert alert-warn">{vitrineDark}</p>
@@ -1113,6 +1240,60 @@
               </ul>
             {/if}
           {/if}
+        </section>
+        <section class="mg flex flex-col gap-2">
+          <h4 class="mg-h">The Core</h4>
+          {#if coreBusy && core === null}
+            <p class="italic text-ink-soft">Asking the version shelf…</p>
+          {:else if coreError && core === null}
+            <p class="alert alert-err" role="alert">{coreError}</p>
+          {:else if core !== null}
+            <div class="card flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="m-0 font-bold">Schmarrn v{core.current}</p>
+                {#if core.latest}
+                  <p class="m-0 text-xs text-ink-soft">
+                    {#if core.latest === core.current}GitHub's newest version: {core.latest}{:else}GitHub announces {core.latest}{/if}
+                  </p>
+                {:else if core.error}
+                  <p class="m-0 text-xs text-ink-soft">{core.error}</p>
+                {/if}
+              </div>
+              {#if core.latest && core.latest !== core.current}
+                <button
+                  class="btn btn-primary"
+                  disabled={coreBusy}
+                  onclick={() => updateCoreNow('hub')}
+                  title="Updates core files only — plugins, templates and your settings stay untouched"
+                >
+                  {#if coreBusy}Under the knife…{:else}Update → {core.latest}{/if}
+                </button>
+              {/if}
+              {#if core.localVersion}
+                <button
+                  class="btn btn-secondary"
+                  disabled={coreBusy}
+                  onclick={() => updateCoreNow('local')}
+                  title="Rides the parked packet — works without the GitHub hub; same version allowed (repair)"
+                >
+                  {#if coreBusy}…{:else}Update locally → v{core.localVersion}{/if}
+                </button>
+              {/if}
+            </div>
+            <p class="m-0 text-xs text-ink-soft">
+              Core files only — plugins, templates, pagetypes you dressed, and your settings never move.
+              While the knife is out, visitors get a blank page until the swap lands.
+            </p>
+            <label class="btn btn-secondary self-start cursor-pointer">
+              <input class="hidden" type="file" accept=".zip" onchange={parkCorePacketNow} disabled={coreBusy} />
+              {#if coreBusy}Parking…{:else}Park a local update packet (.zip){/if}
+            </label>
+            <p class="m-0 text-xs text-ink-soft">
+              No hub answering? Download the release zip on any machine, park it here, and ride the knife from the shelf — an equal version counts as a repair.
+            </p>
+          {/if}
+          {#if coreError && core !== null}<p class="alert alert-err" role="alert">{coreError}</p>{/if}
+          {#if coreNote}<p class="alert alert-ok">{coreNote}</p>{/if}
         </section>
       {/if}
     </div>

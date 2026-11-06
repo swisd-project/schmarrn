@@ -2,12 +2,21 @@
 
 /**
  * 1. Relative path: bridge/wares.php
- * 2. Description: The Vitrine fetch + install engine (p6's wares slice). The
- *                 public Vitrine repo (swisd-project/vitrine) lists its wares in
- *                 one JSON (wares.json at the repo root — one GET, no API, no
- *                 token); the install packet is ONE zip of the whole branch
- *                 (codeload snapshot), from which ONLY <path>/ of the requested
- *                 ware is extracted. Discernment before enabling: dir name
+ * 2. Description: The Vitrine fetch + install + tomb engine (p6's wares slice).
+ *                 The public Vitrine repo (swisd-project/vitrine) lists its wares
+ *                 in one JSON (wares.json at the repo root — one GET, no token).
+ *                 An update rides PER WARE: the trees API lists the ware's own
+ *                 folder once, every file of it rides raw, and nothing else of
+ *                 the branch travels — other wares stay on their shelf. The
+ *                 announce gate fires BEFORE anything rides: only a strictly
+ *                 newer wares.json version over the shelf's manifest moves files
+ *                 (equal = "already installed"; the truth gate still answers
+ *                 after the ride — a lying announce buys nothing). A dark
+ *                 listing (rate limit, drift, truncation, a rogue name) degrades
+ *                 to the old ONE zip of the whole branch (codeload packet), from
+ *                 which ONLY <path>/ of the requested ware is extracted;
+ *                 same staging shape, ride-agnostic the rest of the way.
+ *                 Discernment before enabling: dir name
  *                 matches [a-z0-9-]+, registry name matches the manifest name,
  *                 requiresSchmarrn satisfied by the host; upgrade = overwrite
  *                 only when the incoming version is GREATER (disable-first,
@@ -18,11 +27,16 @@
  *                 phar.readonly). A broken fetch or install degrades to an
  *                 answer — never a dead site. Endpoints live in index.php:
  *                 GET /bridge/wares (admin view), POST /bridge/wares/install
- *                 (admin + CSRF). URLs are overridable in
- *                 config/wares.local.php (git-ignored) for local tests.
- * 3. Expects: bridge/plugins/ + bridge/templates/ homes; ZipArchive or phar;
- *             allow_url_fopen for the two breaches out (registry + packet zip).
- * 4. Provides: Wares\config/registry/status/install (+ httpGet, scratch helpers).
+ *                 (admin + CSRF), POST /bridge/template/delete (admin + CSRF;
+ *                 singular — templates/… is the theme assets' prefix). URLs are
+ *                 overridable in config/wares.local.php (git-ignored) for local
+ *                 tests — treeUrl '' turns the per-folder ride off (the packet
+ *                 carries every install then; the local rig law stays no-GitHub).
+ * 3. Expects: bridge/plugins/ + bridge/templates/ homes; ZipArchive or phar
+ *             (only as the packet fallback); allow_url_fopen for the breaches
+ *             out (registry, trees API, raw files, packet zip).
+ * 4. Provides: Wares\config/registry/folderIndex/stageFolder/status/install/
+ *              removeTemplate (+ httpGet, scratch helpers, lockForget).
  * 5. SPDX-License-Identifier: MPL-2.0
  * 6. Copyright (c) 2026 Homahuki GmbH
  */
@@ -34,20 +48,35 @@ namespace Wares;
 // Library files stand alone: each requires its dependencies explicitly.
 require_once __DIR__ . '/router.php';
 require_once __DIR__ . '/plugins.php';
+require_once __DIR__ . '/site.php'; // removeTemplate reads the live theme
 
-const HOST_VERSION = '1.0.0'; // the repo's tagged floor (v1.0.0) — bump at ship
+/** The host floor: the core's own plain-text version (bridge/CORE-VERSION —
+ *  one source of truth; the self-update carries its own new copy). */
+function hostVersion(): string
+{
+    $raw = trim((string)@file_get_contents(__DIR__ . '/CORE-VERSION'));
+    return $raw !== '' ? $raw : '1.0.0'; // an old shelf without the file keeps its floor
+}
 const REGISTRY_URL = 'https://raw.githubusercontent.com/swisd-project/vitrine/main/wares.json';
 const PACKET_URL = 'https://codeload.github.com/swisd-project/vitrine/zip/heads/main';
+// The per-folder ride: the trees API lists one ware's own files, raw carries each.
+const TREE_URL = 'https://api.github.com/repos/swisd-project/vitrine/git/trees/main?recursive=1';
+const RAW_URL = 'https://raw.githubusercontent.com/swisd-project/vitrine/main/';
 const REGISTRY_TTL = 300; // s — the window stays honest, the fetch stays boring
+
+/** The ride's own roof: file count and byte sum — a listing announcing beyond these is no trust. */
+const FOLDER_FILE_CAP = 1000;
+const FOLDER_BYTE_CAP = 104857600; // 100 MB
 
 /** Defaults, overridable in config/wares.local.php (git-ignored; local tests). */
 function config(): array
 {
-    $urls = ['registryUrl' => REGISTRY_URL, 'packetUrl' => PACKET_URL, 'ttl' => REGISTRY_TTL];
+    $urls = ['registryUrl' => REGISTRY_URL, 'packetUrl' => PACKET_URL, 'treeUrl' => TREE_URL,
+        'rawUrl' => RAW_URL, 'ttl' => REGISTRY_TTL];
     $file = __DIR__ . '/config/wares.local.php';
     if (is_file($file)) {
         $local = (array)(require $file);
-        foreach (['registryUrl', 'packetUrl', 'ttl'] as $key) {
+        foreach (['registryUrl', 'packetUrl', 'treeUrl', 'rawUrl', 'ttl'] as $key) {
             if (isset($local[$key]) && (is_string($local[$key]) || is_int($local[$key]))) {
                 $urls[$key] = $local[$key];
             }
@@ -177,7 +206,7 @@ function status(): array
         }
         $wares[] = [...$ware, 'state' => $state, 'installedVersion' => $have, 'missing' => $missing];
     }
-    return ['wares' => $wares, 'host' => HOST_VERSION];
+    return ['wares' => $wares, 'host' => hostVersion()];
 }
 
 /** Fresh scratch room under the writable cache; caller deletes afterwards. */
@@ -207,11 +236,106 @@ function partWith(string $dir): void
     @rmdir($dir);
 }
 
-/** Discernment rule 3: the host's floor vs the ware's wish. */
 function hostSatisfies(string $requiresSchmarrn): bool
 {
     return $requiresSchmarrn === ''
-        || version_compare(HOST_VERSION, $requiresSchmarrn) >= 0;
+        || version_compare(hostVersion(), $requiresSchmarrn) >= 0;
+}
+
+// ——— the per-folder ride: only the ware's own files ever travel ———
+
+/**
+ * ONE listing of the ware's own folder (the trees API answers path+size per
+ * blob): [folderRelativePath => size|null]. null whenever the listing is
+ * untrustable — dark, truncated, drifted, a rogue name, or the local law
+ * turned it off (treeUrl '') — the caller then takes the packet as the ride.
+ */
+function folderIndex(array $ware): ?array
+{
+    $cfg = config();
+    if ($cfg['treeUrl'] === '') {
+        return null; // the local law turned the listing off
+    }
+    if (!safeUnder($ware['path'])) {
+        return null; // the registry's own path reads unbaked — no trust
+    }
+    $raw = httpGet((string)$cfg['treeUrl']);
+    if ($raw === null) {
+        return null;
+    }
+    $tree = json_decode($raw, true);
+    if (!is_array($tree) || !is_array($tree['tree'] ?? null)
+        || ($tree['truncated'] ?? false) === true) {
+        return null; // a truncated tree is a partial truth — never trusted
+    }
+    $prefix = $ware['path'] . '/';
+    $files = [];
+    foreach ($tree['tree'] as $entry) {
+        if (!is_array($entry) || ($entry['type'] ?? '') !== 'blob') {
+            continue;
+        }
+        $path = (string)($entry['path'] ?? '');
+        if (!str_starts_with($path, $prefix)) {
+            continue;
+        }
+        $rel = substr($path, strlen($prefix));
+        if (!safeUnder($rel)) {
+            return null; // one rogue name → the listing itself is untrustable
+        }
+        $files[$rel] = isset($entry['size']) && is_int($entry['size']) ? $entry['size'] : null;
+    }
+    return $files === [] ? null : $files; // an empty folder answer is a drift
+}
+
+/** One raw file of the ware landed at its folder place — false on any refusal. */
+function fetchRaw(array $ware, string $rel, string $base): bool
+{
+    $bytes = httpGet((string)config()['rawUrl'] . $ware['path'] . '/' . $rel);
+    if ($bytes === null) {
+        return false;
+    }
+    $target = $base . '/' . $rel;
+    $dir = dirname($target);
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
+        return false;
+    }
+    return @file_put_contents($target, $bytes) !== false;
+}
+
+/**
+ * The ware's own folder staged under $scratch/staging — untouched shelf law:
+ * names under $ware['path'] only (no climb), file sizes audited against the
+ * listing, the whole ride beneath the roofs. null when the ride is dark —
+ * the caller falls back to the packet, which stages the same shape.
+ */
+function stageFolder(array $ware, string $scratch): ?string
+{
+    $files = folderIndex($ware);
+    if ($files === null || count($files) > FOLDER_FILE_CAP) {
+        return null;
+    }
+    $staging = $scratch . '/staging';
+    $base = $staging . '/' . $ware['path'];
+    if (!is_dir($base) && !@mkdir($base, 0775, true)) {
+        return null;
+    }
+    $total = 0;
+    foreach ($files as $rel => $size) {
+        if ($size !== null) {
+            $total += $size;
+            if ($total > FOLDER_BYTE_CAP) {
+                return null; // the announced folder outweighs the roof
+            }
+        }
+        if (!fetchRaw($ware, $rel, $base)) {
+            return null;
+        }
+        // the listing announced a size — the arrival answers for it
+        if ($size !== null && (int)@filesize($base . '/' . $rel) !== $size) {
+            return null;
+        }
+    }
+    return $staging;
 }
 
 /**
@@ -239,7 +363,7 @@ function install(string $name): array
         \Router\refuse(404, "'{$name}' is not on the Vitrine's shelf.");
     }
     if (!hostSatisfies($ware['requiresSchmarrn'])) {
-        \Router\refuse(400, "'{$ware['title']}' wants Schmarrn {$ware['requiresSchmarrn']}+ — this host is " . HOST_VERSION . '.');
+        \Router\refuse(400, "'{$ware['title']}' wants Schmarrn {$ware['requiresSchmarrn']}+ — this host is " . hostVersion() . '.');
     }
     // The dependency wall (user-facing, before the packet is even fetched):
     // every required wares-plugin must stand installed on this host first.
@@ -250,46 +374,92 @@ function install(string $name): array
             . " on this host first — install it from the shelf before this one.");
     }
 
-    // ——— the packet: one zip of the whole branch, cached to a file ———
-    if (!class_exists('ZipArchive') && !extension_loaded('phar')) {
-        \Router\refuse(500, 'No unpacker in this kitchen — the host needs ext/zip or ext/phar.');
+    // ——— the announce gate, BEFORE anything rides: only a strictly newer
+    // announcement moves files. The shelf's own manifest is the yardstick; an
+    // unreadable husk counts as less (replaceable). The truth gate still
+    // answers after the ride — a lying announce buys nothing. ———
+    $home = __DIR__ . '/plugins';
+    if ($ware['kind'] === 'template') {
+        $home = __DIR__ . '/templates';
     }
-    $scratch = scratchDir();
-    $packetPath = $scratch . '/packet.zip';
-    $bytes = httpGet((string)config()['packetUrl']);
-    if ($bytes === null) {
-        partWith($scratch);
-        \Router\refuse(502, 'The Vitrine packet would not leave the depot — the install is off.');
+    if (!is_dir($home)) {
+        @mkdir($home, 0775, true);
     }
-    if (@file_put_contents($packetPath, $bytes) === false || strlen($bytes) === 0) {
-        partWith($scratch);
-        \Router\refuse(500, 'The packet could not be held — the cache dir may be unwritable.');
+    $target = $home . '/' . $name;
+    $installedVersion = $ware['kind'] === 'plugin'
+        ? (installedVersions()[$name] ?? null) : (installedThemeVersions()[$name] ?? null);
+    if ($installedVersion === null && is_dir($target)) {
+        $oldManifest = $ware['kind'] === 'plugin'
+            ? json_decode((string)@file_get_contents($target . '/plugin.json'), true)
+            : json_decode((string)@file_get_contents($target . '/theme.json'), true);
+        if (is_array($oldManifest) && is_string($oldManifest['version'] ?? null)) {
+            $installedVersion = $oldManifest['version'];
+        } else {
+            @error_log("[schmarrn-wares] '{$name}' sits installed with an unreadable manifest — replacing it.");
+        }
+    }
+    if ($installedVersion !== null
+        && version_compare((string)$ware['version'], (string)$installedVersion) !== 1) {
+        $installedVersion = (string)$installedVersion;
+        \Router\refuse(409, (string)$ware['version'] === $installedVersion
+            ? "'{$name}' {$installedVersion} is already installed."
+            : "'{$name}' {$ware['version']} is OLDER than the installed {$installedVersion} — the Vitrine never derates.");
     }
 
-    // ——— extract: the ware's own path ONLY, names pre-checked as relative ———
-    $rooms = extractWare($ware, $packetPath, $scratch);
-    if ($rooms === null) {
-        partWith($scratch);
-        \Router\refuse(502, "'{$name}' is not inside the packet — the registry and the shelf drifted apart.");
-    }
-    if ($rooms === false) {
-        partWith($scratch);
-        \Router\refuse(500, 'The packet would not open — is the zip machinery intact?');
-    }
-    // The staging keeps the packet's own directory shape (branch dir prefix):
-    // locate staging/<top>/<path>/, whatever the top is called.
-    $staging = $scratch . '/staging';
+    // ——— the ride: the ware's OWN folder — the trees API lists it once, every
+    // file of it rides raw, nothing else travels. When the listing is dark
+    // (rate limit, drift, truncation, a rogue name), the old one-zip packet
+    // carries the whole branch as the fallback ride. ———
+    $scratch = scratchDir();
     $wareDir = null;
-    foreach (array_merge((array)glob($staging . '/*', GLOB_ONLYDIR), [$staging]) as $top) {
-        $candidate = $top . '/' . $ware['path'];
-        if (is_dir($candidate)) {
-            $wareDir = $candidate;
-            break;
+    $staging = stageFolder($ware, $scratch);
+    if ($staging !== null) {
+        $wareDir = $staging . '/' . $ware['path'];
+        if (!is_dir($wareDir)) {
+            $wareDir = null; // a listing lie — the packet may still tell the truth
         }
     }
     if ($wareDir === null) {
-        partWith($scratch);
-        \Router\refuse(502, "The packet unpacked, but '{$name}' was not among it — call it a bad pack job.");
+        // ——— fallback: one zip of the whole branch, cached to a file ———
+        if (!class_exists('ZipArchive') && !extension_loaded('phar')) {
+            partWith($scratch);
+            \Router\refuse(500, 'No unpacker in this kitchen — the host needs ext/zip or ext/phar, or the folder listing to answer.');
+        }
+        $packetPath = $scratch . '/packet.zip';
+        $bytes = httpGet((string)config()['packetUrl']);
+        if ($bytes === null) {
+            partWith($scratch);
+            \Router\refuse(502, 'The Vitrine packet would not leave the depot — the install is off.');
+        }
+        if (@file_put_contents($packetPath, $bytes) === false || strlen($bytes) === 0) {
+            partWith($scratch);
+            \Router\refuse(500, 'The packet could not be held — the cache dir may be unwritable.');
+        }
+
+        // ——— extract: the ware's own path ONLY, names pre-checked as relative ———
+        $rooms = extractWare($ware, $packetPath, $scratch);
+        if ($rooms === null) {
+            partWith($scratch);
+            \Router\refuse(502, "'{$name}' is not inside the packet — the registry and the shelf drifted apart.");
+        }
+        if ($rooms === false) {
+            partWith($scratch);
+            \Router\refuse(500, 'The packet would not open — is the zip machinery intact?');
+        }
+        // The staging keeps the packet's own directory shape (branch dir prefix):
+        // locate staging/<top>/<path>/, whatever the top is called.
+        $staging = $scratch . '/staging';
+        foreach (array_merge((array)glob($staging . '/*', GLOB_ONLYDIR), [$staging]) as $top) {
+            $candidate = $top . '/' . $ware['path'];
+            if (is_dir($candidate)) {
+                $wareDir = $candidate;
+                break;
+            }
+        }
+        if ($wareDir === null) {
+            partWith($scratch);
+            \Router\refuse(502, "The packet unpacked, but '{$name}' was not among it — call it a bad pack job.");
+        }
     }
 
     // ——— the manifest answers for itself (rule 2: registry name === manifest name) ———
@@ -313,36 +483,18 @@ function install(string $name): array
         $incoming = is_string($manifest['version'] ?? null) ? $manifest['version'] : '0.0.0';
     }
 
-    // ——— versions: overwrite only strictly newer; a manifest-less husk counts as less ———
-    $home = __DIR__ . '/plugins';
-    if ($ware['kind'] === 'template') {
-        $home = __DIR__ . '/templates';
-    }
-    if (!is_dir($home)) {
-        @mkdir($home, 0775, true);
-    }
-    $target = $home . '/' . $name;
-    $have = $ware['kind'] === 'plugin' ? (installedVersions()[$name] ?? null) : (installedThemeVersions()[$name] ?? null);
-    if ($have === null && is_dir($target)) {
-        $oldManifest = $ware['kind'] === 'plugin'
-            ? json_decode((string)@file_get_contents($target . '/plugin.json'), true)
-            : json_decode((string)@file_get_contents($target . '/theme.json'), true);
-        if (is_array($oldManifest) && is_string($oldManifest['version'] ?? null)) {
-            $have = $oldManifest['version'];
-        } else {
-            @error_log("[schmarrn-wares] '{$name}' sits installed with an unreadable manifest — replacing it.");
-        }
-    }
-    if ($have !== null && version_compare($incoming, (string)$have) !== 1) {
+    // ——— the truth gate: the manifest answers for itself, a lying announce
+    // dies here — overwritten only when strictly newer than the shelf. ———
+    if ($installedVersion !== null && version_compare($incoming, (string)$installedVersion) !== 1) {
         partWith($scratch);
-        \Router\refuse(409, $have === $incoming
+        \Router\refuse(409, $installedVersion === $incoming
             ? "'{$name}' {$incoming} is already installed."
-            : "'{$name}' {$incoming} is OLDER than the installed {$have} — the Vitrine never derates.");
+            : "'{$name}' {$incoming} is OLDER than the installed {$installedVersion} — the Vitrine never derates.");
     }
 
     // ——— the swap: disable-first on upgrades, rollback on a failed rename ———
     $restored = false;
-    if ($ware['kind'] === 'plugin' && ($have !== null || is_dir($target))) {
+    if ($ware['kind'] === 'plugin' && ($installedVersion !== null || is_dir($target))) {
         mapWithout($name);
     }
     $backup = $scratch . '/backup-' . bin2hex(random_bytes(3));
@@ -414,6 +566,45 @@ function lockRecord(string $name, array $ware, string $version): void
         'installedAt' => date('c'),
     ];
     lockWrite($lock);
+}
+
+/** A removed install loses its provenance box — the lock stays the truth. */
+function lockForget(string $name): void
+{
+    $lock = lockRead();
+    if (!isset($lock[$name])) {
+        return;
+    }
+    unset($lock[$name]);
+    lockWrite($lock);
+}
+
+/**
+ * ONE deletion of an installed template (theme): the ACTIVE theme is
+ * untouchable — the site stands on it. Atomicity: the shelf dir is renamed
+ * into the writable cache first (never a half-deleted theme on the shelf),
+ * then dusted; its provenance box leaves the lock. Refuses in 4xx JSON.
+ */
+function removeTemplate(string $name): array
+{
+    if (preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $name) !== 1) {
+        \Router\refuse(400, 'That template name is unbaked dough.');
+    }
+    if (\Site\load()['theme'] === $name) {
+        \Router\refuse(409, "'{$name}' is the live theme — activate another template before deleting it.");
+    }
+    $dir = __DIR__ . '/templates/' . $name;
+    if (!is_file($dir . '/theme.json')) {
+        \Router\refuse(404, "'{$name}' is not an installed template.");
+    }
+    $tomb = scratchDir();
+    if (!@rename($dir, $tomb . '/' . $name)) {
+        partWith($tomb);
+        \Router\refuse(500, "The shelf would not let '{$name}' go — the deletion is off, nothing removed.");
+    }
+    partWith($tomb); // best effort — leftover dust is cache's, never the shelf's
+    lockForget($name);
+    return ['ok' => true, 'name' => $name];
 }
 
 /**

@@ -42,6 +42,7 @@ require_once __DIR__ . '/cache.php';
 require_once __DIR__ . '/site.php';
 require_once __DIR__ . '/plugins.php';
 require_once __DIR__ . '/wares.php';
+require_once __DIR__ . '/core.php'; // the core's self-update (GitHub versions)
 require_once __DIR__ . '/serve.php'; // public JSON API reuses the serving engine's byte-peeks
 
 /**
@@ -72,6 +73,14 @@ function stripExecutableHtml(string $html): string
 
 $path = Router\pathAfter('/bridge/');
 $isPublicApi = str_starts_with($path, 'public/');
+
+// ——— the blanko window, from the API head too (Apache bridges straight in
+// here): the operation itself ('core/…') stays reachable, everything else is
+// told the knife is out. The public plate is served by the root head. ———
+if (is_file(__DIR__ . '/cache/core-blank') && !str_starts_with($path, 'core')) {
+    require_once __DIR__ . '/core.php';
+    Router\refuse(503, \Core\blankoNote());
+}
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
@@ -461,6 +470,84 @@ try {
             }
             usort($types, fn($a, $b) => strcmp((string)$a['name'], (string)$b['name']));
             echo json_encode($types, JSON_UNESCAPED_SLASHES);
+            break;
+
+        // ——— templates (theme-contract wares): activate the live theme, bury a dead one ———
+        // Singular on purpose: /bridge/templates/<name>/… belongs to the theme's
+        // static assets (the root front controller exempts that prefix), these
+        // two JSON verbs must not be swallowed by it.
+        case $method === 'POST' && $path === 'template/activate':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $name = is_string($body['name'] ?? null) ? $body['name'] : '';
+            if (preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*$#', $name) !== 1
+                || !is_file(__DIR__ . '/templates/' . $name . '/theme.json')) {
+                Router\refuse(400, "Unknown template: {$name}");
+            }
+            $settings = Site\load();
+            $settings['theme'] = $name;
+            Site\save($settings); // the opcache drop lives in Site\save — the switch lands at once
+            echo json_encode(['ok' => true, 'theme' => $name], JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'POST' && $path === 'template/delete':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $name = is_string($body['name'] ?? null) ? $body['name'] : '';
+            echo json_encode(Wares\removeTemplate((string)$name), JSON_UNESCAPED_SLASHES);
+            break;
+
+        // ——— the core's self-update: GitHub versions or a parked local packet ———
+        case $method === 'GET' && $path === 'core':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
+            }
+            $ann = \Core\announce();
+            echo json_encode([
+                'current' => \Core\version(),
+                'latest' => $ann['latest'],
+                'error' => (string)$ann['error'],
+                'localVersion' => \Core\peekPacket(\Core\LOCAL_PACKET),
+            ], JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'POST' && $path === 'core/packet':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
+            }
+            Auth\assertCsrf();
+            echo json_encode(\Core\parkPacket(), JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'POST' && $path === 'core/update':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $source = is_string($body['source'] ?? null) ? $body['source'] : 'hub';
+            echo json_encode(\Core\update((string)$source), JSON_UNESCAPED_SLASHES);
             break;
 
         // Route: GET /bridge/templates — the theme contract's installed wares with

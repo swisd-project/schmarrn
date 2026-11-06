@@ -282,6 +282,68 @@ export function listTemplates(): Promise<readonly TemplateRef[]> {
   return fetch('/bridge/templates').then((r) => json<readonly TemplateRef[]>(r));
 }
 
+export function activateTemplate(name: string): Promise<{ ok: boolean; theme: string }> {
+  return fetch('/bridge/template/activate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({ name })
+  }).then((r) => json<{ ok: boolean; theme: string }>(r));
+}
+
+export function deleteTemplate(name: string): Promise<{ ok: boolean; name: string }> {
+  return fetch('/bridge/template/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({ name })
+  }).then((r) => json<{ ok: boolean; name: string }>(r));
+}
+
+// ——— the core's self-update (GitHub versions or a parked local packet, admin) ———
+
+export interface CoreStatus {
+  readonly current: string;
+  readonly latest: string | null;
+  readonly localVersion?: string | null;
+  readonly error?: string;
+}
+
+export function coreStatus(): Promise<CoreStatus> {
+  return fetch('/bridge/core').then((r) => json<CoreStatus>(r));
+}
+
+/** Park a locally downloaded update packet — the outage handle. Admin, CSRF-gated. */
+export function uploadCorePacket(file: File): Promise<{ ok: boolean; version: string; bytes: number }> {
+  const body = new FormData();
+  body.append('file', file);
+  return fetch('/bridge/core/packet', {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': csrfToken() },
+    body
+  }).then((r) => json<{ ok: boolean; version: string; bytes: number }>(r));
+}
+
+export function runCoreUpdate(source: 'hub' | 'local' = 'hub'): Promise<{
+  ok: boolean;
+  from: string;
+  to: string;
+  entries: number;
+  newPagetypes: number;
+  note: string;
+}> {
+  return fetch('/bridge/core/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({ source })
+  }).then((r) => json<{
+    ok: boolean;
+    from: string;
+    to: string;
+    entries: number;
+    newPagetypes: number;
+    note: string;
+  }>(r));
+}
+
 // ——— account management (admin) ———
 
 export function listAccounts(): Promise<readonly AccountRef[]> {
