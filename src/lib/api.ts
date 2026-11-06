@@ -308,7 +308,15 @@ export interface CoreStatus {
 }
 
 export function coreStatus(): Promise<CoreStatus> {
-  return fetch('/bridge/core').then((r) => json<CoreStatus>(r));
+  return fetch('/bridge/core')
+    .then((r) => json<CoreStatus>(r))
+    .then((st) => ({
+      ...st,
+      // the tag's vanity "v" never crosses the client — the verdict compares
+      // bare numbers; a stray "v" here made "Update available" eternal (v1.2.1)
+      latest: st.latest ? st.latest.replace(/^v+/, '') : st.latest,
+      localVersion: st.localVersion ? st.localVersion.replace(/^v+/, '') : st.localVersion
+    }));
 }
 
 /** Park a locally downloaded update packet — the outage handle. Admin, CSRF-gated. */

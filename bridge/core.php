@@ -568,7 +568,7 @@ function update(string $source = 'hub'): array
         if (version_compare(ltrim($latest, 'v'), $from) !== 1) {
             \Router\refuse(409, "The core is already on {$from} — GitHub's newest version is {$latest}.");
         }
-        $to = $latest;
+        $to = ltrim($latest, 'v'); // the announced word without the tag's vanity prefix
         $scratch = scratchDir();
         $packet = (string)($ann['packet'] ?? PACKET_URL . $latest); // the release's asset zip when it ships one
         $bytes = httpGet($packet);

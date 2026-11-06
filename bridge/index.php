@@ -520,7 +520,10 @@ try {
             $ann = \Core\announce();
             echo json_encode([
                 'current' => \Core\version(),
-                'latest' => $ann['latest'],
+                                // the tag's vanity "v" stays at the door — the client compares
+                // this against the floor's bare number; a "v" here turns the
+                // verdict into an eternal "update available" (seen live, v1.2.1)
+                'latest' => $ann['latest'] !== null ? ltrim((string)$ann['latest'], 'v') : null,
                 'error' => (string)$ann['error'],
                 'localVersion' => \Core\peekPacket(\Core\LOCAL_PACKET),
             ], JSON_UNESCAPED_SLASHES);
