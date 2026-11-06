@@ -1336,6 +1336,7 @@
             {/if}
           {/if}
         </section>
+      {:else if tab === 'updates' && role === 'admin'}
         <section class="mg flex flex-col gap-2">
           <h4 class="mg-h">Updates</h4>
           {#if vitrineDark}
