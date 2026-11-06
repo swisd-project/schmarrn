@@ -328,6 +328,7 @@ export function runCoreUpdate(source: 'hub' | 'local' = 'hub'): Promise<{
   to: string;
   entries: number;
   newPagetypes: number;
+  dashboard: boolean;
   note: string;
 }> {
   return fetch('/bridge/core/update', {
@@ -340,6 +341,7 @@ export function runCoreUpdate(source: 'hub' | 'local' = 'hub'): Promise<{
     to: string;
     entries: number;
     newPagetypes: number;
+    dashboard: boolean;
     note: string;
   }>(r));
 }

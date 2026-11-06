@@ -25,6 +25,7 @@
 ├── scripts/
 │   ├── build-fallback.mjs        # esbuild → bridge/assets/render.esm.js (committed)
 │   ├── build-edit.mjs            # esbuild → bridge/assets/edit.esm.js (committed live-page editor)
+│   ├── ship-release.sh           # packs the release ASSET zip: tag source tree + built build/ (the only way the dashboard rides an update)
 │   └── (*.mts)                   # dev probes
 ├── bridge/                       # PHP core — front controller + libs, no framework; lives under /bridge (bit-scan prey no longer fed)
 │   ├── .htaccess                 # legacy (root .htaccess is the law now)
@@ -84,7 +85,7 @@
 │   ├── routes/
 │   │   ├── +layout.svelte        # imports ../lib/app.css (relative — $lib evasion, see GUIDE)
 │   │   ├── +layout.ts            # prerender = true
-│   │   └── +page.svelte          # login/setup + burger overlay (Contents | Settings | Plugins & Templates | Users tab bar) — the ONE management surface: Contents = page tree + New (page-type scaffolds) + Upload .md + Media + per-page settings ✑ (title/serve-as/date/tags/draft, guarded draft save + publish) ; Settings = site form; wares = plugins + template inventory; picking a page navigates to the live page
+│   │   └── +page.svelte          # login/setup + burger overlay (Contents | Settings | Plugins & Templates | Updates | Users tab bar — Updates speaks its verdict, active only when core/template/plugin updates wait; Update all = core → templates → plugins) — the ONE management surface: Contents = page tree + New (page-type scaffolds) + Upload .md + Media + per-page settings ✑ (title/serve-as/date/tags/draft, guarded draft save + publish) ; Settings = site form; wares = plugins + template inventory; picking a page navigates to the live page
 │   └── content/                  # install-local user data — GITIGNORED, never committed
 │       ├── pages/                # content types (dirs = types, subdirs = slugs)
 │       │   └── <slug>/index.md   # + .draft.md sidecar + page-local media files

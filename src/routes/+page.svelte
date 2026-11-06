@@ -390,13 +390,13 @@
     updatesError = '';
     updatesNote = '';
     const done: string[] = [];
-    const coreRode = coreUpdateAvailable && core !== null; // captured before the ride flips the verdict
+    let coreRide: Awaited<ReturnType<typeof runCoreUpdate>> | null = null; // captured before the ride flips the verdict
     try {
       if (coreUpdateAvailable && core !== null) {
-        const c = await runCoreUpdate('hub');
+        coreRide = await runCoreUpdate('hub');
         await loadCore();
         await loadWares(true); // the registry's host floor may have moved
-        done.push(`core ${c.from} → ${c.to}`);
+        done.push(`core ${coreRide.from} → ${coreRide.to}`);
       }
       for (const name of templateUpdates.map((w) => w.name)) {
         const fresh = vitrine.find((w) => w.kind === 'template' && w.name === name && w.state === 'update');
@@ -407,7 +407,8 @@
         if (fresh) done.push(await installOne(fresh));
       }
       updatesNote = (done.length > 0 ? done.join(' · ') : 'Nothing needed the knife.') + '.';
-      if (coreRode) updatesNote += ' Reload the page — the dashboard you are wearing predates the core move.';
+      if (coreRide !== null && !coreRide.dashboard) updatesNote += ' The dashboard did NOT move with the core packet — rebuild it (npm run build) or ride a release that carries its asset zip.';
+      else if (coreRide !== null) updatesNote += ' Reload the page — the dashboard you are wearing predates the core move.';
     } catch (e) {
       updatesError = e instanceof Error ? e.message : String(e);
       if (done.length > 0) updatesNote = `Done before the break: ${done.join(' · ')}.`;
@@ -548,6 +549,7 @@
       const done = await runCoreUpdate(source);
       await loadCore();
       coreNote = `${done.note} Reload the page — the dashboard you are wearing is from ${done.from}.`;
+      if (!done.dashboard) coreNote += ' The dashboard did NOT move with this packet — rebuild it (npm run build) or ride a release that carries its asset zip.';
     } catch (e) {
       coreError = e instanceof Error ? e.message : String(e);
     } finally {

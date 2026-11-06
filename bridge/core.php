@@ -8,12 +8,14 @@
  *                 new copy); the newest version is announced by GitHub
  *                 (releases/latest first, the tag list as the fallback — one
  *                 GET each, no token). ONE strict-newer gate BEFORE anything
- *                 rides; then the packet (one codeload zip of the announced
- *                 tag) is staged under a WHITELIST: only the core's land ever
+ *                 rides; then the packet — the RELEASE's own zip asset when
+ *                 the release ships one (the only way a built dashboard,
+ *                 build/, can travel), the tag's codeload zip as the floor —
+ *                 is staged under a WHITELIST: only the core's land ever
  *                 swaps — index.php, .htaccess, bridge/*.php modules, the
  *                 config's non-LOCAL defaults, the wholesale dirs (build/,
- *                 bridge/assets/, bridge/lib/ — shipped or not, tag zips carry
- *                 no build/) and pagetypes/ shells under the MERGE LAW: NEW
+ *                 _/, bridge/assets/, bridge/lib/ — shipped or not, tag zips
+ *                 carry no build/) and pagetypes/ shells under the MERGE LAW: NEW
  *                 shells land, a dressed one is never overwritten. Everything
  *                 a user owns — plugins/, templates/, config/*.local.php,
  *                 wares.lock.php, content, the cache — the packet cannot
@@ -109,18 +111,44 @@ function version(): string
 }
 
 /**
- * The newest version GitHub announces: a release tag first (releases/latest —
+ * The release's own packet URL: its zip asset — the only place a built
+ * dashboard (build/) can travel in. A schmarrn-named zip wins; any other zip
+ * is the floor; none → null (the codeload zipball takes over).
+ */
+function assetIn(array $release): ?string
+{
+    $asset = null;
+    foreach (is_array($release['assets'] ?? null) ? $release['assets'] : [] as $a) {
+        $name = is_string($a['name'] ?? null) ? strtolower((string)$a['name']) : '';
+        $url = is_string($a['browser_download_url'] ?? null) ? (string)$a['browser_download_url'] : '';
+        if ($url === '' || !str_ends_with($name, '.zip')) {
+            continue; // not a packet — checksums, sigs, notes stay out
+        }
+        if ($asset === null || str_contains($name, 'schmarrn')) {
+            $asset = $url;
+        }
+    }
+    return $asset;
+}
+
+/**
+ * The newest version GitHub announces: a release first (releases/latest —
  * drafts and prereleases filtered by GitHub itself), the tag list as the
- * fallback (highest semver of the names). latest null = the source is dark.
+ * fallback (highest semver of the names). The PACKET rides the release's own
+ * zip ASSET when the release ships one — the asset is the only place a built
+ * dashboard (build/) can travel in; a tag's codeload zip is source alone.
+ * latest null = the source is dark.
  */
 function announce(): array
 {
     $tag = null;
+    $asset = null; // the release's own packet URL, when it ships one
     $raw = httpGet(RELEASES_URL);
     if ($raw !== null) {
         $release = json_decode((string)$raw, true);
         if (is_array($release) && is_string($release['tag_name'] ?? null)) {
             $tag = (string)$release['tag_name'];
+            $asset = assetIn($release);
         }
     } else {
         // the first GET went dark — the plain tag list may still answer
@@ -141,9 +169,13 @@ function announce(): array
         }
     }
     if ($tag === null) {
-        return ['latest' => null, 'error' => 'GitHub does not answer — the core\'s newest version is unknown from here.'];
+        return ['latest' => null, 'packet' => null, 'error' => 'GitHub does not answer — the core\'s newest version is unknown from here.'];
     }
-    return ['latest' => $tag, 'error' => ''];
+    return [
+        'latest' => $tag,
+        'packet' => $asset !== null ? $asset : PACKET_URL . $tag, // asset zip (with the dashboard) first, source zipball as the floor
+        'error' => '',
+    ];
 }
 
 /**
@@ -166,8 +198,8 @@ function isCore(string $rel): bool
     if (str_starts_with($rel, 'bridge/config/')) {
         return str_ends_with($rel, '.php') && !str_ends_with($rel, '.local.php');
     }
-    if (str_starts_with($rel, 'build/') || str_starts_with($rel, 'bridge/assets/')
-        || str_starts_with($rel, 'bridge/lib/')) {
+    if (str_starts_with($rel, 'build/') || str_starts_with($rel, '_/')
+        || str_starts_with($rel, 'bridge/assets/') || str_starts_with($rel, 'bridge/lib/')) {
         return true; // the wholesale dirs — they walk in whole or not at all
     }
     if (str_starts_with($rel, 'pagetypes/') && str_ends_with($rel, '.md')) {
@@ -331,7 +363,7 @@ function swap(string $staging, string $scratch): array
     };
 
     // ——— wholesale dirs: the packet may ship none, some, or all ———
-    foreach (['build', 'bridge/assets', 'bridge/lib'] as $dir) {
+    foreach (['build', '_', 'bridge/assets', 'bridge/lib'] as $dir) {
         $src = $staged . '/' . $dir;
         if (!is_dir($src)) {
             continue;
@@ -538,7 +570,8 @@ function update(string $source = 'hub'): array
         }
         $to = $latest;
         $scratch = scratchDir();
-        $bytes = httpGet(PACKET_URL . $latest);
+        $packet = (string)($ann['packet'] ?? PACKET_URL . $latest); // the release's asset zip when it ships one
+        $bytes = httpGet($packet);
         if ($bytes === null) {
             partWith($scratch);
             \Router\refuse(502, "The {$latest} packet would not leave the depot — the update is off.");
@@ -583,6 +616,16 @@ function update(string $source = 'hub'): array
         \Router\refuse(502, "The packet carries no core land (or beyond the roofs: {$entries} entries, {$stagedBytes} bytes) — the update is off.");
     }
 
+    // did the packet carry the dashboard? read it BEFORE the swap — the
+    // wholesale law renames the staged build/ into place, and a post-swap
+    // peek would stare at an empty closet
+    $top = '';
+    foreach ((array)glob($staged . '/*', GLOB_ONLYDIR) ?: [] as $candidate) {
+        $top = (string)$candidate;
+        break;
+    }
+    $dashboard = $top !== '' && is_file($top . '/build/index.html');
+
     // === the knife is out — the site eats the blank plate from here on ===
     blankoOn();
     $marker = true;
@@ -614,7 +657,9 @@ function update(string $source = 'hub'): array
         'source' => $source,
         'entries' => count($files),
         'newPagetypes' => $pagetypes,
+        'dashboard' => $dashboard, // the face moved with the body?
         'note' => "The core is on {$doneTo} now" . $repair
-            . ($pagetypes > 0 ? " — {$pagetypes} new pagetype shells added" : '') . '.',
+            . ($pagetypes > 0 ? " — {$pagetypes} new pagetype shells added" : '')
+            . ($dashboard ? '' : ' — but the packet carried no dashboard; a release asset zip (scripts/ship-release.sh) moves the face too') . '.',
     ];
 }

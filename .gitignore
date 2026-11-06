@@ -28,3 +28,6 @@ Thumbs.db
 
 # Env
 .env
+
+# Release asset artifacts (built by scripts/ship-release.sh — attached to the GitHub release, never committed)
+/schmarrn-*.zip
