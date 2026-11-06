@@ -13,3 +13,7 @@ Side quests (main CMS)
 [ ] Create a default landing page — until then, the public face is just the 404 page, since nothing else is there.
 [ ] 404 page of `atelier` only covers half the DOM.
 [ ] Template choice should happen in the admin page with preview. Every template needs a blanko hello-world page.
+[ ] Deleting a template needs a warning (confirm dialog).
+[ ] There must always be at least one template — the last one cannot be deleted.
+[ ] Rework the Templates & Plugins page — when a ware is active/installed, its Vitrine shelf entry still shows (e.g. catflash after activating); the two views need a cleaner relationship.
+[ ] Remove the Plugins card from the "Templates & Plugins" tab (2026-11-06) — with the Updates tab carrying all update verbs, the plugin inventory needs its own home.

@@ -85,7 +85,7 @@
 │   ├── routes/
 │   │   ├── +layout.svelte        # imports ../lib/app.css (relative — $lib evasion, see GUIDE)
 │   │   ├── +layout.ts            # prerender = true
-│   │   └── +page.svelte          # login/setup + burger overlay (Contents | Settings | Plugins & Templates | Updates | Users tab bar — Updates speaks its verdict, active only when core/template/plugin updates wait; Update all = core → templates → plugins) — the ONE management surface: Contents = page tree + New (page-type scaffolds) + Upload .md + Media + per-page settings ✑ (title/serve-as/date/tags/draft, guarded draft save + publish) ; Settings = site form; wares = plugins + template inventory; picking a page navigates to the live page
+│   │   └── +page.svelte          # login/setup + burger overlay (Contents | Settings | Plugins & Templates | Updates | Users tab bar — Updates speaks its verdict, active only when core/template/plugin updates wait; Update all = core → templates → plugins) — the ONE management surface: Contents = the raw desk (full-height, DOM never scrolls: left = filetree of every md in use, folder-grouped, draft/edits badges + row verbs rename/settings/delete/open-live, foot = guarded Save draft (wakes only on real changes, Ctrl+S) + New/Upload/Media (media in its own modal); right = the sheet card, plain-text md editor riding getDraftRaw/putDraftRaw with the X-Base-Hash conflict guard); Settings = site form; wares = plugins + template inventory; picking ↗ walks to the live page
 │   └── content/                  # install-local user data — GITIGNORED, never committed
 │       ├── pages/                # content types (dirs = types, subdirs = slugs)
 │       │   └── <slug>/index.md   # + .draft.md sidecar + page-local media files

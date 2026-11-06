@@ -208,6 +208,46 @@ textarea.input { resize: vertical; min-height: 5rem; }
 .card:hover { transform: translateY(-3px); box-shadow: var(--hover-lift-deep); }
 
 /* ————————————————————————————————————————————————
+   08a · CONTENTS DESK — the raw editor's stage. The DOM itself never
+   scrolls (fixed height off the viewport); the tree and the sheet scroll
+   INSIDE their cards. Sidebar = 1/5 of the row, the sheet takes the rest.
+   The sheet rests flat — the inset dent stays reserved for field-sized
+   inputs, not for a full page of paper.
+   ———————————————————————————————————————————————— */
+.sm-desk {
+  display: flex; gap: 1rem;
+  height: calc(100dvh - 8.75rem);
+  min-height: 20rem;
+  overflow: hidden;
+}
+.sm-desk-tree {
+  flex: 0 0 20%; min-width: 14rem; max-width: 22rem;
+  display: flex; flex-direction: column; gap: 0.5rem;
+  background: var(--color-batter); border-radius: var(--radius-lg);
+  box-shadow: var(--raise-mg);
+  padding: 0.75rem;
+  overflow: hidden;
+}
+.sm-desk-tree-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.sm-desk-foot { flex: 0 0 auto; display: flex; flex-direction: column; gap: 0.4rem; }
+.sm-desk-main {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column; gap: 0.5rem;
+  background: var(--color-batter); border-radius: var(--radius-lg);
+  box-shadow: var(--raise-mg);
+  padding: 0.75rem;
+  overflow: hidden;
+}
+.sm-desk-sheet {
+  flex: 1 1 auto; min-height: 0;
+  width: 100%; border: none; resize: none;
+  font-family: var(--font-mono); font-size: 0.875rem; line-height: 1.6;
+  color: var(--color-ink); background: transparent;
+  overflow-y: auto; white-space: pre-wrap; tab-size: 2;
+}
+.sm-desk-sheet:focus { outline: none; }
+
+/* ————————————————————————————————————————————————
    08 · OVERLAY BITS — overlays float above the whole stack;
    that shadow is position, not decoration.
    ———————————————————————————————————————————————— */

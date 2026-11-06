@@ -190,6 +190,65 @@
     window.location.href = type === 'pages' ? `/${slug}` : `/${type}/${slug}`;
   }
 
+  // ——— the raw desk (Contents): the md file, open on the sheet ———
+  // The dashboard's own writing desk: the filetree picks, the sheet edits the
+  // DRAFT (getDraftRaw/putDraftRaw), and the hash guard refuses to trample a
+  // concurrent editor. Save only exists when the text actually changed.
+  let sel = $state<null | { type: string; slug: string }>(null);
+  let raw = $state('');
+  let baseline = $state('');
+  let baseHash = $state('');
+  let deskBusy = $state(false);
+  let deskError = $state('');
+  let deskNote = $state('');
+  let mediaModal = $state(false);
+  const dirty = $derived(sel !== null && raw !== baseline);
+  const selPath = $derived(sel === null ? '' : `${sel.type}/${sel.slug}/index.md`);
+
+  async function openRaw(type: string, slug: string) {
+    if (sel?.type === type && sel.slug === slug) return;
+    if (dirty && !window.confirm(`Unsaved changes on ${selPath} — leave without saving?`)) return;
+    deskBusy = true;
+    deskError = '';
+    deskNote = '';
+    try {
+      const d = await getDraftRaw(type, slug);
+      sel = { type, slug };
+      raw = d.raw;
+      baseline = d.raw;
+      baseHash = d.hash;
+    } catch (e) {
+      deskError = e instanceof Error ? e.message : String(e);
+    } finally {
+      deskBusy = false;
+    }
+  }
+
+  async function saveRaw() {
+    if (!dirty || deskBusy || sel === null) return;
+    deskBusy = true;
+    deskError = '';
+    deskNote = '';
+    try {
+      baseHash = await putDraftRaw(sel.type, sel.slug, raw, baseHash);
+      baseline = raw;
+      deskNote = 'Draft saved — publish from ✑ when it is ready for the public face.';
+      index = await pageCount(); // the tree's draft/edits badges re-read
+    } catch (e) {
+      deskError = e instanceof Error ? e.message : String(e);
+    } finally {
+      deskBusy = false;
+    }
+  }
+
+  function deskKeydown(event: KeyboardEvent) {
+    // Ctrl/Cmd+S saves the draft — the one reflex a text desk owes its writer.
+    if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+      event.preventDefault();
+      void saveRaw();
+    }
+  }
+
   // ——— the burger overlay: Pages / Site / Accounts / Media / Plugins ———
   type Tab = 'contents' | 'settings' | 'wares' | 'updates' | 'users';
   let menuOpen = $state(false);
@@ -995,87 +1054,107 @@
       <button class="btn btn-secondary ml-auto" onclick={signOut} title="End the session">Log out</button>
     </nav>
 
-    <div class="px-4 pb-12 max-w-4xl mx-auto w-full">
+    <div class="px-4 mx-auto w-full {tab === 'contents' ? 'pb-4 max-w-none' : 'pb-12 max-w-4xl'}">
       {#if tab === 'contents'}
-        {#if index}
-          {#each Object.entries(index) as [type, pages] (type)}
-            <section class="mg mb-6">
-              <h4 class="mg-h">{type}</h4>
-              <ul class="list-none p-0 m-0 flex flex-col gap-1">
-                {#each pages as page (page.slug)}
-                  <li class="flex items-center gap-1">
-                    {#if renaming?.type === type && renaming?.slug === page.slug}
-                      {@const to = renaming.value.trim().toLowerCase()}
-                      {@const unchanged = to === renaming?.slug}
-                      {@const taken = (index?.[type] ?? []).some((p) => p.slug === to && p.slug !== renaming?.slug)}
-                      <form class="rename flex gap-1 flex-wrap items-center" onsubmit={commitRename}>
-                        <input class="input max-w-48" bind:value={renaming.value} pattern="[a-z0-9]+(-[a-z0-9]+)*" required />
-                        <button type="submit" class="btn btn-primary" disabled={unchanged || taken}
-                          title={unchanged ? 'Name unchanged' : taken ? 'Already taken' : 'Rename'}>✓</button>
-                        <button type="button" class="btn btn-secondary" onclick={() => (renaming = null)}>×</button>
-                        {#if unchanged}
-                          <span class="text-xs text-ink-soft">Same name — change it or close.</span>
-                        {:else if taken}
-                          <span class="text-xs text-error">Another page already uses “{to}”.</span>
-                        {:else if renameError}
-                          <span class="text-xs text-error">{renameError}</span>
+        <div class="sm-desk">
+          <!-- the tree: every md file in use, its folder is the group, the draft
+               state rides as badges; the row verbs stay (rename, settings, delete,
+               open live) — management never left, it just moved into the margin -->
+          <aside class="sm-desk-tree">
+            <div class="sm-desk-tree-list">
+              {#if index === null}
+                <p class="italic text-ink-soft">Opening the drawer…</p>
+              {:else}
+                {#each Object.entries(index) as [type, pages] (type)}
+                  <p class="mg-h mt-3 first:mt-0">{type}</p>
+                  <ul class="list-none p-0 m-0 flex flex-col gap-1">
+                    {#each pages as page (page.slug)}
+                      <li>
+                        <div class="flex items-center gap-1">
+                          <button
+                            class="btn btn-secondary flex-1 justify-start min-w-0"
+                            class:btn-primary={sel?.type === type && sel?.slug === page.slug}
+                            title={`${type}/${page.slug}/index.md`}
+                            onclick={() => openRaw(type, page.slug)}
+                          >
+                            <span class="truncate">{page.slug}</span>
+                            {#if page.draft}<span class="badge badge-draft">draft</span>{/if}
+                            {#if page.hasDraft}<span class="badge badge-live">edits</span>{/if}
+                          </button>
+                          <button class="btn-ghost" title="Rename" onclick={() => startRename(type, page.slug)}>✎</button>
+                          <button class="btn-ghost" title="Page settings" onclick={() => openPageSettings(type, page.slug)}>✑</button>
+                          <button class="btn-ghost danger" title="Delete" onclick={() => removePage(type, page.slug)}>×</button>
+                          <button class="btn-ghost" title="Open the live page" onclick={() => select(type, page.slug)}>↗</button>
+                        </div>
+                        {#if renaming?.type === type && renaming?.slug === page.slug}
+                          {@const to = renaming.value.trim().toLowerCase()}
+                          {@const unchanged = to === renaming?.slug}
+                          {@const taken = (index?.[type] ?? []).some((p) => p.slug === to && p.slug !== renaming?.slug)}
+                          <form class="rename flex gap-1 flex-wrap items-center mt-1" onsubmit={commitRename}>
+                            <input class="input max-w-40" bind:value={renaming.value} pattern="[a-z0-9]+(-[a-z0-9]+)*" required />
+                            <button type="submit" class="btn btn-primary" disabled={unchanged || taken}
+                              title={unchanged ? 'Name unchanged' : taken ? 'Already taken' : 'Rename'}>✓</button>
+                            <button type="button" class="btn btn-secondary" onclick={() => (renaming = null)}>×</button>
+                            {#if unchanged}
+                              <span class="text-xs text-ink-soft">Same name.</span>
+                            {:else if taken}
+                              <span class="text-xs text-error">Another page already uses “{to}”.</span>
+                            {:else if renameError}
+                              <span class="text-xs text-error">{renameError}</span>
+                            {/if}
+                          </form>
                         {/if}
-                      </form>
-                    {:else}
-                      <button
-                        class="btn btn-secondary flex-1 justify-start"
-                        onclick={() => select(type, page.slug)}
-                      >
-                        {page.slug}
-                        {#if page.draft}<span class="badge badge-draft ml-2">draft</span>{/if}
-                        {#if page.hasDraft}<span class="badge badge-live ml-2">edits</span>{/if}
-                      </button>
-                      <button class="btn-ghost" title="Rename" onclick={() => startRename(type, page.slug)}>✎</button>
-                      <button class="btn-ghost" title="Page settings" onclick={() => openPageSettings(type, page.slug)}>✑</button>
-                      <button class="btn-ghost danger" title="Delete" onclick={() => removePage(type, page.slug)}>×</button>
-                    {/if}
-                  </li>
+                      </li>
+                    {/each}
+                  </ul>
                 {/each}
-              </ul>
-            </section>
-          {/each}
-        {/if}
-
-        <section class="mg flex flex-col gap-3">
-          <h4 class="mg-h">New</h4>
-          <button class="btn btn-primary self-start" onclick={openNew}>+ New page</button>
-          <label class="btn btn-secondary self-start cursor-pointer">
-            <input class="hidden" type="file" accept=".md,.markdown,text/markdown" onchange={onUploadPick} />
-            Upload .md → new page
-          </label>
-          {#if uploadError}<p class="alert alert-err m-0" role="alert">{uploadError}</p>{/if}
-        </section>
-
-        <section class="mg flex flex-col gap-3">
-          <h4 class="mg-h">Media</h4>
-          {#if mediaBusy}
-            <p class="italic text-ink-soft">Sweeping the pantry…</p>
-          {:else if mediaError}
-            <p class="alert alert-err m-0" role="alert">{mediaError}</p>
-          {:else if overlayMedia.length === 0}
-            <p class="m-0 italic text-ink-soft">No media yet — upload lives inside the image and video modals.</p>
-          {:else}
-            {#if mediaNote}<p class="alert alert-ok m-0">{mediaNote}</p>{/if}
-            <div class="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(10rem,1fr))]">
-              {#each overlayMedia as item (item.type + '/' + item.slug + '/' + item.name)}
-                <button class="card text-left" title={`Copy URL — ${item.url}`} onclick={() => copyMediaUrl(item)}>
-                  {#if /\.(png|jpe?g|gif|webp|svg)$/i.test(item.name)}
-                    <img class="w-full aspect-video object-cover" src={item.url} alt={item.name} loading="lazy" />
-                  {:else}
-                    <div class="w-full aspect-video bg-crust grid place-items-center text-xs text-ink-soft">{item.name.split('.').pop()?.toUpperCase()}</div>
-                  {/if}
-                  <span class="text-xs font-bold truncate">{item.name}</span>
-                  <span class="text-xs text-ink-soft truncate">{item.slug}</span>
-                </button>
-              {/each}
+              {/if}
             </div>
-          {/if}
-        </section>
+            <div class="sm-desk-foot">
+              {#if deskError}<p class="alert alert-err m-0" role="alert">{deskError}</p>{/if}
+              {#if deskNote}<p class="alert alert-ok m-0">{deskNote}</p>{/if}
+              <!-- the save button only wakes when the sheet actually differs -->
+              <button
+                class="btn btn-primary w-full justify-center"
+                disabled={!dirty || deskBusy}
+                onclick={() => saveRaw()}
+                title="Save the draft (Ctrl+S)"
+              >
+                {#if deskBusy}Saving…{:else if dirty}Save draft{:else}Saved{/if}
+              </button>
+              <div class="flex gap-1">
+                <button class="btn btn-secondary flex-1 justify-center" onclick={openNew}>+ New</button>
+                <label class="btn btn-secondary flex-1 justify-center cursor-pointer">
+                  <input class="hidden" type="file" accept=".md,.markdown,text/markdown" onchange={onUploadPick} />
+                  Upload
+                </label>
+                <button class="btn btn-secondary flex-1 justify-center" onclick={() => { mediaModal = true; void loadAllMedia(); }}>Media</button>
+              </div>
+              {#if uploadError}<p class="alert alert-err m-0" role="alert">{uploadError}</p>{/if}
+            </div>
+          </aside>
+          <!-- the sheet: the md file, plain text, the whole remaining width -->
+          <div class="sm-desk-main">
+            {#if sel === null}
+              <div class="flex-1 grid place-items-center text-center p-6">
+                <p class="m-0 italic text-ink-soft">Pick a file from the tree — its markdown opens here. The draft saves guarded; publish from ✑.</p>
+              </div>
+            {:else}
+              <div class="flex items-center gap-2 flex-wrap">
+                <p class="m-0 font-bold text-sm">{selPath}</p>
+                {#if dirty}<span class="badge">unsaved</span>{/if}
+              </div>
+              <textarea
+                class="sm-desk-sheet"
+                bind:value={raw}
+                onkeydown={deskKeydown}
+                spellcheck="false"
+                disabled={deskBusy}
+                aria-label={`Markdown source of ${selPath}`}
+              ></textarea>
+            {/if}
+          </div>
+        </div>
       {:else if tab === 'settings' && role === 'admin'}
         {#if siteSettings}
           <form class="mg flex flex-col gap-3 max-w-md" onsubmit={saveSiteNow}>
@@ -1412,6 +1491,39 @@
           {#if updatesError}<p class="alert alert-err" role="alert">{updatesError}</p>{/if}
           {#if updatesNote}<p class="alert alert-ok">{updatesNote}</p>{/if}
         </section>
+      {/if}
+    </div>
+  </div>
+{/if}
+
+{#if mediaModal}
+  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50 p-4" role="dialog" aria-modal="true" aria-label="Media">
+    <div class="modal-card" style="width: min(60rem, 94vw)">
+      <header class="modal-head">
+        <h3>Media</h3>
+        <button type="button" class="close-x" onclick={() => (mediaModal = false)}>×</button>
+      </header>
+      {#if mediaBusy}
+        <p class="italic text-ink-soft">Sweeping the pantry…</p>
+      {:else if mediaError}
+        <p class="alert alert-err m-0" role="alert">{mediaError}</p>
+      {:else if overlayMedia.length === 0}
+        <p class="m-0 italic text-ink-soft">No media yet — upload lives inside the image and video modals.</p>
+      {:else}
+        {#if mediaNote}<p class="alert alert-ok m-0">{mediaNote}</p>{/if}
+        <div class="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(10rem,1fr))]">
+          {#each overlayMedia as item (item.type + '/' + item.slug + '/' + item.name)}
+            <button class="card text-left" title={`Copy URL — ${item.url}`} onclick={() => copyMediaUrl(item)}>
+              {#if /\.(png|jpe?g|gif|webp|svg)$/i.test(item.name)}
+                <img class="w-full aspect-video object-cover" src={item.url} alt={item.name} loading="lazy" />
+              {:else}
+                <div class="w-full aspect-video bg-crust grid place-items-center text-xs text-ink-soft">{item.name.split('.').pop()?.toUpperCase()}</div>
+              {/if}
+              <span class="text-xs font-bold truncate">{item.name}</span>
+              <span class="text-xs text-ink-soft truncate">{item.slug}</span>
+            </button>
+          {/each}
+        </div>
       {/if}
     </div>
   </div>
