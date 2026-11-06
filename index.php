@@ -56,6 +56,15 @@ if (str_starts_with($path, '/_/')) {
     if ($sub === '' || $sub === '/') {
         $sub = '/index.html'; // the dir itself → the prerendered dashboard root
     }
+    // ——— the admin ride (2026-11-07, user law): /_/<page> serves the LIVE page
+    // in admin mode — the visual editor's home. The dashboard's own assets keep
+    // their paths; a sub-path that names no page falls through to them. ———
+    if ($sub !== '/index.html' && $sub !== '/dashboard.html') {
+        require_once __DIR__ . '/bridge/serve.php';
+        if (\Serve\tryDispatch($path)) {
+            exit; // served in admin mode
+        }
+    }
     // Host layout: a real _/ directory. Repo layout: the flat build/ output
     // (/_/_app/x → build/_app/x — the base prefix collapses into the path).
     foreach ([__DIR__ . '/_', __DIR__ . '/build'] as $baseDir) {
@@ -133,5 +142,5 @@ if ($path !== '/') {
 }
 
 // ——— everything else: the public site ———
-require __DIR__ . '/bridge/serve.php';
+require_once __DIR__ . '/bridge/serve.php';
 \Serve\dispatch($path);

@@ -80,9 +80,11 @@
       user = s.user;
       role = s.role;
       setupPassword = '';
-      // Fresh install: the bakery is founded, now show the baker their shop.
+      // Fresh install: the bakery is founded, the baker lands on their shop —
+      // the home page in admin mode (2026-11-07 law), editor and drawer awake.
       if (!import.meta.env.DEV) {
-        window.location.href = '/';
+        const landing = await landingSlug();
+        window.location.href = landing !== null ? `/_/${landing}` : '/_/';
         return;
       }
     } catch (e) {
@@ -143,6 +145,22 @@
     }
   }
 
+  /** The landing page after login (2026-11-07 law): the site's home in admin
+   *  mode. Admins read the home slug off the site settings; editors take the
+   *  first published page off the tree; no pages at all → the dashboard. */
+  async function landingSlug(): Promise<string | null> {
+    try {
+      const s = await getSiteSettings();
+      if (s.home !== '') return s.home;
+    } catch { /* editors: the sugar safe stays shut */ }
+    try {
+      for (const p of (await pageCount())['pages'] ?? []) {
+        if (!p.draft) return p.slug;
+      }
+    } catch { /* no tree yet — the dashboard catches them */ }
+    return null;
+  }
+
   async function signIn(event: SubmitEvent) {
     event.preventDefault();
     busy = true;
@@ -152,10 +170,12 @@
       authenticated = true;
       role = s.role;
       password = '';
-      // The law: login at /_, then the PAGE comes back up. Dev stays in the SPA
-      // (the vite origin's / is the dashboard itself).
+      // The law (2026-11-07): login at /_, then the LANDING PAGE comes back up
+      // in admin mode — /_/<home> — the editor and the drawer already awake.
+      // Dev stays in the SPA (the vite origin's / is the dashboard itself).
       if (!import.meta.env.DEV) {
-        window.location.href = '/';
+        const landing = await landingSlug();
+        window.location.href = landing !== null ? `/_/${landing}` : '/_/';
         return;
       }
     } catch (e) {
@@ -1025,15 +1045,10 @@
     use:dialogFocus
     style="background: linear-gradient(145deg, #fffdf7 0%, #fff8ef 45%, #f9ecd9 100%);"
   >
-    <div class="flex items-center gap-3 px-4 py-3">
-      <button class="burger" aria-label="Close menu" onclick={closeMenu}>
-        <span></span><span></span><span></span>
-      </button>
-      <span class="font-extrabold text-lg tracking-tight">Schmarrn</span>
-      <span class="ml-auto text-sm text-ink-soft">{user}{#if role} · {role}{/if}</span>
-      <button class="btn btn-secondary" onclick={closeMenu} title="Back to the page">Close</button>
-    </div>
-
+    <!-- the overlay's chrome, slimmed by law (2026-11-07): tabs on top, the
+         close X at the right edge where the live page wears its triangle,
+         Log out lives in the drawer's foot — nothing else. -->
+    <button class="sm-overlay-x" aria-label="Close the overlay — back to the page" title="Back to the page" onclick={closeMenu}>×</button>
     <nav class="flex gap-2 px-4 pb-4 flex-wrap" aria-label="Menu sections">
       <button class="btn {tab === 'contents' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('contents')}>Contents</button>
       {#if role === 'admin'}
@@ -1051,7 +1066,6 @@
         </button>
         <button class="btn {tab === 'users' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('users')}>Users</button>
       {/if}
-      <button class="btn btn-secondary ml-auto" onclick={signOut} title="End the session">Log out</button>
     </nav>
 
     <div class="px-4 mx-auto w-full {tab === 'contents' ? 'pb-4 max-w-none' : 'pb-12 max-w-4xl'}">

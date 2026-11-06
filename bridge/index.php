@@ -509,6 +509,18 @@ try {
             echo json_encode(Wares\removeTemplate((string)$name), JSON_UNESCAPED_SLASHES);
             break;
 
+        // ——— the drawer's retail band (2026-11-07, user law): quality-of-life
+        // edit handles from enabled plugins + the active theme, manifest-declared.
+        // Any authed hand may read it — editors carry the drawer too. ———
+        case $method === 'GET' && $path === 'drawer':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            echo json_encode([
+                'handles' => array_merge(\Plugins\drawerHandles(), \Serve\themeDrawerHandles()),
+            ], JSON_UNESCAPED_SLASHES);
+            break;
+
         // ——— the core's self-update: GitHub versions or a parked local packet ———
         case $method === 'GET' && $path === 'core':
             if (!Auth\check()) {

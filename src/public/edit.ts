@@ -80,6 +80,9 @@ const EDIT_CSS = `
 .sm-admin-root.open .sm-admin-tri { transform:rotate(180deg); } /* open = points right (state flip, no tween) */
 .sm-admin-menu { visibility:hidden; display:flex; flex-direction:column; gap:.15rem; }
 .sm-admin-root.open .sm-admin-menu { visibility:visible; }
+/* the retail band: the shelf between the tabs and Log out — same item law,
+   one hairline to mark where the menu ends and the market begins */
+.sm-admin-retail { display:flex; flex-direction:column; gap:.15rem; margin-top:.25rem; padding-top:.3rem; border-top:1px solid #e3dccd; }
 .sm-admin-menu button {
   display:block; width:100%; text-align:left; white-space:nowrap;
   background:none; border:none; padding:.5rem .65rem; border-radius:4px;
@@ -339,7 +342,7 @@ async function boot(root: HTMLElement): Promise<void> {
     // The drawer's items ARE the overlay's tabs — each opens /_ pre-selected
     // on that tab (editors only get Contents; admin tabs stay admin-only).
     const TAB_ITEMS: readonly (readonly [string, string])[] = role === 'admin'
-      ? [['contents', 'Contents'], ['settings', 'Settings'], ['wares', 'Plugins & Templates'], ['users', 'Users']]
+      ? [['contents', 'Contents'], ['settings', 'Settings'], ['wares', 'Plugins & Templates'], ['updates', 'Updates'], ['users', 'Users']]
       : [['contents', 'Contents']];
     for (const [tab, label] of TAB_ITEMS) {
       menu.append(el('button', {
@@ -369,6 +372,39 @@ async function boot(root: HTMLElement): Promise<void> {
     door.append(menu);
     document.body.append(door);
 
+    // ——— the retail band (2026-11-07, user law): between the tabs and Log
+    // out, installed plugins and the active template may place quality-of-life
+    // edit handles — manifest-declared {label, href}, served by /bridge/drawer.
+    // Fail-silent: a dark shelf leaves the drawer bare, never broken. The band
+    // lands late (one fetch), so the door re-measures when it arrives — a
+    // stale openW would clip the new items mid-word. ———
+    void apiJson<{ handles?: { label?: unknown; href?: unknown }[] }>('/bridge/drawer')
+      .then((shelf) => {
+        const band = document.createElement('div');
+        band.className = 'sm-admin-retail';
+        for (const handle of Array.isArray(shelf.handles) ? shelf.handles : []) {
+          const label = typeof handle?.label === 'string' ? handle.label : '';
+          const href = typeof handle?.href === 'string' ? handle.href : '';
+          if (label === '' || !(href.startsWith('/') || /^https?:\/\//.test(href))) {
+            continue; // the lid already filtered; the belt has suspenders
+          }
+          band.append(el('button', {
+            type: 'button',
+            role: 'menuitem',
+            onclick: (e) => {
+              e.stopPropagation(); // a handle is navigation, not a toggle
+              window.location.href = href;
+            }
+          }, [label]));
+        }
+        const floor = menu.lastElementChild;
+        if (band.childElementCount > 0 && floor !== null) {
+          menu.insertBefore(band, floor); // Log out stays the bottom item
+          measure();
+        }
+      })
+      .catch(() => undefined);
+
     // Measure ONLY after the drawer is mounted and fully populated — the
     // previous build measured a DETACHED element (offsetWidth 0, computed
     // padding NaN, triangle not yet appended) and wrote "0px"/"NaNpx" widths,
@@ -380,8 +416,14 @@ async function boot(root: HTMLElement): Promise<void> {
       + parseFloat(doorStyle.borderLeftWidth) + parseFloat(doorStyle.borderRightWidth);
     const tri = door.querySelector<HTMLElement>('.sm-admin-tri');
     const closedW = Math.ceil(tri !== null ? tri.getBoundingClientRect().width : 7) + framePad;
-    door.style.width = 'auto';
-    const openW = door.offsetWidth;
+    // The open width is a MEASURED thing, re-measurable by law: the retail band
+    // lands after one fetch, and a stale openW would clip its items mid-word.
+    let openW = 0;
+    const measure = (): void => {
+      door.style.width = 'auto';
+      openW = door.offsetWidth;
+      door.style.width = `${open ? openW : closedW}px`;
+    };
     door.style.width = `${closedW}px`;
 
     function applyOpen(next: boolean): void {

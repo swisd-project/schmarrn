@@ -11,8 +11,8 @@ must look right and behave right through **all three**:
 
 | Door | Who | Body content | Slides at theme-JS execution |
 |---|---|---|---|
-| Authed | logged-in admin/editor | empty `[data-sm-edit-root]` + `edit.esm.js` (renders async) | **not yet** |
-| Fresh cache | anonymous | cached rendered HTML (static) | **yes** |
+| Authed | logged-in admin/editor **under the `/_` prefix** (admin mode, 2026-11-07) | empty `[data-sm-edit-root]` + `edit.esm.js` (renders async) | **not yet** |
+| Fresh cache | anonymous — and authed users on plain URLs (the public face for everyone) | cached rendered HTML (static) | **yes** |
 | Fallback shell | anonymous, cache stale/missing | `div.sm-fallback` + `render.esm.js` (renders async) | **not yet** |
 
 **Readiness law for theme JavaScript:** never assume your markup exists when
@@ -74,9 +74,14 @@ document and the themes move together.
 
 ## Manifest (`theme.json`)
 
-Core reads exactly one field today: `defaultStyle` (`"slide"` or `"classical"`,
-read by `styleOf()`). A `theme.json` file must exist for the theme to be
-offered at setup and accepted in settings (`bridge/index.php`).
+Core reads two fields today: `defaultStyle` (`"slide"` or `"classical"`,
+read by `styleOf()`) and `drawer` — an array of `{label, href}` quality-of-life
+edit handles the admin drawer's retail band carries (2026-11-07). `href` must be
+root-relative (`/…` — a theme lives on this site); labels trim to 60 chars,
+eight handles max. Served to any authed session via `GET /bridge/drawer`
+alongside the enabled plugins' handles (`plugin.json` `"drawer"`, same shape,
+absolute http(s) hrefs allowed there). A theme must exist with a `theme.json`
+for the theme to be offered at setup and accepted in settings (`bridge/index.php`).
 
 ## Assets
 

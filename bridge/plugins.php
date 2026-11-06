@@ -142,6 +142,29 @@ function validate(string $name, array $manifest): array|string
         }
     }
 
+    // Drawer handles (2026-11-07, user law): quality-of-life edit handles the
+    // admin drawer's retail band carries. Manifest-declared {label, href} —
+    // label ≤ 60 chars, href root-relative (plugin routes live at
+    // /bridge/plugin/<name>/<route>) or absolute http(s). Everything foreign
+    // is refused here; eight handles per plugin is already a crowd.
+    $drawer = [];
+    foreach ((array)($caps['drawer'] ?? []) as $handle) {
+        if (!is_array($handle)) {
+            continue;
+        }
+        $label = is_string($handle['label'] ?? null) ? trim((string)$handle['label']) : '';
+        $href = is_string($handle['href'] ?? null) ? trim((string)$handle['href']) : '';
+        if ($label === '' || $href === '') {
+            continue;
+        }
+        if (str_starts_with($href, '/') || preg_match('#^https?://#i', $href) === 1) {
+            $drawer[] = ['label' => mb_substr($label, 0, 60), 'href' => $href];
+        }
+        if (count($drawer) >= 8) {
+            break;
+        }
+    }
+
     return [
         'name' => $name,
         'title' => $title,
@@ -151,6 +174,7 @@ function validate(string $name, array $manifest): array|string
         'routes' => $routes,
         'editorBlocks' => $editorBlocks,
         'contentFilters' => $contentFilters,
+        'drawer' => $drawer,
     ];
 }
 
@@ -169,6 +193,28 @@ function enabled(): array
         }
     }
     return $clean;
+}
+
+/** The retail band (2026-11-07, user law): drawer handles from ENABLED
+ *  plugins — manifest-declared {label, href}, the lid validated them at
+ *  load. A disabled or broken plugin contributes nothing. */
+function drawerHandles(): array
+{
+    $out = [];
+    foreach (all() as $plugin) {
+        if (isset($plugin['error']) || !($plugin['enabled'] ?? false)) {
+            continue;
+        }
+        foreach ((array)($plugin['drawer'] ?? []) as $handle) {
+            if (is_array($handle) && is_string($handle['label'] ?? null) && is_string($handle['href'] ?? null)) {
+                $out[] = ['label' => (string)$handle['label'], 'href' => (string)$handle['href'], 'kind' => 'plugin'];
+            }
+            if (count($out) >= 12) {
+                break 2;
+            }
+        }
+    }
+    return $out;
 }
 
 /** Write the enabled map (var_export — data, never code) + drop stale bytecode. */

@@ -247,6 +247,19 @@ textarea.input { resize: vertical; min-height: 5rem; }
 }
 .sm-desk-sheet:focus { outline: none; }
 
+/* the overlay's close X (2026-11-07): sits where the live page wears its
+   triangle — right edge, middle height — the same white rect, pointing home */
+.sm-overlay-x {
+  position: fixed; right: 0; top: 50%; transform: translateY(-50%);
+  z-index: 50; /* above the overlay (z-40), below the modals (z-50 cards) */
+  width: 2.4rem; height: 3.4rem;
+  background: #fff; border: 2px solid #e3dccd; border-right: none;
+  border-radius: 6px 0 0 6px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.10);
+  font: inherit; font-size: 1.1rem; font-weight: 700; color: #767676;
+  cursor: pointer;
+}
+.sm-overlay-x:hover { color: #4f4a42; background: #f4efe6; }
+
 /* ————————————————————————————————————————————————
    08 · OVERLAY BITS — overlays float above the whole stack;
    that shadow is position, not decoration.

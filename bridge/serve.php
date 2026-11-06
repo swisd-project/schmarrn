@@ -45,6 +45,75 @@ function dispatch(string $path): never
     notFound($site);
 }
 
+/**
+ * Admin mode is URL law (2026-11-07, user-designed): a live page under the
+ * /_ prefix carries the visual editor — the plain URL is the public face.
+ * /_ and /_/ themselves are the dashboard's ground, not a page's.
+ */
+function adminMode(): bool
+{
+    $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
+    return str_starts_with($path, '/_/') && strlen($path) > 3;
+}
+
+/** The public face of an admin-mode URL: /_/hello rides home to /hello. */
+function plainPath(): string
+{
+    $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
+    return str_starts_with($path, '/_/') ? '/' . ltrim(substr($path, 3), '/') : $path;
+}
+
+/**
+ * The /_-prefixed admin ride: resolve the sub-path as a page and serve it in
+ * admin mode. Returns FALSE when the path names no page — the root controller
+ * falls through to the dashboard's own assets. Never 404s: a wrong /_/hello
+ * is the dashboard's business, not a dead end.
+ */
+function tryDispatch(string $path): bool
+{
+    \Plugins\load(); // enabled plugin code in place before any render fills placeholders
+    $site = \Site\load();
+    $sub = trim(substr($path, 3), '/');
+    if ($sub === '') {
+        return false; // the dashboard itself, not a page
+    }
+    $segments = explode('/', $sub);
+    $live = static fn (string $type, string $slug): bool =>
+        preg_match(IDENTIFIER, $type) === 1
+        && preg_match(IDENTIFIER, $slug) === 1
+        && \Store\read($type, $slug) !== null
+        && !\Store\isDraft($type, $slug);
+    if (count($segments) === 2 && $live($segments[0], $segments[1])) {
+        page($segments[0], $segments[1], $site); // serves + exits
+    }
+    if (count($segments) === 1 && $live('pages', $segments[0])) {
+        page('pages', $segments[0], $site); // serves + exits
+    }
+    return false;
+}
+
+/** The active theme's drawer handles — theme.json "drawer": [{label, href}].
+ *  Root-relative only: a theme lives on this site, it points at this site. */
+function themeDrawerHandles(): array
+{
+    $out = [];
+    foreach ((array)(manifest(\Site\load())['drawer'] ?? []) as $handle) {
+        if (!is_array($handle)) {
+            continue;
+        }
+        $label = is_string($handle['label'] ?? null) ? trim((string)$handle['label']) : '';
+        $href = is_string($handle['href'] ?? null) ? trim((string)$handle['href']) : '';
+        if ($label === '' || $href === '' || !str_starts_with($href, '/')) {
+            continue;
+        }
+        $out[] = ['label' => mb_substr($label, 0, 60), 'href' => $href, 'kind' => 'template'];
+        if (count($out) >= 8) {
+            break;
+        }
+    }
+    return $out;
+}
+
 /** The front door: \Site\home slug, else the first published page of "pages". */
 function home(array $site): never
 {
@@ -75,10 +144,18 @@ function page(string $type, string $slug, array $site): never
     }
     header('Content-Type: text/html; charset=utf-8');
     header('Cache-Control: no-cache');
-    // Logged-in editors: the live-page editor renders client-side from the raw .md —
-    // no cache question, no double render. Anonymous visitors: cached HTML straight
+    // Admin mode is URL law (2026-11-07): the editor rides ONLY under /_ — a
+    // visitor there bounces to the public face; an authed user on the plain
+    // URL reads the public face like anyone else (same bytes, same cache law).
+    if (adminMode() && !\Auth\check()) {
+        header('Location: ' . plainPath(), true, 302);
+        exit;
+    }
+    // Logged-in editors in admin mode: the live-page editor renders client-side
+    // from the raw .md — no cache question, no double render. Everyone else
+    // (visitors anywhere, authed users on plain URLs): cached HTML straight
     // out, stale/missing → the client fallback shell. Anon HTML never changes.
-    if (\Auth\check()) {
+    if (\Auth\check() && adminMode()) {
         $html = '<div data-sm-edit-root data-type="' . htmlspecialchars($type, ENT_QUOTES)
             . '" data-slug="' . htmlspecialchars($slug, ENT_QUOTES) . '"></div>'
             . "\n" . '<script type="module" src="/bridge/assets/edit.esm.js"></script>';
