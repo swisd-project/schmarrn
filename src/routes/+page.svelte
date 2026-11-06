@@ -33,10 +33,16 @@
         if (s.authenticated) {
           const wanted = new URLSearchParams(window.location.search).get('tab') ?? '';
           const allowed: readonly Tab[] = s.role === 'admin'
-            ? ['contents', 'settings', 'wares', 'users']
+            ? ['contents', 'settings', 'wares', 'updates', 'users']
             : ['contents'];
           if ((allowed as readonly string[]).includes(wanted)) showTab(wanted as Tab);
           openMenu();
+          // The Updates pill tells the truth from the boot, before any tab is
+          // opened — core status + the Vitrine shelf answer for it.
+          if (s.role === 'admin') {
+            void loadCore();
+            void loadWares();
+          }
         }
       })
       .catch(() => (authenticated = false));
@@ -185,7 +191,7 @@
   }
 
   // ——— the burger overlay: Pages / Site / Accounts / Media / Plugins ———
-  type Tab = 'contents' | 'settings' | 'wares' | 'users';
+  type Tab = 'contents' | 'settings' | 'wares' | 'updates' | 'users';
   let menuOpen = $state(false);
   let tab = $state<Tab>('contents');
 
@@ -220,6 +226,10 @@
       void loadWares();
       void loadCore();
     }
+    if (next === 'updates') {
+      void loadCore();
+      void loadWares(); // the Vitrine shelf carries every installed-vs-registry verdict
+    }
   }
 
   // ——— the drawer (dashboard twin of the editor's door): same rect, items switch tabs in place ———
@@ -227,6 +237,7 @@
     { tab: 'contents', label: 'Contents' },
     { tab: 'settings', label: 'Settings' },
     { tab: 'wares', label: 'Plugins & Templates' },
+    { tab: 'updates', label: 'Updates' },
     { tab: 'users', label: 'Users' }
   ];
   const allowedTabs = $derived(DOOR_TABS.filter((t) => role === 'admin' || t.tab === 'contents'));
@@ -328,18 +339,80 @@
     vitrineError = '';
     vitrineNote = '';
     try {
-      const done = await installWare(ware.name);
-      vitrineNote = `${ware.title} ${done.version}`;
-      if (ware.kind === 'plugin') {
-        plugins = await listPlugins();
-      } else if (ware.kind === 'template') {
-        templates = await listTemplates();
-      }
-      await loadWares(true);
+      vitrineNote = await installOne(ware);
     } catch (e) {
       vitrineError = e instanceof Error ? e.message : String(e);
     } finally {
       vitrineBusy = false;
+    }
+  }
+
+  /** One install-or-update ride + the list refreshes it owes. Returns the note. */
+  async function installOne(ware: WareRef): Promise<string> {
+    const done = await installWare(ware.name);
+    if (ware.kind === 'plugin') {
+      plugins = await listPlugins();
+    } else if (ware.kind === 'template') {
+      templates = await listTemplates();
+    }
+    await loadWares(true); // the shelf re-reads — an updated face stops announcing
+    return `${ware.title} → v${done.version}`;
+  }
+
+  // ——— the Updates tab (admin): what needs updating, and the one-knife button ———
+  let updatesBusy = $state(false);
+  let updatesError = $state('');
+  let updatesNote = $state('');
+
+  /** ONE ware updated from the Updates tab — the same ride, its own notes. */
+  async function updateWareNow(ware: WareRef) {
+    if (updatesBusy) return;
+    updatesBusy = true;
+    updatesError = '';
+    updatesNote = '';
+    try {
+      updatesNote = await installOne(ware);
+    } catch (e) {
+      updatesError = e instanceof Error ? e.message : String(e);
+    } finally {
+      updatesBusy = false;
+    }
+  }
+
+  /**
+   * UPDATE ALL — the house order: the core rides first when GitHub announces a
+   * newer floor, then the templates, then the plugins. Every stop re-reads its
+   * shelf; the first break answers and the rest stay for the next round.
+   */
+  async function updateAllNow() {
+    if (updatesBusy) return;
+    updatesBusy = true;
+    updatesError = '';
+    updatesNote = '';
+    const done: string[] = [];
+    const coreRode = coreUpdateAvailable && core !== null; // captured before the ride flips the verdict
+    try {
+      if (coreUpdateAvailable && core !== null) {
+        const c = await runCoreUpdate('hub');
+        await loadCore();
+        await loadWares(true); // the registry's host floor may have moved
+        done.push(`core ${c.from} → ${c.to}`);
+      }
+      for (const name of templateUpdates.map((w) => w.name)) {
+        const fresh = vitrine.find((w) => w.kind === 'template' && w.name === name && w.state === 'update');
+        if (fresh) done.push(await installOne(fresh));
+      }
+      for (const name of pluginUpdates.map((w) => w.name)) {
+        const fresh = vitrine.find((w) => w.kind === 'plugin' && w.name === name && w.state === 'update');
+        if (fresh) done.push(await installOne(fresh));
+      }
+      updatesNote = (done.length > 0 ? done.join(' · ') : 'Nothing needed the knife.') + '.';
+      if (coreRode) updatesNote += ' Reload the page — the dashboard you are wearing predates the core move.';
+    } catch (e) {
+      updatesError = e instanceof Error ? e.message : String(e);
+      if (done.length > 0) updatesNote = `Done before the break: ${done.join(' · ')}.`;
+    } finally {
+      updatesBusy = false;
     }
   }
 
@@ -426,6 +499,12 @@
   let coreBusy = $state(false);
   let coreError = $state('');
   let coreNote = $state('');
+
+  // ——— the updates verdicts (below the state they read) ———
+  const templateUpdates = $derived(vitrine.filter((w) => w.kind === 'template' && w.state === 'update' && w.missing.length === 0));
+  const pluginUpdates = $derived(vitrine.filter((w) => w.kind === 'plugin' && w.state === 'update' && w.missing.length === 0));
+  const coreUpdateAvailable = $derived(core !== null && core.latest !== null && core.latest !== core.current);
+  const updatesAvailable = $derived(coreUpdateAvailable || templateUpdates.length > 0 || pluginUpdates.length > 0);
 
   async function loadCore() {
     if (coreBusy) return;
@@ -847,7 +926,12 @@
       <span class="sm-admin-tri"></span>
       <div class="sm-admin-menu" role="menu">
         {#each allowedTabs as t (t.tab)}
-          <button type="button" role="menuitem" onclick={(e) => { e.stopPropagation(); showTab(t.tab); drawerOpen = false; }}>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={t.tab === 'updates' && !updatesAvailable}
+            onclick={(e) => { e.stopPropagation(); if (t.tab === 'updates' && !updatesAvailable) return; showTab(t.tab); drawerOpen = false; }}
+          >
             {t.label}
           </button>
         {/each}
@@ -894,6 +978,16 @@
       {#if role === 'admin'}
         <button class="btn {tab === 'settings' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('settings')}>Settings</button>
         <button class="btn {tab === 'wares' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('wares')}>Plugins & Templates</button>
+        <!-- the Updates door: silent (unavailable) until a newer core/template/plugin
+             exists, then it speaks — the button itself carries the verdict -->
+        <button
+          class="btn {tab === 'updates' || updatesAvailable ? 'btn-primary' : 'btn-secondary'}"
+          disabled={!updatesAvailable && tab !== 'updates'}
+          onclick={() => showTab('updates')}
+          title={updatesAvailable ? 'Updates are waiting' : 'Everything is current'}
+        >
+          {updatesAvailable ? 'Update available' : 'Up to date'}
+        </button>
         <button class="btn {tab === 'users' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('users')}>Users</button>
       {/if}
       <button class="btn btn-secondary ml-auto" onclick={signOut} title="End the session">Log out</button>
@@ -1130,15 +1224,19 @@
                           : 'not installed on this host'}
                     </p>
                   </div>
-                  {#if ware.state !== 'installed'}
-                    <button
-                      class="btn {ware.state === 'update' ? 'btn-secondary' : 'btn-primary'}"
-                      disabled={vitrineBusy || ware.missing.length > 0}
-                      onclick={() => installWareByName(ware)}
-                    >
-                      {#if vitrineBusy}…{:else if ware.state === 'update'}Update{:else}Install{/if}
-                    </button>
-                  {/if}
+                  <div>
+                    {#if ware.state === 'installable'}
+                      <button
+                        class="btn btn-primary"
+                        disabled={vitrineBusy || ware.missing.length > 0}
+                        onclick={() => installWareByName(ware)}
+                      >
+                        {#if vitrineBusy}…{:else}Install{/if}
+                      </button>
+                    {:else if ware.state === 'update'}
+                      <span class="text-xs text-ink-soft self-center">update waiting — see Updates</span>
+                    {/if}
+                  </div>
                 </li>
               {/each}
             </ul>
@@ -1167,19 +1265,10 @@
                       <p class="m-0 text-xs text-ink-soft">styles: {template.styles.join(', ')}</p>
                     {/if}
                     {#if ware && ware.state === 'update'}
-                      <p class="m-0 text-xs text-ink-soft">installed: v{ware.installedVersion} — update available</p>
+                      <p class="m-0 text-xs text-ink-soft">installed: v{ware.installedVersion} — update waiting in Updates</p>
                     {/if}
                   </div>
                   <div class="flex shrink-0 items-start gap-2">
-                    {#if ware && ware.state === 'update'}
-                      <button
-                        class="btn btn-secondary"
-                        disabled={templatesBusy || vitrineBusy}
-                        onclick={() => installWareByName(ware)}
-                      >
-                        {#if templatesBusy || vitrineBusy}…{:else}Update{/if}
-                      </button>
-                    {/if}
                     {#if template.active}
                       <span class="text-xs text-ink-soft self-center text-right">live — activate another before deleting</span>
                     {:else}
@@ -1226,15 +1315,19 @@
                         <p class="m-0 text-xs text-ink-soft">requires: {ware.requires.join(', ')} (all on this host ✓)</p>
                       {/if}
                     </div>
-                    {#if ware.state !== 'installed'}
-                      <button
-                        class="btn {ware.state === 'update' ? 'btn-secondary' : 'btn-primary'}"
-                        disabled={vitrineBusy || ware.missing.length > 0}
-                        onclick={() => installWareByName(ware)}
-                      >
-                        {#if vitrineBusy}…{:else if ware.state === 'update'}Update{:else}Install{/if}
-                      </button>
-                    {/if}
+                    <div>
+                      {#if ware.state === 'installable'}
+                        <button
+                          class="btn btn-primary"
+                          disabled={vitrineBusy || ware.missing.length > 0}
+                          onclick={() => installWareByName(ware)}
+                        >
+                          {#if vitrineBusy}…{:else}Install{/if}
+                        </button>
+                      {:else if ware.state === 'update'}
+                        <span class="text-xs text-ink-soft self-center">update waiting — see Updates</span>
+                      {/if}
+                    </div>
                   </li>
                 {/each}
               </ul>
@@ -1242,58 +1335,79 @@
           {/if}
         </section>
         <section class="mg flex flex-col gap-2">
-          <h4 class="mg-h">The Core</h4>
-          {#if coreBusy && core === null}
-            <p class="italic text-ink-soft">Asking the version shelf…</p>
-          {:else if coreError && core === null}
-            <p class="alert alert-err" role="alert">{coreError}</p>
-          {:else if core !== null}
+          <h4 class="mg-h">Updates</h4>
+          {#if vitrineDark}
+            <p class="alert alert-warn">{vitrineDark}</p>
+          {/if}
+          {#if updatesAvailable}
+            <div class="flex items-center justify-between gap-3">
+              <p class="m-0 text-sm text-ink-soft">
+                {#if coreUpdateAvailable}Core{/if}{#if coreUpdateAvailable && (templateUpdates.length > 0 || pluginUpdates.length > 0)} · {/if}{#if templateUpdates.length > 0}{templateUpdates.length} template{templateUpdates.length === 1 ? '' : 's'}{/if}{#if templateUpdates.length > 0 && pluginUpdates.length > 0} · {/if}{#if pluginUpdates.length > 0}{pluginUpdates.length} plugin{pluginUpdates.length === 1 ? '' : 's'}{/if}
+                are waiting — the house order is core, then templates, then plugins.
+              </p>
+              <button class="btn btn-primary shrink-0" disabled={updatesBusy} onclick={() => updateAllNow()}>
+                {#if updatesBusy}Under the knives…{:else}Update all{/if}
+              </button>
+            </div>
+          {/if}
+          {#if core !== null && (coreUpdateAvailable || core.localVersion)}
             <div class="card flex items-start justify-between gap-3">
               <div class="min-w-0">
-                <p class="m-0 font-bold">Schmarrn v{core.current}</p>
-                {#if core.latest}
-                  <p class="m-0 text-xs text-ink-soft">
-                    {#if core.latest === core.current}GitHub's newest version: {core.latest}{:else}GitHub announces {core.latest}{/if}
-                  </p>
-                {:else if core.error}
-                  <p class="m-0 text-xs text-ink-soft">{core.error}</p>
-                {/if}
+                <p class="m-0 font-bold">
+                  Schmarrn core <span class="text-xs text-ink-soft">
+                    {#if coreUpdateAvailable}v{core.current} → v{core.latest}{:else if core.localVersion}v{core.current} — packet v{core.localVersion} parked{:else}v{core.current}{/if}
+                  </span>
+                </p>
+                <p class="m-0 text-xs text-ink-soft">Core files only — plugins, templates, dressed pagetypes and your settings never move. Visitors see a blank page while the knife is out.</p>
               </div>
-              {#if core.latest && core.latest !== core.current}
-                <button
-                  class="btn btn-primary"
-                  disabled={coreBusy}
-                  onclick={() => updateCoreNow('hub')}
-                  title="Updates core files only — plugins, templates and your settings stay untouched"
-                >
-                  {#if coreBusy}Under the knife…{:else}Update → {core.latest}{/if}
+              {#if coreUpdateAvailable}
+                <button class="btn btn-secondary shrink-0" disabled={updatesBusy || coreBusy} onclick={() => updateCoreNow('hub')}>
+                  {#if updatesBusy || coreBusy}…{:else}Core update → {core.latest}{/if}
                 </button>
               {/if}
               {#if core.localVersion}
-                <button
-                  class="btn btn-secondary"
-                  disabled={coreBusy}
-                  onclick={() => updateCoreNow('local')}
-                  title="Rides the parked packet — works without the GitHub hub; same version allowed (repair)"
-                >
-                  {#if coreBusy}…{:else}Update locally → v{core.localVersion}{/if}
+                <button class="btn btn-secondary shrink-0" disabled={updatesBusy || coreBusy} onclick={() => updateCoreNow('local')}>
+                  {#if updatesBusy || coreBusy}…{:else}Locally → v{core.localVersion}{/if}
                 </button>
               {/if}
             </div>
-            <p class="m-0 text-xs text-ink-soft">
-              Core files only — plugins, templates, pagetypes you dressed, and your settings never move.
-              While the knife is out, visitors get a blank page until the swap lands.
-            </p>
-            <label class="btn btn-secondary self-start cursor-pointer">
-              <input class="hidden" type="file" accept=".zip" onchange={parkCorePacketNow} disabled={coreBusy} />
-              {#if coreBusy}Parking…{:else}Park a local update packet (.zip){/if}
-            </label>
-            <p class="m-0 text-xs text-ink-soft">
-              No hub answering? Download the release zip on any machine, park it here, and ride the knife from the shelf — an equal version counts as a repair.
-            </p>
           {/if}
-          {#if coreError && core !== null}<p class="alert alert-err" role="alert">{coreError}</p>{/if}
+          {#each templateUpdates as ware (ware.name)}
+            <div class="card flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="m-0 font-bold">{ware.title} <span class="text-xs text-ink-soft">v{ware.installedVersion} → v{ware.version}</span></p>
+                <p class="m-0 text-xs text-ink-soft">template</p>
+              </div>
+              <button class="btn btn-secondary shrink-0" disabled={updatesBusy} onclick={() => updateWareNow(ware)}>
+                {#if updatesBusy}…{:else}Update{/if}
+              </button>
+            </div>
+          {/each}
+          {#each pluginUpdates as ware (ware.name)}
+            <div class="card flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="m-0 font-bold">{ware.title} <span class="text-xs text-ink-soft">v{ware.installedVersion} → v{ware.version}</span></p>
+                <p class="m-0 text-xs text-ink-soft">plugin</p>
+              </div>
+              <button class="btn btn-secondary shrink-0" disabled={updatesBusy} onclick={() => updateWareNow(ware)}>
+                {#if updatesBusy}…{:else}Update{/if}
+              </button>
+            </div>
+          {/each}
+          {#if !updatesAvailable && core !== null && !core.localVersion}
+            <p class="m-0 italic text-ink-soft">Nothing to update — every shelf is current.</p>
+          {/if}
+          <label class="btn btn-secondary self-start cursor-pointer">
+            <input class="hidden" type="file" accept=".zip" onchange={parkCorePacketNow} disabled={coreBusy || updatesBusy} />
+            {#if coreBusy}Parking…{:else}Park a local update packet (.zip){/if}
+          </label>
+          <p class="m-0 text-xs text-ink-soft">
+            No hub answering? Download the release zip on any machine, park it here, and ride the knife from the shelf — an equal version counts as a repair.
+          </p>
+          {#if coreError}<p class="alert alert-err" role="alert">{coreError}</p>{/if}
           {#if coreNote}<p class="alert alert-ok">{coreNote}</p>{/if}
+          {#if updatesError}<p class="alert alert-err" role="alert">{updatesError}</p>{/if}
+          {#if updatesNote}<p class="alert alert-ok">{updatesNote}</p>{/if}
         </section>
       {/if}
     </div>
