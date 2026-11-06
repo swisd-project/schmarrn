@@ -26,6 +26,13 @@ if (!in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)) {
 }
 
 require_once __DIR__ . '/router.php';
+
+/** The optional media sub-folder — a dedicated editor's home, always validated. */
+function mediaFolderParam(): string
+{
+    $folder = is_string($_GET['folder'] ?? null) ? $_GET['folder'] : '';
+    return preg_match('/^[a-z0-9][a-z0-9-]*$/', $folder) === 1 ? $folder : '';
+}
 require_once __DIR__ . '/auth.php';      // pulls accounts.php + router.php itself now
 require_once __DIR__ . '/accounts.php';
 require_once __DIR__ . '/mail.php';
@@ -34,6 +41,7 @@ require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/cache.php';
 require_once __DIR__ . '/site.php';
 require_once __DIR__ . '/plugins.php';
+require_once __DIR__ . '/wares.php';
 require_once __DIR__ . '/serve.php'; // public JSON API reuses the serving engine's byte-peeks
 
 /**
@@ -352,6 +360,30 @@ try {
             readfile($assetPath);
             exit;
 
+        // ——— the Vitrine (public wares showcase): admin's fetch + install lid ———
+        case $method === 'GET' && $path === 'wares':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
+            }
+            echo json_encode(Wares\status(), JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'POST' && $path === 'wares/install':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $name = is_string($body['name'] ?? null) ? $body['name'] : '';
+            echo json_encode(Wares\install($name), JSON_UNESCAPED_SLASHES);
+            break;
+
         // ——— plugins (p6): the admin's install lid ———
         case $method === 'GET' && $path === 'plugins':
             if (!Auth\check()) {
@@ -360,7 +392,10 @@ try {
             if (!Auth\isAdmin()) {
                 Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
             }
-            echo json_encode(Plugins\all(), JSON_UNESCAPED_SLASHES);
+            echo json_encode(array_map(
+                fn($p) => isset($p['error']) ? $p : [...$p, 'requires' => \Wares\requirements((string)$p['name'])],
+                Plugins\all()
+            ), JSON_UNESCAPED_SLASHES);
             break;
 
         case $method === 'PUT' && $path === 'plugins':
@@ -378,9 +413,27 @@ try {
             }
             // Only INSTALLED plugins may be toggled — the lid holds.
             $installed = array_filter(Plugins\all(), fn($p) => !isset($p['error']));
+            $installedBy = [];
             $clean = [];
             foreach ($installed as $p) {
+                $installedBy[$p['name']] = $p;
                 $clean[$p['name']] = $wanted[$p['name']] === true;
+            }
+            // The enable law (requirements): a plugin may not stand enabled on a
+            // dep that is not enabled too — its filters would never run. The
+            // refusal names the failing dep, user-facing, at the switch.
+            foreach ($clean as $name => $on) {
+                if (!$on) {
+                    continue;
+                }
+                $pending = array_values(array_filter(
+                    \Wares\requirements((string)$name),
+                    fn($dep) => ($clean[$dep] ?? false) !== true
+                ));
+                if ($pending !== []) {
+                    Router\refuse(409, "'" . ($installedBy[$name]['title'] ?? $name) . "' waits for "
+                        . implode(', ', $pending) . " to be enabled first — a plugin does not run on a sleeping dependency.");
+                }
             }
             Plugins\setState($clean);
             echo json_encode(['ok' => true]);
@@ -446,6 +499,25 @@ try {
             && preg_match('#^plugin/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             [, $pluginName, $pluginRoute] = explode('/', $path);
             Plugins\dispatch((string)$pluginName, (string)$pluginRoute, $method);
+            break;
+
+        // ——— editor blocks (p6): the canvas insertables of every ENABLED plugin ———
+        case $method === 'GET' && $path === 'editor-blocks':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            $defs = [];
+            foreach (Plugins\all() as $plugin) {
+                if (isset($plugin['error']) || $plugin['enabled'] !== true) {
+                    continue;
+                }
+                foreach ($plugin['editorBlocks'] as $blockDef) {
+                    $defs[] = is_array($blockDef)
+                        ? $blockDef
+                        : ['name' => $blockDef, 'label' => $plugin['title'], 'template' => ''];
+                }
+            }
+            echo json_encode($defs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
             break;
 
         // ——— account management: admin-only, CSRF-gated ———
@@ -585,21 +657,26 @@ try {
                 Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             $allMedia = [];
+            $folders = ['', 'stop-motion']; // the page tray + the dedicated stop-motion folder
             foreach (Store\listAll() as $type => $pages) {
                 foreach ($pages as $page) {
                     $slug = (string)$page['slug'];
-                    try {
-                        foreach (Store\mediaList($type, $slug) as $file) {
-                            $allMedia[] = [
-                                'type' => $type,
-                                'slug' => $slug,
-                                'name' => $file['name'],
-                                'size' => $file['size'],
-                                'url' => "/bridge/media/{$type}/{$slug}/" . rawurlencode((string)$file['name']),
-                            ];
+                    foreach ($folders as $folder) {
+                        try {
+                            foreach (Store\mediaList($type, $slug, $folder) as $file) {
+                                $allMedia[] = [
+                                    'type' => $type,
+                                    'slug' => $slug,
+                                    'folder' => $folder,
+                                    'name' => $file['name'],
+                                    'size' => $file['size'],
+                                    'url' => "/bridge/media/{$type}/{$slug}"
+                                        . ($folder !== '' ? '/' . $folder : '') . '/' . rawurlencode((string)$file['name']),
+                                ];
+                            }
+                        } catch (\Throwable) {
+                            continue; // a vanished page never breaks the sweep
                         }
-                    } catch (\Throwable) {
-                        continue; // a vanished page never breaks the sweep
                     }
                 }
             }
@@ -611,7 +688,7 @@ try {
                 Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             [, $type, $slug] = explode('/', $path);
-            echo json_encode(Store\mediaList($type, $slug), JSON_UNESCAPED_SLASHES);
+            echo json_encode(Store\mediaList($type, $slug, mediaFolderParam()), JSON_UNESCAPED_SLASHES);
             break;
         case $method === 'POST' && preg_match('#^media/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             if (!Auth\check()) {
@@ -624,13 +701,30 @@ try {
                 || !is_string($upload['tmp_name']) || !is_string($upload['name'])) {
                 Router\refuse(400, 'You promised pastry and brought an empty plate — no file in the upload.');
             }
-            $stored = Store\mediaStore($type, $slug, $upload['name'], $upload['tmp_name']);
+            $stored = Store\mediaStore($type, $slug, $upload['name'], $upload['tmp_name'], mediaFolderParam());
             http_response_code(201);
             echo json_encode($stored, JSON_UNESCAPED_SLASHES);
             break;
-        case $method === 'GET' && preg_match('#^media/[a-z0-9-]+/[a-z0-9-]+/[A-Za-z0-9._-]+$#', $path) === 1:
+        // DELETE — a named media file leaves its tin (page dir or sub-folder).
+        // Immutability guards overwrites, not existence; the hand is CSRF-gated.
+        case $method === 'DELETE' && preg_match('#^media/[a-z0-9-]+/[a-z0-9-]+/[A-Za-z0-9._-]+$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            Auth\assertCsrf();
             [, $type, $slug, $name] = explode('/', $path);
-            $path = Store\mediaPath($type, $slug, (string)$name);
+            Store\mediaDelete($type, $slug, (string)$name, mediaFolderParam());
+            echo json_encode(['ok' => true]);
+            break;
+        case $method === 'GET' && preg_match('#^media/[a-z0-9-]+/[a-z0-9-]+(?:/[a-z0-9-]+)?/[A-Za-z0-9._-]+$#', $path) === 1:
+            $parts = explode('/', $path);
+            if (count($parts) === 4) {
+                [, $type, $slug, $name] = $parts;
+                $mediaFolder = '';
+            } else {
+                [, $type, $slug, $mediaFolder, $name] = $parts;
+            }
+            $path = Store\mediaPath($type, $slug, (string)$name, $mediaFolder);
             if ($path === null) {
                 Router\refuse(404, 'That media crumb is not in the tin.');
             }

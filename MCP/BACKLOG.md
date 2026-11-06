@@ -16,7 +16,7 @@ See GOSPEL.md — the law lives there. Locked here on 2026-10-28:
 - v1 page model: full-screen slide page as the standard; alternative classical style with menu + subpages.
 - Editor: single-canvas wysiwyg on the live page (Markdown truth + preset module tags; edit via save-confirm modals; no two-column, no in-page menu editing — management lives in the `/_` overlay).
 - Multi-editor: named accounts, roles admin/editor, file-backed store on plain FTP; SMTP mail (vendored lib) for invites/resets; edit-lock per page. Exactly ONE account (admin) until further user order.
-- Media: uploads via modal (no drag-drop), immutable assets; media browser = lazy-loaded in the Contents tab.
+- Media: uploads via modal (no drag-drop), immutable assets (immutable against OVERWRITE — names never reused; deletion is a named, CSRF-gated action, 2026-11-05 user-ordered for the stop-motion frame tray; page-local sub-folders via validated `?folder=` param), media browser = lazy-loaded in the Contents tab.
 - UI: no sidebar — the overlay with tab bar **Contents | Settings | Plugins & Templates | Users** (+ Log out last); ONE admin surface, the editor is canvas-only with the drawer door at the right edge (simple white rect, slides in/out, no choreography).
 - Serving: clean URLs, editor-browser renders HTML at save, PHP caches (per-page hash + mtime sentinel), read-only public JSON API, SEO/link previews.
 - Wares: plugins + templates are the Vitrine contract (`swisd-project/vitrine`); plugins carry placeholders, routes AND contentFilters (serve-time, fail open); the drunken-monk envelope (` ```drunken-monk ` fence + base64url JSON {kind: style|script|html}) is the machine-generated payload pattern.
@@ -52,8 +52,8 @@ v1 — todos
 [ ] Origin-absolute media URLs option — decide save-time baked vs serve-time rewrite when building.
 
 ## p6 plugins
-[~] Capability contract: slices 1 + 2 shipped (placeholders, routes, contentFilters, drunken-monk as the proof); REMAINING: editor-blocks wiring (manifest-declared blocks on the canvas).
-[~] Vitrine wares install GUI — DONT IMPLEMENT YET (user capture order): local FTP scan vs the public vitrine repo; decide install mechanics + manifest-version gates at build.
+[~] Capability contract: slices 1 + 2 shipped (placeholders, routes, contentFilters, drunken-monk as the proof); slice 3 = Vitrine fetch + install (2026-11-05); slice 4 = editorBlocks WIRED 2026-11-05 — manifests may declare {name,label,template} (namespaced, underscored prefix law), GET /bridge/editor-blocks serves enabled plugins' defs, the canvas Add menu gains the "Plugins:" row, insert pre-fills the text modal with the template (stop-motion 0.1.1 carries its own fence template).
+[x] Vitrine wares install — SHIPPED 2026-11-05 (user ordered the build): `bridge/wares.php` + `GET /bridge/wares`, `POST /bridge/wares/install`; dashboard "From the Vitrine" blocks on both wares tabs; base version ships monk/stop-motion uninstalled (monk kept in the Vitrine repo, hello remains the local demo).
 
 ## p7+ later phases
 [ ] p7 media & packaging: gd derivatives + zip packaging/installer.
@@ -69,6 +69,11 @@ User-to-verify / housekeeping
 [user-to-apply] Vitrine pushes need the `github-vitrine` ssh alias (per-repo deploy key; schmarrn's key is collar-bound to its own repo).
 
 ## THE drawer bug 2026-11-04 (user, thousandth telling: "how hard is it to create a simple drawer?")
+
+> ### 2026-11-05 second body, same drawer: the orphaned canvas click wiring
+> Discovered live: the visual editor rendered but never answered clicks. The drawer's Nov 4 rework declared `const root` INSIDE `mountChrome()` — shadowing the canvas root — so the block-click handler (`data-sm-block` → select + float menu, Oct 28) silently bound to THE DRAWER instead of the canvas. Playwright repro: zero selection/floats after a block click. FIX: the drawer's local is `door`, the canvas keeps `root`; block wiring lives again. Rebuilt `bridge/assets/edit.esm.js` and verified click → float menu in the browser.
+>
+> Plus, same session: (a) editor modals STACKED on reopen and the hidden layer ate clicks — the "crash" the user saw with ~10 frames; openModal now replaces (one modal at a time) and Escape dismisses the open layer. (b) The php -S asset serve path sent NO Cache-Control → browsers heuristic-cached `edit.esm.js` for hours → "I see a textfield with the settings" = a STALE editor bundle. Cache law mirrored from .htaccess: dashboard `_app/immutable` = 1y immutable, everything else no-cache/must-revalidate; theme assets 3600 (contract).
 
 THE REAL PARASITE, finally with a body: the width measurement ran BEFORE document.body.append(root) and BEFORE the triangle append — a DETACHED element measures offsetWidth = 0, computed padding = NaN, tri = null → closedW/openW garbage → every style.width write was "0px"/"NaNpx" → INVALID → ignored → width stayed auto → the drawer rendered permanently WIDE and could never collapse. Not a design fight — a mounting-order bug wearing a design argument as a costume. FIX: measure only after mount + full population (append root → getComputedStyle → tri rect → auto → openW → closedW). Bundle rebuilt; front page battery green.
 

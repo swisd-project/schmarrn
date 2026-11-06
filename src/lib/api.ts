@@ -214,6 +214,7 @@ export interface PluginRef {
   readonly editorBlocks: readonly string[];
   readonly enabled: boolean;
   readonly error?: string;
+  readonly requires?: readonly string[];
 }
 
 export function listPlugins(): Promise<readonly PluginRef[]> {
@@ -227,6 +228,43 @@ export function setPlugins(enabled: Readonly<Record<string, boolean>>): Promise<
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
     body: JSON.stringify({ enabled })
   }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
+}
+
+// ——— the Vitrine (public wares showcase: fetch + install, admin) ———
+
+export interface WareRef {
+  readonly kind: 'plugin' | 'template';
+  readonly name: string;
+  readonly title: string;
+  readonly version: string;
+  readonly description: string;
+  readonly requiresSchmarrn: string;
+  readonly path: string;
+  readonly requires: readonly string[];
+  readonly state: 'installable' | 'installed' | 'update';
+  readonly installedVersion?: string | null;
+  readonly missing: readonly string[];
+}
+
+export interface VitrineShelf {
+  readonly wares: readonly WareRef[];
+  readonly host?: string;
+  readonly error?: string;
+}
+
+/** The merged shelf: registry wares + local install state. Registry dark → error carries the note. */
+export function listWares(): Promise<VitrineShelf> {
+  return fetch('/bridge/wares').then((r) => json<VitrineShelf>(r));
+}
+
+export function installWare(
+  name: string
+): Promise<{ ok: boolean; name: string; kind: string; version: string }> {
+  return fetch('/bridge/wares/install', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({ name })
+  }).then((r) => json<{ ok: boolean; name: string; kind: string; version: string }>(r));
 }
 
 // ——— templates (theme-contract wares, admin inventory) ———

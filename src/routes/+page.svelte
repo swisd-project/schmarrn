@@ -1,7 +1,7 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
   // a burger opens the full-screen overlay (Contents / Settings / Plugins & Templates / Users).
-  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, listTemplates, listPagetypes, getDraftRaw, putDraftRaw, publishDraft, type PluginRef, type TemplateRef, type PagetypeRef } from '$lib/api';
+  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, listTemplates, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef } from '$lib/api';
   import { closeTarget } from '$lib/back';
   import { schemaFor, withDraftFlag } from '$lib/schema';
   import { splitFrontmatter } from '$lib/blocks';
@@ -217,6 +217,7 @@
     if (next === 'wares') {
       void loadPlugins();
       void loadTemplates();
+      void loadWares();
     }
   }
 
@@ -278,6 +279,15 @@
       const fresh = await listPlugins();
       const enabled: Record<string, boolean> = {};
       for (const p of fresh) enabled[p.name] = p.name === plugin.name ? !p.enabled : p.enabled;
+      // The enable law, stated client-side before the server ever answers:
+      // enabling a plugin while its dependency sleeps is refused with the diff.
+      if (enabled[plugin.name] === true && (plugin.requires ?? []).length > 0) {
+        const sleeping = (plugin.requires ?? []).filter((dep) => !fresh.some((p) => p.name === dep && p.enabled));
+        if (sleeping.length > 0) {
+          pluginsError = `${plugin.title} waits for ${sleeping.join(', ')} to be enabled first — a plugin does not run on a sleeping dependency.`;
+          return;
+        }
+      }
       await setPlugins(enabled);
       plugins = await listPlugins();
       pluginsNote = `${plugin.title} ${plugins.find((p) => p.name === plugin.name)?.enabled ? 'enabled' : 'disabled'}.`;
@@ -285,6 +295,50 @@
       pluginsError = e instanceof Error ? e.message : String(e);
     } finally {
       pluginsBusy = false;
+    }
+  }
+
+  // ——— the Vitrine (public showcase wares, admin, lazy) ———
+  let vitrine = $state<readonly WareRef[]>([]);
+  let vitrineBusy = $state(false);
+  let vitrineError = $state('');
+  let vitrineNote = $state('');
+  let vitrineDark = $state(''); // the registry's own unreachable note, empty when the shelf is lit
+
+  async function loadWares(force = false) {
+    if (vitrineBusy && !force) return;
+    vitrineBusy = true;
+    vitrineError = '';
+    vitrineNote = '';
+    try {
+      const shelf = await listWares();
+      vitrine = shelf.wares;
+      vitrineDark = shelf.error ?? '';
+    } catch (e) {
+      vitrineError = e instanceof Error ? e.message : String(e);
+    } finally {
+      vitrineBusy = false;
+    }
+  }
+
+  async function installWareByName(ware: WareRef) {
+    if (vitrineBusy) return;
+    vitrineBusy = true;
+    vitrineError = '';
+    vitrineNote = '';
+    try {
+      const done = await installWare(ware.name);
+      vitrineNote = `${ware.title} ${done.version}`;
+      if (ware.kind === 'plugin') {
+        plugins = await listPlugins();
+      } else if (ware.kind === 'template') {
+        templates = await listTemplates();
+      }
+      await loadWares(true);
+    } catch (e) {
+      vitrineError = e instanceof Error ? e.message : String(e);
+    } finally {
+      vitrineBusy = false;
     }
   }
 
@@ -922,6 +976,13 @@
                       {#if plugin.error}<span class="badge">broken</span>{/if}
                     </p>
                     {#if plugin.description}<p class="m-0 text-sm text-ink-soft">{plugin.description}</p>{/if}
+                    {#if !plugin.enabled && (plugin.requires ?? []).length > 0}
+                      {@const sleeping = (plugin.requires ?? []).filter((r) => !plugins.some((p) => p.name === r && p.enabled))}
+                      <p class="m-0 text-xs {sleeping.length > 0 ? 'text-error' : 'text-ink-soft'}">
+                        requires: {(plugin.requires ?? []).join(', ')}
+                        {sleeping.length > 0 ? `— sleeping: ${sleeping.join(', ')}` : '(all enabled ✓)'}
+                      </p>
+                    {/if}
                     {#if plugin.error}
                       <p class="m-0 text-sm text-ink-soft">{plugin.error}</p>
                     {:else}
@@ -948,6 +1009,53 @@
           {#if pluginsNote}<p class="alert alert-ok">{pluginsNote}</p>{/if}
         </section>
         <section class="mg flex flex-col gap-2">
+          <h4 class="mg-h">From the Vitrine</h4>
+          {#if vitrineDark}
+            <p class="alert alert-warn">{vitrineDark}</p>
+          {:else if vitrineBusy && vitrine.length === 0}
+            <p class="italic text-ink-soft">Reading the window display…</p>
+          {:else}
+            <ul class="list-none p-0 m-0 flex flex-col gap-2">
+              {#each vitrine.filter((w) => w.kind === 'plugin') as ware (ware.name)}
+                <li class="card flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="m-0 font-bold">
+                      {ware.title} <span class="text-xs text-ink-soft">v{ware.version}</span>
+                      {#if ware.state === 'update'}<span class="badge">update</span>{/if}
+                    </p>
+                    {#if ware.description}<p class="m-0 text-sm text-ink-soft">{ware.description}</p>{/if}
+                    {#if ware.missing.length > 0}
+                      <p class="m-0 text-xs text-error">
+                        requires {ware.requires.join(', ')} — missing: {ware.missing.join(', ')}. The dependency must be installed first.
+                      </p>
+                    {:else if ware.requires.length > 0 && ware.state !== 'installed'}
+                      <p class="m-0 text-xs text-ink-soft">requires: {ware.requires.join(', ')} (all on this host ✓)</p>
+                    {/if}
+                    <p class="m-0 text-xs text-ink-soft">
+                      {ware.state === 'installed'
+                        ? 'up to date on this host'
+                        : ware.state === 'update'
+                          ? `installed: v${ware.installedVersion} — update available`
+                          : 'not installed on this host'}
+                    </p>
+                  </div>
+                  {#if ware.state !== 'installed'}
+                    <button
+                      class="btn {ware.state === 'update' ? 'btn-secondary' : 'btn-primary'}"
+                      disabled={vitrineBusy || ware.missing.length > 0}
+                      onclick={() => installWareByName(ware)}
+                    >
+                      {#if vitrineBusy}…{:else if ware.state === 'update'}Update{:else}Install{/if}
+                    </button>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          {#if vitrineError && role === 'admin'}<p class="alert alert-err" role="alert">{vitrineError}</p>{/if}
+          {#if vitrineNote}<p class="alert alert-ok">{vitrineNote}</p>{/if}
+        </section>
+        <section class="mg flex flex-col gap-2">
           <h4 class="mg-h">Templates</h4>
           {#if templatesBusy && templates.length === 0}
             <p class="italic text-ink-soft">Reading the bake-shop wall…</p>
@@ -968,7 +1076,42 @@
                 </li>
               {/each}
             </ul>
-            <p class="m-0 text-xs text-ink-soft">Install and uninstall come from the Vitrine shelf — planned, not built yet.</p>
+            <h4 class="mg-h mg-sub">From the Vitrine</h4>
+            {#if vitrineDark}
+              <p class="alert alert-warn">{vitrineDark}</p>
+            {:else if vitrineBusy && vitrine.length === 0}
+              <p class="italic text-ink-soft">Reading the window display…</p>
+            {:else}
+              <ul class="list-none p-0 m-0 flex flex-col gap-2">
+                {#each vitrine.filter((w) => w.kind === 'template') as ware (ware.name)}
+                  <li class="card flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <p class="m-0 font-bold">
+                        {ware.title} <span class="text-xs text-ink-soft">v{ware.version}</span>
+                        {#if ware.state === 'update'}<span class="badge">update</span>{/if}
+                      </p>
+                      {#if ware.description}<p class="m-0 text-sm text-ink-soft">{ware.description}</p>{/if}
+                      {#if ware.missing.length > 0}
+                        <p class="m-0 text-xs text-error">
+                          requires {ware.requires.join(', ')} — missing: {ware.missing.join(', ')}. The dependency must be installed first.
+                        </p>
+                      {:else if ware.requires.length > 0 && ware.state !== 'installed'}
+                        <p class="m-0 text-xs text-ink-soft">requires: {ware.requires.join(', ')} (all on this host ✓)</p>
+                      {/if}
+                    </div>
+                    {#if ware.state !== 'installed'}
+                      <button
+                        class="btn {ware.state === 'update' ? 'btn-secondary' : 'btn-primary'}"
+                        disabled={vitrineBusy || ware.missing.length > 0}
+                        onclick={() => installWareByName(ware)}
+                      >
+                        {#if vitrineBusy}…{:else if ware.state === 'update'}Update{:else}Install{/if}
+                      </button>
+                    {/if}
+                  </li>
+                {/each}
+              </ul>
+            {/if}
           {/if}
         </section>
       {/if}

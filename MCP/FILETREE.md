@@ -31,6 +31,7 @@
 │   ├── index.php                 # JSON routes: login/session, pages, drafts, publish(+html), pagetypes, templates (admin theme inventory), public API, media, plugins
 │   ├── serve.php                 # public serving engine: dispatch, templates, cached HTML, fallback shell, SEO head, plugin fills, editor injection (data-sm-edit-root + edit.esm.js; nav ghost RETIRED 2026-11-04 — navHtml is plain core nav, same bytes for editors and visitors); styleOf: page frontmatter → GLOBAL site style → theme default
 │   ├── site.php                  # brand settings load/save (template < site.local.php) + site assets (.assets/); `style` = GLOBAL template ('' | classical | slide, whitelist-validated)
+│   ├── wares.php                 # Vitrine fetch + install (p6 slice 3): registry GET (TTL cache) + codeload packet zip → extract ONLY <path>/ (ZipArchive | PharData), manifest gate, version gate, disable-first upgrade w/ rollback; GET /bridge/wares + POST /bridge/wares/install (admin+CSRF); URLs override in config/wares.local.php (ignored)
 │   ├── plugins.php               # p6 capability contract: scan/validate/load/dispatch, state in config/plugins.local.php
 │   ├── router.php
 │   ├── auth.php                  # Argon2id password, session, 24h
@@ -54,9 +55,7 @@
 │   │   ├── hello/                # demo plugin (copy-me template): placeholder + public/user routes
 │   │   │   ├── plugin.json
 │   │   │   └── plugin.php
-│   │   └── drunken-monk/         # first real plugin: machine-generated payloads in md (```drunken-monk fence, monk banner + base64url envelope) — serve-time filter decodes → style|script|html, provenance comment replaces the fence; fails open to the visible notice; admin routes encode/decode mint payloads
-│   │       ├── plugin.json
-│   │       └── plugin.php
+│   │   └── (*.local installs)    # monk + stop-motion live in the VITRINE repo now (base keeps none); install lands here via the wares slice
 │   ├── assets/
 │   │   ├── render.esm.js         # committed fallback render bundle (client-side mdms)
 │   │   └── edit.esm.js           # committed live-page editor bundle (injected only for logged-in sessions; carries the nav ghost)
