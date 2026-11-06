@@ -51,6 +51,14 @@ if (str_starts_with($path, '/_/')) {
                 : (str_ends_with($sub, '.woff2') ? 'font/woff2'
                 : (mime_content_type($file) ?: 'application/octet-stream')))));
             header('Content-Type: ' . $mime);
+            // Cache law, mirrored from .htaccess: hashed bundles live for a year
+            // (immutable); the shell and unhashed assets revalidate — a rebuilt
+            // editor bundle reaches a reload, not an era.
+            if (str_contains($sub, '/_app/immutable/')) {
+                header('Cache-Control: public, max-age=31536000, immutable');
+            } else {
+                header('Cache-Control: no-cache, must-revalidate');
+            }
             header('X-Content-Type-Options: nosniff');
             readfile($file);
             exit;
@@ -96,6 +104,9 @@ if ($path !== '/') {
                 : (str_ends_with($rel, '.woff2') ? 'font/woff2'
                 : (mime_content_type($file) ?: 'application/octet-stream')))));
             header('Content-Type: ' . $mime);
+            // Theme-contract cache law (3600, revalidate) — PHP streams these in
+            // build/dev mode only; Apache hands the .htaccess rule on prod.
+            header('Cache-Control: max-age=3600, must-revalidate');
             header('X-Content-Type-Options: nosniff');
             readfile($file);
             exit;
