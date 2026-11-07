@@ -40,3 +40,18 @@ export function backTarget(draft: string | null): string | null {
 export function closeTarget(search: string): string {
   return backTarget(new URLSearchParams(search).get(backParam)) ?? '/';
 }
+
+/**
+ * Close target that keeps ADMIN STATE active (2026-11 user fix): closing the
+ * overlay must never strand the editor — it returns to the carried page in
+ * admin mode (visual editor + drawer). A plain carried path is promoted under
+ * /_ so the editor rides; no carried page returns null and the caller lands on
+ * an admin-mode home page. Only Logout leaves admin mode for the public face.
+ */
+export function adminCloseTarget(search: string): string | null {
+  const target = backTarget(new URLSearchParams(search).get(backParam));
+  if (target === null) return null;
+  if (target === '/_' || target.startsWith('/_/')) return target;
+  if (target === '/') return null; // no specific page — let the caller pick a live admin landing
+  return '/_' + target;
+}

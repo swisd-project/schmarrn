@@ -1,7 +1,7 @@
 {
   "name": "schmarrn-dashboard",
   "private": true,
-  "version": "1.2.9",
+  "version": "1.2.9a",
   "type": "module",
   "scripts": {
     "dev": "bash scripts/dev-serve.sh",

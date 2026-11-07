@@ -582,9 +582,12 @@ function install(string $name): array
     }
 
     // ——— the swap: disable-first on upgrades, rollback on a failed rename ———
+    // The Chain Law at the knife: a plugin leaving the shelf (even for an
+    // upgrade) cannot strand dependents as orphan intent — cascade-disable
+    // everything that stands on it, transitively, before the swap.
     $restored = false;
     if ($ware['kind'] === 'plugin' && ($installedVersion !== null || is_dir($target))) {
-        mapWithout($name);
+        mapWithoutCascade($name);
     }
     $backup = $scratch . '/backup-' . bin2hex(random_bytes(3));
     if (is_dir($target) && !@rename($target, $backup)) {
@@ -847,4 +850,44 @@ function mapWithout(string $name): void
         }
     }
     \Plugins\setState($clean);
+}
+
+/** Disable-first, cascaded: a plugin leaving the shelf (upgrade/delete path)
+ *  takes every dependent's intent with it — direct and transitive — so no ware
+ *  stays switched-on for a chain that cannot stand. The manifests answer who
+ *  stands on whom; 64 rounds caps a ring (the chain never promotes a ring). */
+function mapWithoutCascade(string $name): void
+{
+    $doomed = [$name => true];
+    for ($round = 0; $round < 64; $round++) {
+        $grew = false;
+        foreach (\Plugins\all() as $plugin) {
+            if (isset($plugin['error']) || isset($doomed[$plugin['name']])) {
+                continue;
+            }
+            foreach ((array)($plugin['requiresParsed'] ?? []) as $req) {
+                if (is_array($req) && isset($doomed[(string)($req['name'] ?? '')])) {
+                    $doomed[(string)$plugin['name']] = true;
+                    $grew = true;
+                    break;
+                }
+            }
+        }
+        if (!$grew) {
+            break;
+        }
+    }
+    $map = \Plugins\enabled();
+    $clean = [];
+    $changed = false;
+    foreach ($map as $key => $on) {
+        if (!isset($doomed[$key])) {
+            $clean[$key] = true;
+        } else {
+            $changed = true;
+        }
+    }
+    if ($changed || isset($map[$name])) {
+        \Plugins\setState($clean);
+    }
 }

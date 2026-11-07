@@ -2,7 +2,7 @@
   // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
   // a burger opens the full-screen overlay (Contents / Settings / Plugins & Templates / Users).
   import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, listTemplates, activateTemplate, deleteTemplate, coreStatus, uploadCorePacket, runCoreUpdate, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef } from '$lib/api';
-  import { closeTarget } from '$lib/back';
+  import { adminCloseTarget } from '$lib/back';
   import { schemaFor, withDraftFlag } from '$lib/schema';
   import { splitFrontmatter } from '$lib/blocks';
   import { renderMdms } from '$lib/render';
@@ -291,16 +291,27 @@
     if (role === 'admin') void loadSiteSettings(); // warm the site form while the overlay opens
   }
 
-  function closeMenu() {
+  async function closeMenu() {
     menuOpen = false;
-    // THE PAGE comes back — deterministically. The pill opened this overlay by
-    // carrying its own page in ?back=; Close walks exactly there. No param
-    // (typed URL, the front door's own ride) → the front door. Dev stays inside
-    // the SPA — the vite origin's / IS the dashboard. Never history.back(): a
-    // restored tab can pass its length check with no real entry to return to
-    // (audited 2026-11-04 — back() no-op = stranded on a blank /_).
+    // THE PAGE comes back — in ADMIN MODE (2026-11 fix, user law): closing the
+    // overlay must keep admin state active so the visual editor + drawer stay
+    // alive. The carried ?back= page is ridden in admin mode; with no carried
+    // page (the dashboard's own ride) we land on the admin-mode home page —
+    // never the plain public face. Only Logout in the sidebar leaves admin mode.
+    // Dev stays inside the SPA — the vite origin's / IS the dashboard itself.
     if (import.meta.env.DEV) return;
-    window.location.href = closeTarget(window.location.search);
+    const carried = adminCloseTarget(window.location.search);
+    if (carried !== null) {
+      window.location.href = carried;
+      return;
+    }
+    const landing = await landingSlug();
+    if (landing !== null) {
+      window.location.href = `/_/${landing}`;
+      return;
+    }
+    // No pages to edit: stay on the dashboard (overlay now closed). Never kick
+    // to the public face — admin state remains; only Logout leaves admin mode.
   }
 
   function showTab(next: Tab) {
