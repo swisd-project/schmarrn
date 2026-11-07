@@ -66,19 +66,20 @@ const EDIT_CSS = `
    the WIDTH slides (measured hop in JS, transition below). Collapsed: thin
    rect, grey triangle, items waiting invisibly. Open: same rect, wider. */
 .sm-admin-root {
-  position:fixed; right:0; top:50%; transform:translateY(-50%); padding:.45rem;
+  position:fixed; right:0; top:0; bottom:0; padding:.45rem;
   overflow:hidden; background:#fff; border:2px solid #e3dccd; border-right:none;
   border-radius:6px 0 0 6px; box-shadow:0 1px 4px rgba(0,0,0,.10);
   transition:width .15s ease; cursor:pointer;
+  display:flex; flex-direction:column;
   font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size:12.5px;
 }
 .sm-admin-root.open { cursor:auto; }
-.sm-admin-tri { display:block; width:0; height:0; margin:.15rem auto .45rem;
+.sm-admin-tri { display:block; width:0; height:0; margin:.35rem auto .45rem; flex:0 0 auto;
   border-top:6px solid transparent; border-bottom:6px solid transparent;
   border-right:7px solid #767676; pointer-events:none;
 }
 .sm-admin-root.open .sm-admin-tri { transform:rotate(180deg); } /* open = points right (state flip, no tween) */
-.sm-admin-menu { visibility:hidden; display:flex; flex-direction:column; gap:.15rem; }
+.sm-admin-menu { visibility:hidden; display:flex; flex-direction:column; gap:.15rem; flex:1 1 auto; min-height:0; overflow-y:auto; }
 .sm-admin-root.open .sm-admin-menu { visibility:visible; }
 /* the retail band: the shelf between the tabs and Log out — same item law,
    one hairline to mark where the menu ends and the market begins */
@@ -89,6 +90,8 @@ const EDIT_CSS = `
   font:inherit; font-size:12.5px; font-weight:600; color:#767676; cursor:pointer;
 }
 .sm-admin-menu button:hover { background:#f4efe6; color:#4f4a42; }
+/* Log out lives at the drawer's foot — the full-height law's floor */
+.sm-admin-menu > :last-child { margin-top: auto; }
 .sm-edit-layer { position:fixed; inset:0; background:rgba(40,25,15,.45); z-index:9999; display:grid; place-items:center; }
 .sm-modal {
   background:var(--color-batter); border-radius:4px; box-shadow:var(--float-shadow);
@@ -399,38 +402,29 @@ async function boot(root: HTMLElement): Promise<void> {
         }
         const floor = menu.lastElementChild;
         if (band.childElementCount > 0 && floor !== null) {
-          menu.insertBefore(band, floor); // Log out stays the bottom item
-          measure();
+          menu.insertBefore(band, floor); // Log out stays the bottom item —
+          // no re-measure: the open width is the law (1/5), not the content
         }
       })
       .catch(() => undefined);
 
-    // Measure ONLY after the drawer is mounted and fully populated — the
-    // previous build measured a DETACHED element (offsetWidth 0, computed
-    // padding NaN, triangle not yet appended) and wrote "0px"/"NaNpx" widths,
-    // which the browser ignored → the door was born wide and never collapsed.
-    // The drawer's two widths, measured once from real layout: height is NEVER
-    // touched (menu stays in flow, visibility toggles) so closed = opened tall.
+    // The width law (2026-11-07, user order): the drawer is a FULL-HEIGHT
+    // panel (top to bottom, always) that opens to 1/5 of the viewport width
+    // (min 14rem) — no measuring ceremony, the open width is the law itself.
+    // Closed: the thin full-height tab with its triangle. Items scroll if the
+    // shelf ever outgrows the panel.
     const doorStyle = getComputedStyle(door);
     const framePad = parseFloat(doorStyle.paddingLeft) + parseFloat(doorStyle.paddingRight)
       + parseFloat(doorStyle.borderLeftWidth) + parseFloat(doorStyle.borderRightWidth);
     const tri = door.querySelector<HTMLElement>('.sm-admin-tri');
     const closedW = Math.ceil(tri !== null ? tri.getBoundingClientRect().width : 7) + framePad;
-    // The open width is a MEASURED thing, re-measurable by law: the retail band
-    // lands after one fetch, and a stale openW would clip its items mid-word.
-    let openW = 0;
-    const measure = (): void => {
-      door.style.width = 'auto';
-      openW = door.offsetWidth;
-      door.style.width = `${open ? openW : closedW}px`;
-    };
-    measure(); // the mount measurement — the old inline law, now a verb
+    const openW = 'max(20vw, 14rem)';
 
     function applyOpen(next: boolean): void {
       open = next;
       door.classList.toggle('open', open);
       door.setAttribute('aria-expanded', open ? 'true' : 'false');
-      door.style.width = `${open ? openW : closedW}px`; // height: never
+      door.style.width = open ? openW : `${closedW}px`; // height: full, always
     }
 
     document.addEventListener('click', (e) => {

@@ -27,7 +27,7 @@ theme and style switches apply to cached pages without a re-publish.
 ## Templates
 
 - `page.html` — required. The classical template.
-- `blanko.md` — optional (2026-11-07, sidequest law). The theme's blanko hello-world page: when a site is born (setup) or a template is activated onto an **empty** tree, core seeds it as the published `pages/hello` — the front door never opens onto a 404. Core never surprise-plants a site that has pages.
+- `blanko.md` — optional (2026-11-07, sidequest law). The theme's blanko hello-world page: when a site is born (setup) or a template is activated onto an **empty** tree, core seeds it as the published `pages/index` — the index IS the landing, and the front door never opens onto a 404. Core never surprise-plants a site that has pages.
 - `slide.html` — optional. Used when a page's style resolves to `slide`;
   falls back to `page.html` when absent (`themeTemplate()` in `bridge/serve.php`).
   A slide template **must** wrap the body in an element with class

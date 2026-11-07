@@ -321,36 +321,9 @@
     }
   }
 
-  // ——— the drawer (dashboard twin of the editor's door): same rect, items switch tabs in place ———
-  const DOOR_TABS: readonly { tab: Tab; label: string }[] = [
-    { tab: 'contents', label: 'Contents' },
-    { tab: 'settings', label: 'Settings' },
-    { tab: 'plugins', label: 'Plugins' },
-    { tab: 'templates', label: 'Templates' },
-    { tab: 'updates', label: 'Updates' },
-    { tab: 'users', label: 'Users' }
-  ];
-  const allowedTabs = $derived(DOOR_TABS.filter((t) => role === 'admin' || t.tab === 'contents'));
-  let drawerOpen = $state(false);
-
-  /** Measured widths, same law as the editor's door (src/public/edit.ts): the
-   *  menu stays in flow (height = open height always), only the width slides;
-   *  sizes are measured from real mounted layout, never guessed. */
-  function drawer(node: HTMLElement, open: boolean) {
-    const cs = getComputedStyle(node);
-    const framePad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
-      + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
-    node.style.width = 'auto';
-    const openW = node.offsetWidth;
-    const tri = node.querySelector<HTMLElement>('.sm-admin-tri');
-    const closedW = Math.ceil(tri !== null ? tri.getBoundingClientRect().width : 7) + framePad;
-    node.style.width = `${open ? openW : closedW}px`;
-    return {
-      update(next: boolean) {
-        node.style.width = `${next ? openW : closedW}px`;
-      }
-    };
-  }
+  // The dashboard's drawer is GONE (2026-11-07, user law): the overlay carries
+  // the tabs and the close X itself — a second door here only buried the X
+  // under a z-45 panel. The live page's drawer (edit.ts) is the one true door.
 
   // ——— plugins (admin, lazy, part of "Plugins & Templates") ———
   let plugins = $state<readonly PluginRef[]>([]);
@@ -1031,45 +1004,11 @@
       <button class="btn btn-secondary" onclick={signOut}>Log out</button>
     </header>
 
-    <!-- the drawer: same door as the live page — items switch the overlay's tabs in place -->
-    <div
-      class="sm-admin-root"
-      class:open={drawerOpen}
-      role="button"
-      tabindex="0"
-      aria-label="Admin drawer — overlay tabs and Log out"
-      aria-expanded={drawerOpen}
-      use:drawer={drawerOpen}
-      onclick={(e) => {
-        if ((e.target as HTMLElement).closest('button') !== null) return;
-        drawerOpen = !drawerOpen;
-      }}
-      onkeydown={(e) => {
-        if ((e.key === 'Enter' || e.key === ' ') && (e.target as HTMLElement).closest('button') === null) {
-          e.preventDefault();
-          drawerOpen = !drawerOpen;
-        }
-      }}
-    >
-      <span class="sm-admin-tri"></span>
-      <div class="sm-admin-menu" role="menu">
-        {#each allowedTabs as t (t.tab)}
-          <button
-            type="button"
-            role="menuitem"
-            disabled={t.tab === 'updates' && !updatesAvailable}
-            onclick={(e) => { e.stopPropagation(); if (t.tab === 'updates' && !updatesAvailable) return; showTab(t.tab); drawerOpen = false; }}
-          >
-            {t.label}
-          </button>
-        {/each}
-        <button type="button" role="menuitem" onclick={(e) => { e.stopPropagation(); signOut(); }}>Log out</button>
-      </div>
-    </div>
-    <!-- Behind the overlay there is deliberately NO management view: the overlay
-         IS the authed face of /_ (it auto-opens on a live session), and its Close
-         walks back to the exact page you came from. A second "management page"
-         behind a full-screen overlay is how two kitchens got built — never again. -->
+    <!-- the drawer is GONE from the dashboard (2026-11-07, user law): the overlay
+         carries the tabs and the close X itself — a second door here just buried
+         the X under a z-45 panel. Behind the overlay there is deliberately NO
+         management view: the overlay IS the authed face of /_, and its X walks
+         back to the exact page you came from. -->
   {/if}
 
   {#if error && authenticated !== false}
@@ -1078,9 +1017,6 @@
 </main>
 
 <svelte:window onkeydown={(e) => (menuOpen && e.key === 'Escape' ? closeMenu() : null)} />
-<svelte:document onclick={(e) => {
-  if (drawerOpen && (e.target as HTMLElement).closest('.sm-admin-root') === null) drawerOpen = false;
-}} />
 
 {#if menuOpen}
   <!-- Escape lives on WINDOW (see the top-level <svelte:window>): the overlay

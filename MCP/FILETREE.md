@@ -26,6 +26,7 @@
 │   ├── build-fallback.mjs        # esbuild → bridge/assets/render.esm.js (committed)
 │   ├── build-edit.mjs            # esbuild → bridge/assets/edit.esm.js (committed live-page editor)
 │   ├── ship-release.sh           # packs the release ASSET zip: tag source tree + built build/ (the only way the dashboard rides an update)
+│   ├── dev-serve.sh              # the dev server under the PORT LAW: knocks, never kicks; auto-steps to the next free port
 │   └── (*.mts)                   # dev probes
 ├── bridge/                       # PHP core — front controller + libs, no framework; lives under /bridge (bit-scan prey no longer fed)
 │   ├── .htaccess                 # legacy (root .htaccess is the law now)
@@ -85,7 +86,7 @@
 │   ├── routes/
 │   │   ├── +layout.svelte        # imports ../lib/app.css (relative — $lib evasion, see GUIDE)
 │   │   ├── +layout.ts            # prerender = true
-│   │   └── +page.svelte          # login/setup + burger overlay (Contents | Settings | Plugins & Templates | Updates | Users tab bar — Updates speaks its verdict, active only when core/template/plugin updates wait; Update all = core → templates → plugins) — the ONE management surface: Contents = the raw desk (full-height, DOM never scrolls: left = filetree of every md in use, folder-grouped, draft/edits badges + row verbs rename/settings/delete/open-live, foot = guarded Save draft (wakes only on real changes, Ctrl+S) + New/Upload/Media (media in its own modal); right = the sheet card, plain-text md editor riding getDraftRaw/putDraftRaw with the X-Base-Hash conflict guard); Settings = site form; wares = plugins + template inventory; picking ↗ walks to the live page
+│   │   └── +page.svelte          # login/setup + burger overlay (Contents | Settings | Plugins | Templates | Updates | Users tab bar — Plugins/Templates split 2026-11-07; Updates speaks its verdict, active only when core/template/plugin updates wait; Update all = core → templates → plugins) — the ONE management surface: Contents = the raw desk (full-height, DOM never scrolls: left = filetree of every md in use, folder-grouped, home page crowned (no delete — server lid), draft/edits badges + row verbs rename/settings/delete(open+unlock-gated)/open-live, foot = guarded Save draft (wakes only on real changes, Ctrl+S; the sheet LOCKS until an explicit Unlock, re-locks on save; the visual editor is the recommended house way) + New/Upload/Media (media in its own modal; Landing scaffold prefills 'index' when no index page exists); right = the sheet card, plain-text md editor riding getDraftRaw/putDraftRaw with the X-Base-Hash conflict guard); Settings = site form; Plugins = plugin inventory + Vitrine shelf (installable/update only); Templates = template inventory + Preview ↗ (/bridge/preview/<theme>/<type>/<slug> — the fitting room) + Vitrine shelf; picking ↗ walks to the live page
 │   └── content/                  # install-local user data — GITIGNORED, never committed
 │       ├── pages/                # content types (dirs = types, subdirs = slugs)
 │       │   └── <slug>/index.md   # + .draft.md sidecar + page-local media files
