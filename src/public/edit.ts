@@ -342,7 +342,7 @@ async function boot(root: HTMLElement): Promise<void> {
     // The drawer's items ARE the overlay's tabs — each opens /_ pre-selected
     // on that tab (editors only get Contents; admin tabs stay admin-only).
     const TAB_ITEMS: readonly (readonly [string, string])[] = role === 'admin'
-      ? [['contents', 'Contents'], ['settings', 'Settings'], ['wares', 'Plugins & Templates'], ['updates', 'Updates'], ['users', 'Users']]
+      ? [['contents', 'Contents'], ['settings', 'Settings'], ['plugins', 'Plugins'], ['templates', 'Templates'], ['updates', 'Updates'], ['users', 'Users']]
       : [['contents', 'Contents']];
     for (const [tab, label] of TAB_ITEMS) {
       menu.append(el('button', {

@@ -115,9 +115,9 @@ function themeDrawerHandles(): array
 }
 
 /** The front door: \Site\home slug, else the first published page of "pages". */
-function home(array $site): never
+function homeSlug(array $site): string
 {
-    $home = $site['home'];
+    $home = (string)($site['home'] ?? '');
     if ($home === '') {
         foreach (\Store\listAll()['pages'] ?? [] as $candidate) {
             if (!($candidate['draft'] ?? false)) {
@@ -126,6 +126,13 @@ function home(array $site): never
             }
         }
     }
+    return $home;
+}
+
+/** The front door SERVED: the home slug, or the 404 when the bakery is empty. */
+function home(array $site): never
+{
+    $home = homeSlug($site);
     if ($home === '') {
         notFound($site);
     }

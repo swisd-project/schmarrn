@@ -27,6 +27,7 @@ theme and style switches apply to cached pages without a re-publish.
 ## Templates
 
 - `page.html` — required. The classical template.
+- `blanko.md` — optional (2026-11-07, sidequest law). The theme's blanko hello-world page: when a site is born (setup) or a template is activated onto an **empty** tree, core seeds it as the published `pages/hello` — the front door never opens onto a 404. Core never surprise-plants a site that has pages.
 - `slide.html` — optional. Used when a page's style resolves to `slide`;
   falls back to `page.html` when absent (`themeTemplate()` in `bridge/serve.php`).
   A slide template **must** wrap the body in an element with class
@@ -74,13 +75,16 @@ document and the themes move together.
 
 ## Manifest (`theme.json`)
 
-Core reads two fields today: `defaultStyle` (`"slide"` or `"classical"`,
-read by `styleOf()`) and `drawer` — an array of `{label, href}` quality-of-life
-edit handles the admin drawer's retail band carries (2026-11-07). `href` must be
+Core reads three fields today: `defaultStyle` (`"slide"` or `"classical"`,
+read by `styleOf()`), `drawer` — an array of `{label, href}` quality-of-life
+edit handles the admin drawer's retail band carries (2026-11-07; `href` must be
 root-relative (`/…` — a theme lives on this site); labels trim to 60 chars,
-eight handles max. Served to any authed session via `GET /bridge/drawer`
-alongside the enabled plugins' handles (`plugin.json` `"drawer"`, same shape,
-absolute http(s) hrefs allowed there). A theme must exist with a `theme.json`
+eight handles max; served to any authed session via `GET /bridge/drawer`
+alongside the plugins' handles — `plugin.json` `"drawer"`, same shape, absolute
+http(s) hrefs allowed there) — and `requires` (the Chain Law, 2026-11-07: an
+array of `"name"` / `"name >=1.2"` entries judged against EFFECTIVE plugins at
+template activation — a theme whose dependencies sleep cannot dress the site;
+409 names the unmet). A theme must exist with a `theme.json`
 for the theme to be offered at setup and accepted in settings (`bridge/index.php`).
 
 ## Assets

@@ -283,3 +283,16 @@ hr.sm-more {
 .sm-slide.active { opacity: 1; }
 .sm-slide { transition: opacity 0.3s ease; }
 html:has(.slide-stage > .sm-slide) .sm-slide:not(.active) { opacity: 0.92; }
+
+/* ——— the 404 owns the stage (sidequest, 2026-11-07): full-height, centered ——— */
+.sm-notfound {
+  min-height: calc(100dvh - 12rem);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  text-align: center;
+  gap: 0.5rem;
+}
+.sm-notfound h1 { margin: 0; font-size: clamp(5rem, 16vw, 11rem); line-height: 1; color: var(--ink); }
+.sm-notfound p { margin: 0; color: var(--ink-soft); }
+.sm-notfound a { color: var(--jam); }

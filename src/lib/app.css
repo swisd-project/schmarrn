@@ -246,6 +246,8 @@ textarea.input { resize: vertical; min-height: 5rem; }
   overflow-y: auto; white-space: pre-wrap; tab-size: 2;
 }
 .sm-desk-sheet:focus { outline: none; }
+/* the locked sheet: read-only paper — a tint, not a tomb */
+.sm-desk-locked { background: var(--color-crust); opacity: 0.85; }
 
 /* the overlay's close X (2026-11-07): sits where the live page wears its
    triangle — right edge, middle height — the same white rect, pointing home */

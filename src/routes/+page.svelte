@@ -33,7 +33,7 @@
         if (s.authenticated) {
           const wanted = new URLSearchParams(window.location.search).get('tab') ?? '';
           const allowed: readonly Tab[] = s.role === 'admin'
-            ? ['contents', 'settings', 'wares', 'updates', 'users']
+            ? ['contents', 'settings', 'plugins', 'templates', 'updates', 'users']
             : ['contents'];
           if ((allowed as readonly string[]).includes(wanted)) showTab(wanted as Tab);
           openMenu();
@@ -222,6 +222,12 @@
   let deskError = $state('');
   let deskNote = $state('');
   let mediaModal = $state(false);
+  // The sheet locks by law (2026-11-07): raw markdown is surgery — it needs an
+  // explicit Unlock, and the lock returns the moment the page is saved. Every
+  // freshly opened page arrives locked; switching pages locks too. The lock
+  // gates NEW edits only — pending changes stay saveable (and dirty stays
+  // truthful) even after a manual re-lock.
+  let unlocked = $state(false);
   const dirty = $derived(sel !== null && raw !== baseline);
   const selPath = $derived(sel === null ? '' : `${sel.type}/${sel.slug}/index.md`);
 
@@ -231,6 +237,7 @@
     deskBusy = true;
     deskError = '';
     deskNote = '';
+    unlocked = false; // every page arrives locked — surgery needs its own yes
     try {
       const d = await getDraftRaw(type, slug);
       sel = { type, slug };
@@ -252,6 +259,7 @@
     try {
       baseHash = await putDraftRaw(sel.type, sel.slug, raw, baseHash);
       baseline = raw;
+      unlocked = false; // the lock returns when the page is saved — the law
       deskNote = 'Draft saved — publish from ✑ when it is ready for the public face.';
       index = await pageCount(); // the tree's draft/edits badges re-read
     } catch (e) {
@@ -270,7 +278,7 @@
   }
 
   // ——— the burger overlay: Pages / Site / Accounts / Media / Plugins ———
-  type Tab = 'contents' | 'settings' | 'wares' | 'updates' | 'users';
+  type Tab = 'contents' | 'settings' | 'plugins' | 'templates' | 'updates' | 'users';
   let menuOpen = $state(false);
   let tab = $state<Tab>('contents');
 
@@ -299,11 +307,13 @@
     tab = next;
     if (next === 'contents') void loadAllMedia(); // the media pane pays for itself (lazy)
     if (next === 'users') void loadAccounts();
-    if (next === 'wares') {
+    if (next === 'plugins') {
       void loadPlugins();
+      void loadWares(); // the Vitrine shelf carries the update verdicts
+    }
+    if (next === 'templates') {
       void loadTemplates();
       void loadWares();
-      void loadCore();
     }
     if (next === 'updates') {
       void loadCore();
@@ -315,7 +325,8 @@
   const DOOR_TABS: readonly { tab: Tab; label: string }[] = [
     { tab: 'contents', label: 'Contents' },
     { tab: 'settings', label: 'Settings' },
-    { tab: 'wares', label: 'Plugins & Templates' },
+    { tab: 'plugins', label: 'Plugins' },
+    { tab: 'templates', label: 'Templates' },
     { tab: 'updates', label: 'Updates' },
     { tab: 'users', label: 'Users' }
   ];
@@ -559,6 +570,7 @@
 
   async function deleteTemplateNow(template: TemplateRef) {
     if (templatesBusy) return;
+    if (!confirm(`Delete the ${template.title} template? Pages keep working — the site falls back to a house theme until another is activated.`)) return;
     templatesBusy = true;
     templatesError = '';
     templatesNote = '';
@@ -599,6 +611,8 @@
   const pluginUpdates = $derived(vitrine.filter((w) => w.kind === 'plugin' && w.state === 'update' && w.missing.length === 0));
   const coreUpdateAvailable = $derived(core !== null && core.latest !== null && versionGreater(core.latest, core.current));
   const updatesAvailable = $derived(coreUpdateAvailable || templateUpdates.length > 0 || pluginUpdates.length > 0);
+  // the preview's mannequin: the tree's first page wears whichever theme you fit it in
+  const previewSlug = $derived((index?.['pages'] ?? [])[0]?.slug ?? '');
 
   async function loadCore() {
     if (coreBusy) return;
@@ -723,6 +737,17 @@
     void loadPagetypes(); // scaffolds pay for themselves — lazy load on modal open
   }
 
+  /** The Landing law (sidequest, 2026-11-07): the index page is the front door —
+   *  picking the Landing scaffold while no index page exists preaches 'index'
+   *  into the slug field, so the new page lands where the home law looks. */
+  function pickScaffold(next: string) {
+    if (newModal === null) return;
+    if (next === 'landing' && newModal.slug === ''
+      && !(index?.['pages'] ?? []).some((p) => p.slug === 'index')) {
+      newModal.slug = 'index';
+    }
+  }
+
   async function loadPagetypes() {
     if (pagetypes.length > 0) return; // fetched once per visit, refreshed by reload
     try {
@@ -841,6 +866,14 @@
     if (!confirm(`Delete ${type}/${slug} for good? No undo, no tears.`)) return;
     try {
       await deletePage(type, slug);
+      // the sheet never haunts a deleted file — it lets go
+      if (sel?.type === type && sel?.slug === slug) {
+        sel = null;
+        raw = '';
+        baseline = '';
+        baseHash = '';
+        unlocked = false;
+      }
       refreshIndex();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -1067,7 +1100,8 @@
       <button class="btn {tab === 'contents' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('contents')}>Contents</button>
       {#if role === 'admin'}
         <button class="btn {tab === 'settings' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('settings')}>Settings</button>
-        <button class="btn {tab === 'wares' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('wares')}>Plugins & Templates</button>
+        <button class="btn {tab === 'plugins' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('plugins')}>Plugins</button>
+        <button class="btn {tab === 'templates' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('templates')}>Templates</button>
         <!-- the Updates door: silent (unavailable) until a newer core/template/plugin
              exists, then it speaks — the button itself carries the verdict -->
         <button
@@ -1106,12 +1140,22 @@
                             onclick={() => openRaw(type, page.slug)}
                           >
                             <span class="truncate">{page.slug}</span>
+                            {#if page.home}<span class="badge">home</span>{/if}
                             {#if page.draft}<span class="badge badge-draft">draft</span>{/if}
                             {#if page.hasDraft}<span class="badge badge-live">edits</span>{/if}
                           </button>
                           <button class="btn-ghost" title="Rename" onclick={() => startRename(type, page.slug)}>✎</button>
                           <button class="btn-ghost" title="Page settings" onclick={() => openPageSettings(type, page.slug)}>✑</button>
-                          <button class="btn-ghost danger" title="Delete" onclick={() => removePage(type, page.slug)}>×</button>
+                          {#if page.home}
+                            <!-- the home page stands: no delete, ever (the lid is server-side too) -->
+                          {:else}
+                            <button
+                              class="btn-ghost danger"
+                              title={sel?.type === type && sel?.slug === page.slug && unlocked ? 'Delete page' : 'Open the page and press Unlock first — deletion follows the unlock'}
+                              disabled={!(sel?.type === type && sel?.slug === page.slug && unlocked)}
+                              onclick={() => removePage(type, page.slug)}
+                            >×</button>
+                          {/if}
                           <button class="btn-ghost" title="Open the live page" onclick={() => select(type, page.slug)}>↗</button>
                         </div>
                         {#if renaming?.type === type && renaming?.slug === page.slug}
@@ -1171,11 +1215,26 @@
               <div class="flex items-center gap-2 flex-wrap">
                 <p class="m-0 font-bold text-sm">{selPath}</p>
                 {#if dirty}<span class="badge">unsaved</span>{/if}
+                {#if !unlocked}<span class="badge">locked</span>{/if}
+                <button
+                  class="btn btn-secondary ml-auto"
+                  disabled={deskBusy}
+                  onclick={() => (unlocked = !unlocked)}
+                  title={unlocked ? 'Lock the sheet again' : 'Raw markdown is surgery — unlock to edit; the lock returns on save'}
+                >
+                  {unlocked ? 'Lock' : 'Unlock'}
+                </button>
               </div>
+              <p class="m-0 text-xs text-ink-soft">
+                The visual editor is the house way — open the live page (↗) and click what you see.
+                This sheet writes raw markdown: unlock only for surgery, and it locks again on save.
+              </p>
               <textarea
                 class="sm-desk-sheet"
+                class:sm-desk-locked={!unlocked}
                 bind:value={raw}
                 onkeydown={deskKeydown}
+                readonly={!unlocked}
                 spellcheck="false"
                 disabled={deskBusy}
                 aria-label={`Markdown source of ${selPath}`}
@@ -1251,7 +1310,7 @@
           </label>
           <button type="submit" class="btn btn-primary self-start">Add account</button>
         </form>
-      {:else if tab === 'wares' && role === 'admin'}
+      {:else if tab === 'plugins' && role === 'admin'}
         <section class="mg mb-6">
           <h4 class="mg-h">Plugins</h4>
           {#if pluginsBusy && plugins.length === 0}
@@ -1310,7 +1369,7 @@
             <p class="italic text-ink-soft">Reading the window display…</p>
           {:else}
             <ul class="list-none p-0 m-0 flex flex-col gap-2">
-              {#each vitrine.filter((w) => w.kind === 'plugin') as ware (ware.name)}
+              {#each vitrine.filter((w) => w.kind === 'plugin' && w.state !== 'installed') as ware (ware.name)}
                 <li class="card flex items-start justify-between gap-3">
                   <div class="min-w-0">
                     <p class="m-0 font-bold">
@@ -1353,6 +1412,7 @@
           {#if vitrineError && role === 'admin'}<p class="alert alert-err" role="alert">{vitrineError}</p>{/if}
           {#if vitrineNote}<p class="alert alert-ok">{vitrineNote}</p>{/if}
         </section>
+      {:else if tab === 'templates' && role === 'admin'}
         <section class="mg flex flex-col gap-2">
           <h4 class="mg-h">Templates</h4>
           {#if templatesBusy && templates.length === 0}
@@ -1378,6 +1438,15 @@
                     {/if}
                   </div>
                   <div class="flex shrink-0 items-start gap-2">
+                    {#if previewSlug !== ''}
+                      <a
+                        class="btn btn-secondary"
+                        href={`/bridge/preview/${template.name}/pages/${previewSlug}`}
+                        target="_blank"
+                        rel="noopener"
+                        title="See your page dressed in this theme — the fitting room, nothing saved"
+                      >Preview ↗</a>
+                    {/if}
                     {#if template.active}
                       <span class="text-xs text-ink-soft self-center text-right">live — activate another before deleting</span>
                     {:else}
@@ -1408,7 +1477,7 @@
               <p class="italic text-ink-soft">Reading the window display…</p>
             {:else}
               <ul class="list-none p-0 m-0 flex flex-col gap-2">
-                {#each vitrine.filter((w) => w.kind === 'template') as ware (ware.name)}
+                {#each vitrine.filter((w) => w.kind === 'template' && w.state !== 'installed') as ware (ware.name)}
                   <li class="card flex items-start justify-between gap-3">
                     <div class="min-w-0">
                       <p class="m-0 font-bold">
@@ -1666,7 +1735,7 @@
       </label>
       <label class="field">
         <span>Fill from a page type</span>
-        <select class="input" bind:value={newModal.scaffold}>
+        <select class="input" bind:value={newModal.scaffold} onchange={() => pickScaffold(newModal?.scaffold ?? 'article')}>
           {#each pagetypes as p (p.name)}
             <option value={p.name}>{p.title}</option>
           {/each}

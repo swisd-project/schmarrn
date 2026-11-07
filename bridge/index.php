@@ -287,6 +287,7 @@ try {
             }
             Accounts\add($user, password_hash($password, PASSWORD_ARGON2ID), 'admin');
             Site\save(['name' => $siteName, 'claim' => $claim, 'logo' => '', 'theme' => $theme, 'home' => '']);
+            \Wares\seedBlanko($theme); // the blanko hello-world: a fresh site is born dressed, never a 404
             Auth\login();
             flock($setupLock, LOCK_UN);
             fclose($setupLock);
@@ -401,10 +402,7 @@ try {
             if (!Auth\isAdmin()) {
                 Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
             }
-            echo json_encode(array_map(
-                fn($p) => isset($p['error']) ? $p : [...$p, 'requires' => \Wares\requirements((string)$p['name'])],
-                Plugins\all()
-            ), JSON_UNESCAPED_SLASHES);
+            echo json_encode(Plugins\all(), JSON_UNESCAPED_SLASHES);
             break;
 
         case $method === 'PUT' && $path === 'plugins':
@@ -428,20 +426,25 @@ try {
                 $installedBy[$p['name']] = $p;
                 $clean[$p['name']] = $wanted[$p['name']] === true;
             }
-            // The enable law (requirements): a plugin may not stand enabled on a
-            // dep that is not enabled too — its filters would never run. The
-            // refusal names the failing dep, user-facing, at the switch.
+            // The chain law at the switch (2026-11-07): the world AFTER this
+            // write is DERIVED — intent ∧ deps effective — and a plugin may
+            // only ride that world. A requested-on plugin whose chain never
+            // completes is refused by name; rings never promote, they refuse
+            // here, at the switch, before any state is written.
+            $manifests = [];
+            foreach ($installed as $p) {
+                $manifests[$p['name']] = $p;
+            }
+            $effAfter = Plugins\deriveEffective($manifests, $clean);
+            $versions = array_map(fn($p) => (string)$p['version'], $manifests);
             foreach ($clean as $name => $on) {
                 if (!$on) {
                     continue;
                 }
-                $pending = array_values(array_filter(
-                    \Wares\requirements((string)$name),
-                    fn($dep) => ($clean[$dep] ?? false) !== true
-                ));
-                if ($pending !== []) {
+                $unmet = \Chain\unmet($manifests[$name]['requiresParsed'], \Chain\pool($versions, $effAfter));
+                if ($unmet !== []) {
                     Router\refuse(409, "'" . ($installedBy[$name]['title'] ?? $name) . "' waits for "
-                        . implode(', ', $pending) . " to be enabled first — a plugin does not run on a sleeping dependency.");
+                        . implode(', ', $unmet) . " to stand effective first — a plugin does not run on a sleeping dependency.");
                 }
             }
             Plugins\setState($clean);
@@ -490,9 +493,35 @@ try {
                 || !is_file(__DIR__ . '/templates/' . $name . '/theme.json')) {
                 Router\refuse(400, "Unknown template: {$name}");
             }
+            // The chain law at the wardrobe: a template dresses the whole site,
+            // so its manifest's requirements must stand EFFECTIVE first — a
+            // theme whose dependencies sleep would serve a half-dressed site.
+            $themeManifest = json_decode((string)@file_get_contents(__DIR__ . '/templates/' . $name . '/theme.json'), true);
+            $requiresParsed = is_array($themeManifest) ? \Chain\parse($themeManifest['requires'] ?? []) : null;
+            if ($requiresParsed === null) {
+                Router\refuse(400, "'{$name}' declares requirements this core cannot read — entries are \"name\" or \"name >=1.2\".");
+            }
+            foreach ($requiresParsed as $req) {
+                if ($req['name'] === $name) {
+                    Router\refuse(400, "A template does not require itself.");
+                }
+            }
+            $pool = [];
+            foreach (Plugins\all() as $p) {
+                if (isset($p['error'])) {
+                    continue;
+                }
+                $pool[$p['name']] = ['version' => (string)$p['version'], 'effective' => ($p['effective'] ?? false) === true];
+            }
+            $unmet = \Chain\unmet($requiresParsed, $pool);
+            if ($unmet !== []) {
+                Router\refuse(409, "'{$name}' dresses a site that stands on " . implode(', ', $unmet)
+                    . ' — enable ' . (count($unmet) === 1 ? 'it' : 'them') . ' first, then activate.');
+            }
             $settings = Site\load();
             $settings['theme'] = $name;
             Site\save($settings); // the opcache drop lives in Site\save — the switch lands at once
+            \Wares\seedBlanko($name); // an empty site wakes dressed in its new theme — never a 404
             echo json_encode(['ok' => true, 'theme' => $name], JSON_UNESCAPED_SLASHES);
             break;
 
@@ -507,6 +536,25 @@ try {
             $body = json_decode(file_get_contents('php://input') ?: '{}', true);
             $name = is_string($body['name'] ?? null) ? $body['name'] : '';
             echo json_encode(Wares\removeTemplate((string)$name), JSON_UNESCAPED_SLASHES);
+            break;
+
+        // ——— the template preview (sidequest, 2026-11-07): the admin's page,
+        // dressed in ANY installed theme — the shell door renders it client-side,
+        // so the preview obeys all three doors' law by construction. ———
+        case $method === 'GET' && preg_match('#^preview/[a-z0-9-]+/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — the fitting room is not for strangers.');
+            }
+            [, $themeName, $type, $slug] = explode('/', $path);
+            if (!is_file(__DIR__ . '/templates/' . $themeName . '/theme.json')) {
+                Router\refuse(404, "No such theme: {$themeName}");
+            }
+            $site = \Site\load();
+            $site['theme'] = $themeName; // the override — the whole template chain reads it
+            echo \Serve\shell($site, $type, $slug);
             break;
 
         // ——— the drawer's retail band (2026-11-07, user law): quality-of-life
@@ -721,7 +769,17 @@ try {
 
         case $method === 'GET' && $path === 'pages':
             // Public listing for strangers (drafts filtered inside), full tree for editors.
-            echo json_encode(Store\listAll(), JSON_UNESCAPED_SLASHES);
+            // The home page wears its crown (2026-11-07): the desk refuses to delete it.
+            $tree = Store\listAll();
+            $home = \Serve\homeSlug(\Site\load());
+            if ($home !== '' && isset($tree['pages'])) {
+                foreach ($tree['pages'] as $i => $p) {
+                    if (($p['slug'] ?? null) === $home) {
+                        $tree['pages'][$i]['home'] = true;
+                    }
+                }
+            }
+            echo json_encode($tree, JSON_UNESCAPED_SLASHES);
             break;
 
         // ——— edit locks: heartbeat in warm, silence and polite exit free ———
@@ -732,6 +790,11 @@ try {
             }
             Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
+            // The home page stands (2026-11-07, user law): the index page cannot
+            // be deleted — the lid lives HERE, server-side, not in a hidden button.
+            if ($type === 'pages' && $slug === \Serve\homeSlug(\Site\load())) {
+                Router\refuse(409, 'The home page stands — the index page cannot be deleted.');
+            }
             Lock\assertFreeOrMine($type, $slug, Auth\user());
             Store\remove($type, $slug);
             Cache\drop($type, $slug);

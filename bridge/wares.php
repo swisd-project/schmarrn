@@ -32,6 +32,13 @@
  *                 overridable in config/wares.local.php (git-ignored) for local
  *                 tests — treeUrl '' turns the per-folder ride off (the packet
  *                 carries every install then; the local rig law stays no-GitHub).
+ *                 THE CHAIN LAW (2026-11-07): the MANIFEST is the single
+ *                 dependency truth ("name" / "name >=1.2", version_compare);
+ *                 registry + lock only mirror. The install gate judges the
+ *                 manifest that rode — presence at a satisfying version; the
+ *                 truth gate names a shelf↔manifest drift instead of mumbling
+ *                 "already installed". Deletion is refused while an effective
+ *                 ware stands on the doomed one.
  * 3. Expects: bridge/plugins/ + bridge/templates/ homes; ZipArchive or phar
  *             (only as the packet fallback); allow_url_fopen for the breaches
  *             out (registry, trees API, raw files, packet zip).
@@ -236,6 +243,34 @@ function partWith(string $dir): void
     @rmdir($dir);
 }
 
+/**
+ * The blanko hello-world (sidequest, 2026-11-07): a theme may ship blanko.md —
+ * the starter page a fresh site is BORN with, so the front door never opens
+ * onto a 404. Seeds ONLY into an empty tree: an existing site is never
+ * surprise-planted. Returns the slug or null when nothing was planted.
+ */
+function seedBlanko(string $themeName): ?string
+{
+    if (preg_match('/^[a-z0-9-]+$/', $themeName) !== 1) {
+        return null;
+    }
+    $file = __DIR__ . '/templates/' . $themeName . '/blanko.md';
+    if (!is_file($file)) {
+        return null; // the theme ships no blanko — its choice, lawful
+    }
+    $raw = (string)file_get_contents($file);
+    if (trim($raw) === '') {
+        return null;
+    }
+    $tree = \Store\listAll();
+    if (!empty($tree['pages'])) {
+        return null; // the site has pages — never surprise-plant
+    }
+    \Store\write('pages', 'index', $raw); // the index page IS the blanko (sidequest law)
+    \Cache\drop('pages', 'index');
+    return 'index';
+}
+
 function hostSatisfies(string $requiresSchmarrn): bool
 {
     return $requiresSchmarrn === ''
@@ -365,14 +400,6 @@ function install(string $name): array
     if (!hostSatisfies($ware['requiresSchmarrn'])) {
         \Router\refuse(400, "'{$ware['title']}' wants Schmarrn {$ware['requiresSchmarrn']}+ — this host is " . hostVersion() . '.');
     }
-    // The dependency wall (user-facing, before the packet is even fetched):
-    // every required wares-plugin must stand installed on this host first.
-    $have = installedVersions();
-    $missing = array_values(array_filter($ware['requires'], fn($dep) => !isset($have[$dep])));
-    if ($missing !== []) {
-        \Router\refuse(409, "'{$ware['title']}' needs " . implode(', ', $missing)
-            . " on this host first — install it from the shelf before this one.");
-    }
 
     // ——— the announce gate, BEFORE anything rides: only a strictly newer
     // announcement moves files. The shelf's own manifest is the yardstick; an
@@ -487,9 +514,40 @@ function install(string $name): array
     // dies here — overwritten only when strictly newer than the shelf. ———
     if ($installedVersion !== null && version_compare($incoming, (string)$installedVersion) !== 1) {
         partWith($scratch);
+        $drift = (string)($ware['version'] ?? '') !== $incoming
+            ? " — and note the drift: the Vitrine's shelf announces {$ware['version']} while the ware's own manifest says {$incoming}. The manifest is the truth; fix the shelf."
+            : '';
         \Router\refuse(409, $installedVersion === $incoming
-            ? "'{$name}' {$incoming} is already installed."
-            : "'{$name}' {$incoming} is OLDER than the installed {$installedVersion} — the Vitrine never derates.");
+            ? "'{$name}' {$incoming} is already installed.{$drift}"
+            : "'{$name}' {$incoming} is OLDER than the installed {$installedVersion} — the Vitrine never derates.{$drift}");
+    }
+
+    // ——— the chain gate (the Chain Law, 2026-11-07): the MANIFEST answers for
+    // its own dependencies — the registry's memory and the lock's bookkeeping
+    // are not the truth, the ware is. Installed at a satisfying version, or
+    // nothing rides. Effectiveness is demanded later, at the enable switch
+    // and at activation — install asks presence, the running state asks life. ———
+    $requiresParsed = \Chain\parse($manifest['requires'] ?? []);
+    if ($requiresParsed === null) {
+        partWith($scratch);
+        \Router\refuse(400, "'{$name}' declares requirements this core cannot read — entries are \"name\" or \"name >=1.2\". Nothing installed.");
+    }
+    foreach ($requiresParsed as $req) {
+        if ($req['name'] === $name) {
+            partWith($scratch);
+            \Router\refuse(400, "'{$name}' does not require itself — chains start elsewhere.");
+        }
+    }
+    $versions = installedVersions();
+    foreach (installedThemeVersions() as $themeName => $themeVersion) {
+        $versions[$themeName] = $themeVersion;
+    }
+    $unmet = \Chain\unmet($requiresParsed, \Chain\pool($versions, array_keys($versions)));
+    if ($unmet !== []) {
+        partWith($scratch);
+        \Router\refuse(409, "'{$name}' stands on " . implode(', ', $unmet)
+            . ' — install ' . (count($unmet) === 1 ? 'it' : 'them')
+            . ' from the shelf first, then ride again.');
     }
 
     // ——— the swap: disable-first on upgrades, rollback on a failed rename ———
@@ -519,15 +577,16 @@ function install(string $name): array
     if (function_exists('opcache_invalidate')) {
         @opcache_invalidate($target . '/plugin.php', true);
     }
-    lockRecord($name, $ware, $incoming);
+    lockRecord($name, $ware, $incoming, array_map(fn($req) => \Chain\describe($req), $requiresParsed));
     partWith($scratch);
     return ['ok' => true, 'name' => $name, 'kind' => $ware['kind'], 'version' => $incoming
         . ' — installed disabled; enable when you want it working.'];
 }
 
 // ——— the lock: what was installed from the Vitrine, with its requirements ———
-// Data only (var_export into config, git-ignored): one honest box of provenance
-// so the requirements (and their versions) stay trackable beyond the packet.
+// Data only (var_export into config, git-ignored): one honest box of provenance.
+// Since the Chain Law the lock is bookkeeping, never the enforced truth — the
+// manifest carries the dependencies; the lock remembers who installed what when.
 
 function lockFile(): string
 {
@@ -554,15 +613,17 @@ function lockWrite(array $lock): void
     }
 }
 
-/** One successful install (fresh or upgrade) gets its box ticked. */
-function lockRecord(string $name, array $ware, string $version): void
+/** One successful install (fresh or upgrade) gets its box ticked — with the
+ *  requirements THE MANIFEST declared (the truth that rode), not the shelf's
+ *  claim about them. */
+function lockRecord(string $name, array $ware, string $version, array $requires): void
 {
     $lock = lockRead();
     $lock[$name] = [
         'kind' => $ware['kind'],
         'title' => $ware['title'],
         'version' => $version,
-        'requires' => array_values((array)$ware['requires']),
+        'requires' => array_values($requires),
         'installedAt' => date('c'),
     ];
     lockWrite($lock);
@@ -593,6 +654,45 @@ function removeTemplate(string $name): array
     if (\Site\load()['theme'] === $name) {
         \Router\refuse(409, "'{$name}' is the live theme — activate another template before deleting it.");
     }
+    // ——— the chain law: a ware an EFFECTIVE ware stands on is not deleted ———
+    foreach (\Plugins\all() as $p) {
+        if (isset($p['error']) || empty($p['effective'])) {
+            continue;
+        }
+        foreach ($p['requiresParsed'] as $req) {
+            if ($req['name'] === $name) {
+                \Router\refuse(409, "'{$p['title']}' stands on '{$name}' — disable it before the deletion.");
+            }
+        }
+    }
+    foreach (glob(__DIR__ . '/templates/*', GLOB_ONLYDIR) ?: [] as $dir) {
+        $dependent = basename($dir);
+        if ($dependent === $name) {
+            continue;
+        }
+        $manifest = json_decode((string)@file_get_contents($dir . '/theme.json'), true);
+        $reqs = is_array($manifest) ? \Chain\parse($manifest['requires'] ?? []) : null;
+        if ($reqs === null) {
+            continue; // unreadable claims make no dependents
+        }
+        foreach ($reqs as $req) {
+            if ($req['name'] === $name) {
+                \Router\refuse(409, "The template '{$dependent}' stands on '{$name}' — delete it first.");
+            }
+        }
+    }
+    // The last template stands (sidequest, 2026-11-07): a site is never themeless.
+    $remaining = 0;
+    foreach ((array)scandir(__DIR__ . '/templates') ?: [] as $dir) {
+        if ($dir !== $name && !str_starts_with((string)$dir, '.')
+            && is_dir(__DIR__ . '/templates/' . $dir)
+            && is_file(__DIR__ . '/templates/' . $dir . '/theme.json')) {
+            $remaining++;
+        }
+    }
+    if ($remaining === 0) {
+        \Router\refuse(409, "The last template stands — a site is never themeless. Install another before '{$name}' leaves.");
+    }
     $dir = __DIR__ . '/templates/' . $name;
     if (!is_file($dir . '/theme.json')) {
         \Router\refuse(404, "'{$name}' is not an installed template.");
@@ -608,30 +708,12 @@ function removeTemplate(string $name): array
 }
 
 /**
- * The requirements an INSTALLED plugin stands on, for the enable lid and the
- * plugin inventory. The lock is the bookkeeping truth (recorded at install);
- * the registry is the fallback for wares that slipped past the shelf.
- * Unknown hand-dropped installs read as dependency-free — their author never
- * declared any, in no ledger we keep.
+ * The requirements an installed ware stands on — RETIRED by the Chain Law
+ * (2026-11-07): the manifest is the single truth, read live from disk, so a
+ * lost lock line or a rewritten registry can never evaporate a dependency.
+ * The plugin inventory reads Plugins\all() (requires + effective + blockedBy);
+ * the activation gate reads the theme.json in hand.
  */
-function requirements(string $name): array
-{
-    $lockEntry = lockRead()[$name] ?? null;
-    if (is_array($lockEntry) && is_array($lockEntry['requires'] ?? null)) {
-        return array_values((array)$lockEntry['requires']);
-    }
-    $reg = registry();
-    if (isset($reg['error'])) {
-        @error_log("[schmarrn-wares] enable lid could not reach the registry — '{$name}' reads as dependency-free.");
-        return [];
-    }
-    foreach ($reg['wares'] as $ware) {
-        if ($ware['name'] === $name) {
-            return array_values((array)$ware['requires']);
-        }
-    }
-    return [];
-}
 
 /** Pull one ware's own path out of the packet into $scratch/staging.
  *  Returns true, false when the packet will not open, null when the ware is

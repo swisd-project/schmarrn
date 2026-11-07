@@ -12,6 +12,7 @@ export interface PageRef {
   readonly updatedAt: number;
   readonly draft?: boolean;
   readonly hasDraft?: boolean;
+  readonly home?: boolean;
 }
 export type PageIndex = Readonly<Record<string, readonly PageRef[]>>;
 

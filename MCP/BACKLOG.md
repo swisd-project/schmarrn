@@ -54,6 +54,7 @@ v1 — todos
 ## p6 plugins
 [~] Capability contract: slices 1 + 2 shipped (placeholders, routes, contentFilters, drunken-monk as the proof); slice 3 = Vitrine fetch + install (2026-11-05); slice 4 = editorBlocks WIRED 2026-11-05 — manifests may declare {name,label,template} (namespaced, underscored prefix law), GET /bridge/editor-blocks serves enabled plugins' defs, the canvas Add menu gains the "Plugins:" row, insert pre-fills the text modal with the template (stop-motion 0.1.1 carries its own fence template).
 [x] Vitrine wares install — SHIPPED 2026-11-05 (user ordered the build): `bridge/wares.php` + `GET /bridge/wares`, `POST /bridge/wares/install`; dashboard "From the Vitrine" blocks on both wares tabs; base version ships monk/stop-motion uninstalled (monk kept in the Vitrine repo, hello remains the local demo).
+[x] The Chain Law — SHIPPED 2026-11-07 (user ordered after the requires line died in an uncommitted rewrite and the shelf↔manifest drift answered "0.2.0 is already installed" for a 0.2.1 update): manifest-carried requires with version constraints (`bridge/chain.php`), derived effective state (`Plugins\deriveEffective`), gates at install/enable/activate/delete, serve-time fail-closed; the truth gate NAMES a shelf↔manifest drift; monk/stop-motion the proof pair (stop-motion requires monk in its manifest).
 
 ## p7+ later phases
 [ ] p7 media & packaging: gd derivatives + zip packaging/installer.

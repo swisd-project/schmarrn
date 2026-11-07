@@ -11,7 +11,7 @@
  *                 Capabilities (v1): template placeholders + API routes. Editor blocks
  *                 are declared in the manifest shape but not yet wired (slice 2).
  * 3. Expects: bridge/plugins/ dir at the repo root; state in bridge/config/plugins.local.php.
- * 4. Provides: Plugins\all/enabled/setState/load/placeholderFills/dispatch.
+ * 4. Provides: Plugins\all/enabled/effective/deriveEffective/setState/load/placeholderFills/dispatch.
  * 5. SPDX-License-Identifier: MPL-2.0
  * 6. Copyright (c) 2026 Homahuki GmbH
  */
@@ -19,6 +19,8 @@
 declare(strict_types=1);
 
 namespace Plugins;
+
+require_once __DIR__ . '/chain.php';
 
 const IDENTIFIER = '/^[a-z0-9]+(?:-[a-z0-9]+)*$/';
 
@@ -33,11 +35,18 @@ function stateFile(): string
     return __DIR__ . '/config/plugins.local.php';
 }
 
-/** Every installed plugin with its validated manifest + enabled state. Broken manifests degrade to an `error` note. */
-function all(): array
+/**
+ * The scan: every installed plugin, validated manifest, intent flag. Returns
+ * [list (display rows incl. broken ones), map (clean manifests by name),
+ * intent (the state file's switches)] — the raw material all() dresses and
+ * effective() derives from. No derivation here: all() calls this once and
+ * decorates; effective() reuses the map without recursing into all().
+ */
+function scan(): array
 {
     $state = enabled();
     $plugins = [];
+    $map = [];
     foreach (scandir(__DIR__ . '/plugins') ?: [] as $name) {
         $dir = __DIR__ . '/plugins/' . $name;
         if (!is_dir($dir) || str_starts_with($name, '.')) {
@@ -58,9 +67,69 @@ function all(): array
             $plugins[] = ['name' => $name, 'enabled' => false, 'error' => $clean];
             continue;
         }
+        $map[$name] = $clean;
         $plugins[] = [...$clean, 'enabled' => $state[$name] ?? false];
     }
     usort($plugins, fn($a, $b) => strcmp((string)$a['name'], (string)$b['name']));
+    return [$plugins, $map, $state];
+}
+
+/**
+ * THE CHAIN LAW — effective state is DERIVED, never stored: a plugin stands
+ * effective only when its intent switch is on AND every requirement is
+ * effective at a satisfying version, walked to a fixpoint. Orphaned
+ * enable-states are unconstructible; rings never promote (the walk simply
+ * never reaches them — they sit blocked, visible, until a human breaks the
+ * circle). Depth-capped at 64 rounds: a chain that deep is a ring in a coat.
+ */
+function deriveEffective(array $map, array $intent): array
+{
+    $versions = array_map(fn($m) => (string)$m['version'], $map);
+    $eff = [];
+    for ($round = 0; $round < 64; $round++) {
+        $grew = false;
+        foreach ($map as $name => $m) {
+            if (isset($eff[$name]) || ($intent[$name] ?? false) !== true) {
+                continue;
+            }
+            if (\Chain\unmet($m['requiresParsed'], \Chain\pool($versions, $eff)) === []) {
+                $eff[$name] = true;
+                $grew = true;
+            }
+        }
+        if (!$grew) {
+            break;
+        }
+    }
+    return $eff;
+}
+
+/** The derived truth over the installed shelf: name => true for effective plugins. */
+function effective(): array
+{
+    [, $map, $state] = scan();
+    return deriveEffective($map, $state);
+}
+
+/** Every installed plugin: manifest + intent + derived effective state + the
+ * chain's verdict (blockedBy names what keeps a switched-on plugin from
+ * running). Broken manifests degrade to an `error` note. */
+function all(): array
+{
+    [$plugins, $map, $state] = scan();
+    $eff = deriveEffective($map, $state);
+    $versions = array_map(fn($m) => (string)$m['version'], $map);
+    foreach ($plugins as $i => $plugin) {
+        if (isset($plugin['error'])) {
+            continue;
+        }
+        $name = (string)$plugin['name'];
+        $on = ($state[$name] ?? false) === true;
+        $plugins[$i]['effective'] = isset($eff[$name]);
+        $plugins[$i]['blockedBy'] = $on && !isset($eff[$name])
+            ? \Chain\unmet($map[$name]['requiresParsed'], \Chain\pool($versions, $eff))
+            : [];
+    }
     return $plugins;
 }
 
@@ -74,6 +143,21 @@ function validate(string $name, array $manifest): array|string
     $version = is_string($manifest['version'] ?? null) ? $manifest['version'] : '0.0.0';
     $description = is_string($manifest['description'] ?? null) ? $manifest['description'] : '';
     $caps = is_array($manifest['capabilities'] ?? null) ? $manifest['capabilities'] : [];
+
+    // The Chain Law (2026-11-07, user law): the manifest carries its own
+    // dependency truth — "name" or "name >=1.2". A malformed list is a broken
+    // manifest (the plugin reads as errored, never as dependency-free), and a
+    // ware does not require itself.
+    $requiresParsed = \Chain\parse($manifest['requires'] ?? []);
+    if ($requiresParsed === null) {
+        return 'The requires list is unbaked dough — entries are "name" or "name >=1.2".';
+    }
+    foreach ($requiresParsed as $req) {
+        if ($req['name'] === $name) {
+            return 'A ware does not require itself.';
+        }
+    }
+    $requires = array_map(fn($req) => \Chain\describe($req), $requiresParsed);
 
     // Placeholders: namespaced by law — every placeholder must start with "<name>_".
     $placeholders = [];
@@ -170,6 +254,8 @@ function validate(string $name, array $manifest): array|string
         'title' => $title,
         'version' => $version,
         'description' => $description,
+        'requires' => $requires,
+        'requiresParsed' => $requiresParsed,
         'placeholders' => $placeholders,
         'routes' => $routes,
         'editorBlocks' => $editorBlocks,
@@ -195,14 +281,14 @@ function enabled(): array
     return $clean;
 }
 
-/** The retail band (2026-11-07, user law): drawer handles from ENABLED
+/** The retail band (2026-11-07, user law): drawer handles from EFFECTIVE
  *  plugins — manifest-declared {label, href}, the lid validated them at
- *  load. A disabled or broken plugin contributes nothing. */
+ *  load. A sleeping, blocked or broken plugin contributes nothing. */
 function drawerHandles(): array
 {
     $out = [];
     foreach (all() as $plugin) {
-        if (isset($plugin['error']) || !($plugin['enabled'] ?? false)) {
+        if (isset($plugin['error']) || !($plugin['effective'] ?? false)) {
             continue;
         }
         foreach ((array)($plugin['drawer'] ?? []) as $handle) {
@@ -235,10 +321,12 @@ function setState(array $enabled): void
     }
 }
 
-/** Load every enabled plugin's code. A broken plugin is skipped with a log line — never a dead site. */
+/** Load every EFFECTIVE plugin's code — the chain law's serve-time face: a
+ *  plugin whose dependencies sleep (or a ring member) never loads, whatever
+ *  its switch says. A broken plugin is skipped with a log line — never a dead site. */
 function load(): void
 {
-    foreach (enabled() as $name => $on) {
+    foreach (effective() as $name => $on) {
         $file = __DIR__ . '/plugins/' . $name . '/plugin.php';
         if (!is_file($file)) {
             @error_log("[schmarrn-plugins] enabled plugin '{$name}' has no plugin.php — skipped.");
@@ -261,7 +349,7 @@ function placeholderFills(array $ctx): array
 {
     $fills = [];
     $installed = all();
-    foreach (enabled() as $name => $on) {
+    foreach (effective() as $name => $on) {
         $manifest = null;
         foreach ($installed as $plugin) {
             if (($plugin['name'] ?? null) === $name && isset($plugin['placeholders'])) {
@@ -301,7 +389,7 @@ function placeholderFills(array $ctx): array
 function contentFilters(array $ctx, string $html): string
 {
     $installed = all();
-    foreach (enabled() as $name => $on) {
+    foreach (effective() as $name => $on) {
         foreach ($installed as $plugin) {
             if (($plugin['name'] ?? null) === $name && isset($plugin['contentFilters'])) {
                 foreach ($plugin['contentFilters'] as $key) {
@@ -334,7 +422,8 @@ function dispatch(string $name, string $route, string $method): never
             break;
         }
     }
-    if ($plugin === null || !($plugin['enabled'] ?? false)) {
+    $eff = effective();
+    if ($plugin === null || !isset($eff[$name])) {
         \Router\refuse(404, 'That plugin serves nothing — no such route.');
     }
     $declared = null;
