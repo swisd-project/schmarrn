@@ -129,6 +129,7 @@ function registry(): array
                 || preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', (string)$ware['name']) !== 1
                 || !in_array($ware['kind'] ?? '', ['plugin', 'template'], true)
                 || !is_string($ware['path'] ?? null)
+                || !safeUnder((string)$ware['path'])
                 || str_starts_with((string)$ware['path'], $ware['kind'] === 'plugin' ? 'plugins/' : 'templates/') === false
                 || basename((string)$ware['path']) !== $ware['name']) {
                 continue; // junk in the window display — taken off the shelf
@@ -365,9 +366,18 @@ function stageFolder(array $ware, string $scratch): ?string
         if (!fetchRaw($ware, $rel, $base)) {
             return null;
         }
-        // the listing announced a size — the arrival answers for it
-        if ($size !== null && (int)@filesize($base . '/' . $rel) !== $size) {
+        // the arrival always answers for itself — announced size or counted truth
+        $arrived = (int)@filesize($base . '/' . $rel);
+        if ($size !== null && $arrived !== $size) {
             return null;
+        }
+        // a listing that hid the size (null) cannot dodge the roof either —
+        // the arrival's real bytes join the sum.
+        if ($size === null) {
+            $total += $arrived;
+            if ($total > FOLDER_BYTE_CAP) {
+                return null;
+            }
         }
     }
     return $staging;
@@ -438,6 +448,27 @@ function install(string $name): array
     // (rate limit, drift, truncation, a rogue name), the old one-zip packet
     // carries the whole branch as the fallback ride. ———
     $scratch = scratchDir();
+    // ONE KNIFE AT A TIME (2026-11-07, the audit): two simultaneous installs
+    // race the same shelf dir — the swap is atomic, the double-swap is not.
+    // Same named-flock law the core update rides under.
+    $knife = @fopen(__DIR__ . '/cache/wares.lock', 'c');
+    if ($knife === false || !@flock($knife, LOCK_EX | LOCK_NB)) {
+        if (is_resource($knife)) {
+            @fclose($knife);
+        }
+        partWith($scratch);
+        \Router\refuse(409, 'One knife at a time — a wares install is already on the table.');
+    }
+    // the knife rest: the blade unlocks and closes, the FILE stays (audit U3,
+    // fixed 2026-11-07 — the same laundering law the core lock learned): an
+    // unlinked lock file hands the next cook a fresh inode and a false mutex.
+    // Zero-byte dust in a writable cache is the honest price.
+    register_shutdown_function(static function () use ($knife): void {
+        if (is_resource($knife)) {
+            @flock($knife, LOCK_UN);
+            @fclose($knife);
+        }
+    });
     $wareDir = null;
     $staging = stageFolder($ware, $scratch);
     if ($staging !== null) {
@@ -579,6 +610,11 @@ function install(string $name): array
     }
     lockRecord($name, $ware, $incoming, array_map(fn($req) => \Chain\describe($req), $requiresParsed));
     partWith($scratch);
+    // the shelf changed mid-request — a plugin landing must not be answered
+    // from the scan memo's memory of the old shelf (the optimization pass)
+    if (($ware['kind'] ?? '') === 'plugin') {
+        \Plugins\forget();
+    }
     return ['ok' => true, 'name' => $name, 'kind' => $ware['kind'], 'version' => $incoming
         . ' — installed disabled; enable when you want it working.'];
 }

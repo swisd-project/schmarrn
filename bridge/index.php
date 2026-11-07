@@ -77,9 +77,13 @@ $isPublicApi = str_starts_with($path, 'public/');
 // ——— the blanko window, from the API head too (Apache bridges straight in
 // here): the operation itself ('core/…') stays reachable, everything else is
 // told the knife is out. The public plate is served by the root head. ———
-if (is_file(__DIR__ . '/cache/core-blank') && !str_starts_with($path, 'core')) {
+if (is_file(__DIR__ . '/cache/core-blank')) {
     require_once __DIR__ . '/core.php';
-    Router\refuse(503, \Core\blankoNote());
+    // the marker's TTL answers here too (audit U5) — a stale marker is swept
+    // at the read and the API walks on
+    if (\Core\blankKnives() && !str_starts_with($path, 'core')) {
+        Router\refuse(503, \Core\blankoNote());
+    }
 }
 
 header('Content-Type: application/json; charset=utf-8');
@@ -580,10 +584,9 @@ try {
             $ann = \Core\announce();
             echo json_encode([
                 'current' => \Core\version(),
-                                // the tag's vanity "v" stays at the door — the client compares
-                // this against the floor's bare number; a "v" here turns the
-                // verdict into an eternal "update available" (seen live, v1.2.1)
                 'latest' => $ann['latest'] !== null ? ltrim((string)$ann['latest'], 'v') : null,
+                'dashboard' => \Core\dashboardVersion(), // the face's own version — null = unmarked (counts stale)
+                'updatable' => \Core\updatable($ann), // the ONE verdict — the announce in hand, no second GitHub trip
                 'error' => (string)$ann['error'],
                 'localVersion' => \Core\peekPacket(\Core\LOCAL_PACKET),
             ], JSON_UNESCAPED_SLASHES);
@@ -1004,10 +1007,9 @@ try {
             if (Store\read($type, $slug) === null || Store\isDraft($type, $slug)) {
                 Router\refuse(404, "Page not found: {$type}/{$slug}");
             }
-            $bodyHtml = Cache\html($type, $slug);
-            if ($bodyHtml !== null && Cache\htmlStale($type, $slug)) {
-                $bodyHtml = null; // stale render is a lie — let the consumer re-render from raw
-            }
+            // Staleness first, body second (the optimization pass): a stale
+            // render costs the mtime peek only, never a wasted body read.
+            $bodyHtml = !Cache\htmlStale($type, $slug) ? Cache\html($type, $slug) : null;
             $children = [];
             foreach (Store\listAll()[$type] ?? [] as $sibling) {
                 if (($sibling['slug'] ?? '') !== $slug && !($sibling['draft'] ?? false)) {

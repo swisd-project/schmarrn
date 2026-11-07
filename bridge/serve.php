@@ -103,7 +103,8 @@ function themeDrawerHandles(): array
         }
         $label = is_string($handle['label'] ?? null) ? trim((string)$handle['label']) : '';
         $href = is_string($handle['href'] ?? null) ? trim((string)$handle['href']) : '';
-        if ($label === '' || $href === '' || !str_starts_with($href, '/')) {
+        if ($label === '' || $href === ''
+            || !str_starts_with($href, '/') || str_starts_with($href, '//') || str_contains($href, '\\')) {
             continue;
         }
         $out[] = ['label' => mb_substr($label, 0, 60), 'href' => $href, 'kind' => 'template'];
@@ -171,8 +172,9 @@ function page(string $type, string $slug, array $site): never
         echo fill($theme, $site, $title, $html, seoHead($title, $site['name'], "{$type}/{$slug}"), $slug, $type);
         exit;
     }
-    $html = \Cache\html($type, $slug);
-    if ($html !== null && !\Cache\htmlStale($type, $slug)) {
+    // Staleness first, body second (the optimization pass, 2026-11-07): a
+    // stale page costs the mtime peek only, never a wasted body read.
+    if (!\Cache\htmlStale($type, $slug) && ($html = \Cache\html($type, $slug)) !== null) {
         // The cache holds the BODY only — the theme wrap happens here, at serve
         // time, so theme and style switches apply to cached pages without a re-publish.
         $theme = themeTemplate($site, styleOf($type, $slug, $site));
@@ -198,12 +200,20 @@ function themeDir(array $site): string
     return __DIR__ . '/templates/' . $name;
 }
 
-/** The theme manifest, or [] when absent/broken — never a fatal for decoration data. */
+/** The theme manifest, or [] when absent/broken — never a fatal for decoration data.
+ *  Memoized per request (the optimization pass, 2026-11-07): styleOf asks per
+ *  page and the drawer asks again; theme.json never changes mid-request (a
+ *  theme switch rides Site\save + a fresh request). */
 function manifest(array $site): array
 {
-    $file = themeDir($site) . '/theme.json';
-    $manifest = is_file($file) ? json_decode((string)file_get_contents($file), true) : null;
-    return is_array($manifest) ? $manifest : [];
+    static $memo = [];
+    $dir = themeDir($site);
+    if (!array_key_exists($dir, $memo)) {
+        $file = $dir . '/theme.json';
+        $manifest = is_file($file) ? json_decode((string)file_get_contents($file), true) : null;
+        $memo[$dir] = is_array($manifest) ? $manifest : [];
+    }
+    return $memo[$dir];
 }
 
 /** Page style: frontmatter byte-peek wins, else the theme's declared default. */
@@ -259,32 +269,34 @@ HTML;
 
 /** Fill the theme template. Body HTML is trusted (walled pipeline); everything else escapes.
  *  Plugin content filters (p6 slice 2) transform the body first; plugin placeholders (p6)
- *  merge in last — manifest-declared only, values are the plugin's trusted HTML. */
+ *  merge in FIRST, core tokens AFTER — a core token structurally wins on any collision
+ *  (defense-in-depth, boundary audit B5, 2026-11-07: the manifest lid namespaces plugin
+ *  placeholders "<prefix>_", so no collision exists today; if one is ever speakable,
+ *  the core's own word is the one the page obeys). Values are the plugin's trusted HTML. */
 function fill(array $theme, array $site, string $title, string $bodyHtml, string $seoHead, string $currentSlug = '', string $type = ''): string
 {
     /** Plugin content filters (p6 slice 2) transform the stored body HTML — serve-time, live. */
     $bodyHtml = \Plugins\contentFilters(['site' => $site, 'type' => $type, 'slug' => $currentSlug, 'title' => $title], $bodyHtml);
-    $replacements = [
-        '{{siteName}}' => htmlspecialchars($site['name'], ENT_QUOTES),
-        '{{claim}}' => htmlspecialchars($site['claim'], ENT_QUOTES),
-        '{{claimHtml}}' => $site['claim'] === ''
-            ? ''
-            : '<p class="claim">' . htmlspecialchars($site['claim'], ENT_QUOTES) . '</p>',
-        '{{logoUrl}}' => htmlspecialchars(logoUrl($site['logo']), ENT_QUOTES),
-        '{{logoHtml}}' => $site['logo'] === ''
-            ? ''
-            : '<img class="logo" src="' . htmlspecialchars(logoUrl($site['logo']), ENT_QUOTES)
-                . '" alt="' . htmlspecialchars($site['name'], ENT_QUOTES) . '">',
-        '{{pageTitle}}' => htmlspecialchars($title, ENT_QUOTES),
-        '{{bodyHtml}}' => $bodyHtml,
-        '{{seoHead}}' => $seoHead,
-        '{{navHtml}}' => navHtml($site, $currentSlug),
-        '{{themeBase}}' => htmlspecialchars($theme['base'], ENT_QUOTES),
-        '{{year}}' => date('Y'),
-    ];
+    $replacements = [];
     foreach (\Plugins\placeholderFills(['site' => $site, 'type' => $type, 'slug' => $currentSlug, 'title' => $title]) as $token => $value) {
         $replacements[$token] = $value;
     }
+    $replacements['{{siteName}}'] = htmlspecialchars($site['name'], ENT_QUOTES);
+    $replacements['{{claim}}'] = htmlspecialchars($site['claim'], ENT_QUOTES);
+    $replacements['{{claimHtml}}'] = $site['claim'] === ''
+        ? ''
+        : '<p class="claim">' . htmlspecialchars($site['claim'], ENT_QUOTES) . '</p>';
+    $replacements['{{logoUrl}}'] = htmlspecialchars(logoUrl($site['logo']), ENT_QUOTES);
+    $replacements['{{logoHtml}}'] = $site['logo'] === ''
+        ? ''
+        : '<img class="logo" src="' . htmlspecialchars(logoUrl($site['logo']), ENT_QUOTES)
+            . '" alt="' . htmlspecialchars($site['name'], ENT_QUOTES) . '">';
+    $replacements['{{pageTitle}}'] = htmlspecialchars($title, ENT_QUOTES);
+    $replacements['{{bodyHtml}}'] = $bodyHtml;
+    $replacements['{{seoHead}}'] = $seoHead;
+    $replacements['{{navHtml}}'] = navHtml($site, $currentSlug);
+    $replacements['{{themeBase}}'] = htmlspecialchars($theme['base'], ENT_QUOTES);
+    $replacements['{{year}}'] = date('Y');
     return str_replace(array_keys($replacements), array_values($replacements), $theme['template']);
 }
 

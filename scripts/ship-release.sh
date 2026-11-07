@@ -20,8 +20,23 @@ cd "$(cd "$(dirname "$0")/.." && pwd)"
 
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || { echo "no tag $TAG here — cut it first" >&2; exit 1; }
 
+# the tag must confess the same version the floor carries (audit U9):
+# a mistyped tag stamps DASHBOARD-VERSION with a version the floor never
+# wears, and the repair verdict chases a phantom.
+COREV="$(tr -d ' \t\n\r' < bridge/CORE-VERSION)"
+if [ "$COREV" != "$VERSION" ]; then
+  echo "bridge/CORE-VERSION says '$COREV' but the tag says '$VERSION' — align them (bump, commit, tag) and ride again" >&2
+  exit 1
+fi
+PKGV="$(node -p "require('./package.json').version" 2>/dev/null || true)"
+if [ -n "$PKGV" ] && [ "$PKGV" != "$VERSION" ]; then
+  echo "package.json says '$PKGV' but the tag says '$VERSION' — align them and ride again" >&2
+  exit 1
+fi
+
 echo "— building the dashboard —"
 npm run build
+echo "$VERSION" > build/DASHBOARD-VERSION  # the face carries its own version — the repair law reads it
 
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT

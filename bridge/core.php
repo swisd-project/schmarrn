@@ -47,7 +47,9 @@ const RELEASES_URL = 'https://api.github.com/repos/swisd-project/schmarrn/releas
 const TAGS_URL = 'https://api.github.com/repos/swisd-project/schmarrn/tags?per_page=100';
 const PACKET_URL = 'https://codeload.github.com/swisd-project/schmarrn/zip/refs/tags/';
 const VERSION_FILE = __DIR__ . '/CORE-VERSION';
+const DASHBOARD_FILES = ['../build/DASHBOARD-VERSION', '../_/DASHBOARD-VERSION']; // repo layout, host layout
 const BLANK_FILE = __DIR__ . '/cache/core-blank';
+const BLANK_TTL = 300; // a marker older than the window is dust, not a knife (audit U5)
 const LOCAL_PACKET = __DIR__ . '/cache/core-packet.zip'; // a locally parked update
 const FILE_CAP = 3000; // the core's own roofs: entries and bytes
 const BYTE_CAP = 104857600; // 100 MB
@@ -59,6 +61,48 @@ function httpGet(string $url): ?string
         'https' => ['timeout' => 20, 'user_agent' => 'schmarrn-core/1.0']]);
     $bytes = @file_get_contents($url, false, $context);
     return $bytes === false ? null : $bytes;
+}
+
+/** Stream a URL into a file UNDER THE BYTE ROOF (audit U4): a mad or
+ *  malicious packet can no longer exhaust memory mid-download — the cap is
+ *  enforced mid-flight, the partial never reaches the shelf. null when the
+ *  depot is dark, the disk refuses, the stream dies, or the roof is jumped. */
+function fetchPacket(string $url, string $dest): ?int
+{
+    $context = stream_context_create(['http' => ['timeout' => 20, 'user_agent' => 'schmarrn-core/1.0'],
+        'https' => ['timeout' => 20, 'user_agent' => 'schmarrn-core/1.0']]);
+    $src = @fopen($url, 'rb', false, $context);
+    if ($src === false) {
+        return null;
+    }
+    $dst = @fopen($dest, 'wb');
+    if ($dst === false) {
+        @fclose($src);
+        return null;
+    }
+    $total = 0;
+    while (!feof($src)) {
+        $chunk = @fread($src, 65536);
+        if ($chunk === false || $chunk === '') {
+            break;
+        }
+        $total += strlen($chunk);
+        if ($total > BYTE_CAP) {
+            @fclose($src);
+            @fclose($dst);
+            @unlink($dest); // too heavy — it never lands
+            return null;
+        }
+        if (@fwrite($dst, $chunk) !== strlen($chunk)) {
+            @fclose($src);
+            @fclose($dst);
+            @unlink($dest);
+            return null;
+        }
+    }
+    @fclose($src);
+    @fclose($dst);
+    return $total > 0 ? $total : null; // an empty packet is no packet
 }
 
 /** A zip/phar entry name may name the repo only: no absolute, no climb, no dot tricks. */
@@ -111,24 +155,68 @@ function version(): string
 }
 
 /**
+ * The DASHBOARD's own version (2026-11-07): the face is not the floor — a rig
+ * can carry core 1.2.8 under a 1.2.5-era dashboard (the half-ride wound). The
+ * ship script stamps build/DASHBOARD-VERSION; unmarked builds answer null and
+ * count as stale, so the repair ride is always offered to a lagging face.
+ */
+function dashboardVersion(): ?string
+{
+    foreach (DASHBOARD_FILES as $rel) {
+        $raw = trim((string)@file_get_contents(__DIR__ . '/' . $rel));
+        if ($raw !== '' && preg_match('/^\d+(?:\.\d+){0,3}$/', $raw) === 1) {
+            return $raw;
+        }
+    }
+    return null;
+}
+
+/** The one update verdict, computed ONCE, server-side: may this core move?
+ *  newer floor → yes; equal floor with a lagging (or unmarked) face → the
+ *  repair ride; older → never. Takes the announce in hand when the caller
+ *  already fetched it (GET /bridge/core asks both — the memo saves the
+ *  second GitHub round-trip; the unauthenticated budget is 60/h). */
+function updatable(?array $ann = null): bool
+{
+    $ann ??= announce();
+    if ($ann['latest'] === null) {
+        return false;
+    }
+    $latest = ltrim((string)$ann['latest'], 'v');
+    $floor = version();
+    if (version_compare($latest, $floor) === 1) {
+        return true;
+    }
+    if (version_compare($latest, $floor) === 0) {
+        $face = dashboardVersion();
+        return $face === null || version_compare($latest, $face) === 1;
+    }
+    return false;
+}
+
+/**
  * The release's own packet URL: its zip asset — the only place a built
  * dashboard (build/) can travel in. A schmarrn-named zip wins; any other zip
  * is the floor; none → null (the codeload zipball takes over).
  */
 function assetIn(array $release): ?string
 {
-    $asset = null;
+    $anyZip = null;
+    $named = null;
     foreach (is_array($release['assets'] ?? null) ? $release['assets'] : [] as $a) {
         $name = is_string($a['name'] ?? null) ? strtolower((string)$a['name']) : '';
         $url = is_string($a['browser_download_url'] ?? null) ? (string)$a['browser_download_url'] : '';
         if ($url === '' || !str_ends_with($name, '.zip')) {
             continue; // not a packet — checksums, sigs, notes stay out
         }
-        if ($asset === null || str_contains($name, 'schmarrn')) {
-            $asset = $url;
+        if ($named === null && str_contains($name, 'schmarrn')) {
+            $named = $url; // the FIRST schmarrn-named zip wins (audit U6) — deterministic
+        }
+        if ($anyZip === null) {
+            $anyZip = $url;
         }
     }
-    return $asset;
+    return $named ?? $anyZip; // a schmarrn zip carries the face; any other zip is the floor
 }
 
 /**
@@ -145,23 +233,34 @@ function announce(): array
 {
     $tag = null;
     $asset = null;
-    $raw = httpGet(str_replace('/releases/latest', '/releases?per_page=100', RELEASES_URL));
-    if ($raw !== null) {
+    // the releases list, PAGED (audit U7): the semver max of a 100+ release
+    // history may live past page one. Walk FULL pages only — a short page is
+    // the definitive end of the line; ten pages is the safety rail.
+    $releasesBase = str_replace('/releases/latest', '/releases?per_page=100', RELEASES_URL);
+    for ($page = 1; $page <= 10; $page++) {
+        $raw = httpGet($releasesBase . '&page=' . $page);
+        if ($raw === null) {
+            break; // the depot went dark — what we hold is what we hold
+        }
         $list = json_decode((string)$raw, true);
-        if (is_array($list)) {
-            foreach ($list as $release) {
-                if (!is_array($release) || !is_string($release['tag_name'] ?? null)) {
-                    continue;
-                }
-                $name = (string)$release['tag_name'];
-                if (preg_match('/^v?(\d+(?:\.\d+){0,3})$/', $name) !== 1) {
-                    continue; // junk in the release hat — not a version
-                }
-                if ($tag === null || version_compare(ltrim($name, 'v'), ltrim($tag, 'v')) === 1) {
-                    $tag = $name;
-                    $asset = assetIn($release); // the winner's own asset, or null
-                }
+        if (!is_array($list) || $list === []) {
+            break;
+        }
+        foreach ($list as $release) {
+            if (!is_array($release) || !is_string($release['tag_name'] ?? null)) {
+                continue;
             }
+            $name = (string)$release['tag_name'];
+            if (preg_match('/^v?(\d+(?:\.\d+){0,3})$/', $name) !== 1) {
+                continue; // junk in the release hat — not a version
+            }
+            if ($tag === null || version_compare(ltrim($name, 'v'), ltrim($tag, 'v')) === 1) {
+                $tag = $name;
+                $asset = assetIn($release); // the winner's own asset, or null
+            }
+        }
+        if (count($list) < 100) {
+            break; // the last page — the whole history is in hand
         }
     }
 
@@ -348,6 +447,23 @@ function allPhp(string $dir): array
     return $out;
 }
 
+/** Recursively dust a directory the swap just hung — packet content, never a
+ *  user's land; the restore law uses it to take a wholesale dir back out. */
+function dustDir(string $dir): void
+{
+    if (!is_dir($dir)) {
+        return;
+    }
+    foreach (array_merge((array)glob($dir . '/*'), (array)glob($dir . '/.*')) as $item) {
+        $item = (string)$item;
+        if (basename($item) === '.' || basename($item) === '..') {
+            continue;
+        }
+        is_dir($item) ? dustDir($item) : @unlink($item);
+    }
+    @rmdir($dir);
+}
+
 /**
  * THE SWAP: wholesale dirs first (whole dir in, old whole out), NEW pagetypes
  * land under the merge law, then the named core files. Every replaced thing
@@ -365,9 +481,14 @@ function swap(string $staging, string $scratch): array
         $staged = (string)$candidate;
         break;
     }
-    $backups = []; // repo-relative => the old's scratch place
+    $backups = []; // repo-relative FILE => the old's scratch place
+    $dirBackups = []; // wholesale DIR => the old dir's scratch place (null when none existed)
     $files = []; // every swapped target — the opcache drops walk this
-    $restore = static function () use (&$backups, $root): void {
+    // THE TOTAL ROLLBACK (audit U-CLEAN): files AND wholesale dirs alike
+    // register in the restore scope — "one break rolls everything back" is
+    // the law this swap answers to, dirs included. The old vaults rest in
+    // the scratch until the restore or the success owns them.
+    $restore = static function () use (&$backups, &$dirBackups, $root): void {
         foreach (array_reverse(array_keys($backups)) as $rel) {
             $target = $root . '/' . $rel;
             $old = (string)$backups[$rel];
@@ -375,6 +496,16 @@ function swap(string $staging, string $scratch): array
                 @unlink($target);
             }
             @rename($old, $target);
+        }
+        foreach (array_reverse(array_keys($dirBackups)) as $dir) {
+            $target = $root . '/' . $dir;
+            $old = $dirBackups[$dir];
+            if (is_dir($target)) {
+                dustDir($target); // the new dir hung — packet dust, never user land
+            }
+            if (is_dir((string)$old)) {
+                @rename((string)$old, $target); // the old face returns whole
+            }
         }
     };
 
@@ -386,17 +517,20 @@ function swap(string $staging, string $scratch): array
         }
         $target = $root . '/' . $dir;
         $old = $scratch . '/dir-backup-' . str_replace('/', '-', $dir);
-        if (is_dir($target) && !@rename($target, $old)) {
+        $hadOld = is_dir($target);
+        if ($hadOld && !@rename($target, $old)) {
             $restore();
             return [[], 0, "the old '{$dir}' would not move — the swap is off, nothing lost"];
         }
         if (!@rename($src, $target)) {
-            if (is_dir($old)) {
+            if ($hadOld) {
                 @rename($old, $target);
             }
             $restore();
             return [[], 0, "the new '{$dir}' would not hang — the swap is off, nothing lost"];
         }
+        // the swap STOOD — the rollback owns it now (files and dirs, one law)
+        $dirBackups[$dir] = $hadOld ? $old : null;
         array_push($files, ...allPhp($target));
     }
 
@@ -461,7 +595,17 @@ function blankoOff(): void
 
 function blankKnives(): bool // a blade out, any swap loud? — the marker's answer
 {
-    return is_file(BLANK_FILE);
+    if (!is_file(BLANK_FILE)) {
+        return false;
+    }
+    // a marker older than the window is dust, not a knife (audit U5): a hard
+    // kill mid-update must not blank the site until a hand climbs FTP. The
+    // sweep happens at the read — and the read is everywhere the plate serves.
+    if (time() - (int)@filemtime(BLANK_FILE) > BLANK_TTL) {
+        @unlink(BLANK_FILE);
+        return false;
+    }
+    return true;
 }
 
 /**
@@ -581,21 +725,37 @@ function update(string $source = 'hub'): array
             \Router\refuse(502, (string)$ann['error']);
         }
         $latest = (string)$ann['latest'];
-        if (version_compare(ltrim($latest, 'v'), $from) !== 1) {
-            \Router\refuse(409, "The core is already on {$from} — the newest RELEASED version is {$latest}." . (version_compare(ltrim($latest, 'v'), $from) === -1 ? ' The floor outran the release line — cut the release for the version this host carries.' : ''));
+        $latestBare = ltrim($latest, 'v');
+        // the gate: strictly newer rides; an EQUAL floor rides as the REPAIR
+        // when the face lags (the half-ride ban guarantees the packet carries
+        // the dashboard) — older never rides, from either house
+        $face = dashboardVersion();
+        $repair = version_compare($latestBare, $from) === 0
+            && ($face === null || version_compare($latestBare, $face) === 1);
+        if (version_compare($latestBare, $from) !== 1 && !$repair) {
+            \Router\refuse(409, "The core is already on {$from} — the newest RELEASED version is {$latest}." . (version_compare($latestBare, $from) === -1 ? ' The floor outran the release line — cut the release for the version this host carries.' : ''));
         }
         $to = ltrim($latest, 'v'); // the announced word without the tag's vanity prefix
         $scratch = scratchDir();
         $packet = (string)($ann['packet'] ?? PACKET_URL . $latest); // the release's asset zip when it ships one
-        $bytes = httpGet($packet);
+        $packetPath = $scratch . '/packet.zip';
+        // streamed UNDER THE BYTE ROOF (audit U4) — the cap is enforced
+        // mid-flight; a mad asset can no longer exhaust memory mid-update
+        $bytes = fetchPacket($packet, $packetPath);
         if ($bytes === null) {
             partWith($scratch);
-            \Router\refuse(502, "The {$latest} packet would not leave the depot — the update is off.");
+            \Router\refuse(502, "The {$latest} packet would not come whole — the depot is dark, the cache refused, or it outweighs the " . BYTE_CAP . "-byte roof.");
         }
-        $packetPath = $scratch . '/packet.zip';
-        if (@file_put_contents($packetPath, $bytes) === false || strlen($bytes) === 0) {
+        // THE PACKET TRUTH GATE (audit U1): the packet's own CORE-VERSION is
+        // the truth, the announce is the advertisement — the same
+        // manifest-over-shelf law the wares pipeline answers to. A stale or
+        // mislabeled asset on a fresh release derates no floor on this watch.
+        $packetVer = peekPacket($packetPath);
+        if ($packetVer === null || version_compare($packetVer, $to) !== 0) {
             partWith($scratch);
-            \Router\refuse(500, 'The packet could not be held — the cache dir may be unwritable.');
+            \Router\refuse(502, "The {$latest} packet does not confess its own version"
+                . ($packetVer === null ? ' — no readable bridge/CORE-VERSION in it' : " (it says {$packetVer})")
+                . ' — attach the asset built from that tag and ride again.');
         }
     }
     $scratch = $scratch ?? scratchDir(); // the local ride stages its tomb on demand
@@ -604,7 +764,11 @@ function update(string $source = 'hub'): array
     if ($lock === false || !@flock($lock, LOCK_EX | LOCK_NB)) {
         if (is_resource($lock)) {
             @fclose($lock);
-            @unlink(__DIR__ . '/cache/core.lock');
+            // NEVER unlink the lock file (audit U2): a refused waiter that
+            // deletes the file launders the mutex out from under the holder —
+            // the next arrival flocks a fresh inode and a SECOND update rides
+            // beside the first. The knife file stays: zero-byte dust in a
+            // writable cache, harmless and honest.
         }
         \Router\refuse(409, 'One knife at a time — a core update is already on the table.');
     }
@@ -619,7 +783,10 @@ function update(string $source = 'hub'): array
             @flock($lock, LOCK_UN);
             @fclose($lock);
         }
-        @unlink(__DIR__ . '/cache/core.lock'); // the knife rest leaves no name
+        // the lock FILE stays by the same law (audit U2) — unlinking it in
+        // the window between the release and the next waiter's flock hands
+        // two knives to two cooks. The name outlives the blade; that is the
+        // honest price of a mutex that cannot be laundered.
     });
 
     [$staged, $entries, $stagedBytes] = stageCore($packetPath, $scratch);
@@ -634,13 +801,26 @@ function update(string $source = 'hub'): array
 
     // did the packet carry the dashboard? read it BEFORE the swap — the
     // wholesale law renames the staged build/ into place, and a post-swap
-    // peek would stare at an empty closet
-    $top = '';
+    // peek would stare at an empty closet. A flat staging (no top dir)
+    // reads from its own root — the same tolerance swap() carries (audit U8).
+    $top = $staged;
     foreach ((array)glob($staged . '/*', GLOB_ONLYDIR) ?: [] as $candidate) {
         $top = (string)$candidate;
         break;
     }
-    $dashboard = $top !== '' && is_file($top . '/build/index.html');
+    $dashboard = is_file($top . '/build/index.html');
+
+    // THE HALF-RIDE BAN (2026-11-07, the law the books carried and the code
+    // failed to enforce — the rig rode 1.2.7 → 1.2.8 dashboard-less and the
+    // operator paid for it): the floor does NOT move without the face. A
+    // packet without the dashboard is refused before the knife ever leaves
+    // the drawer — no blanko, no swap, no half-state. The repair is the
+    // release's asset zip (scripts/ship-release.sh), attached or parked.
+    if (!$dashboard) {
+        partWith($scratch);
+        \Router\refuse(409, 'The packet carries no dashboard — the floor does not move without the face. '
+            . 'Attach the release asset zip (scripts/ship-release.sh) to the release on GitHub — or park it here — and ride again.');
+    }
 
     // === the knife is out — the site eats the blank plate from here on ===
     blankoOn();
@@ -673,9 +853,8 @@ function update(string $source = 'hub'): array
         'source' => $source,
         'entries' => count($files),
         'newPagetypes' => $pagetypes,
-        'dashboard' => $dashboard, // the face moved with the body?
+        'dashboard' => $dashboard, // always true on success — the half-ride ban refuses the rest
         'note' => "The core is on {$doneTo} now" . $repair
-            . ($pagetypes > 0 ? " — {$pagetypes} new pagetype shells added" : '')
-            . ($dashboard ? '' : ' — but the packet carried no dashboard; a release asset zip (scripts/ship-release.sh) moves the face too') . '.',
+            . ($pagetypes > 0 ? " — {$pagetypes} new pagetype shells added" : '') . '.',
     ];
 }

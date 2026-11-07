@@ -41,9 +41,23 @@ function stateFile(): string
  * intent (the state file's switches)] — the raw material all() dresses and
  * effective() derives from. No derivation here: all() calls this once and
  * decorates; effective() reuses the map without recursing into all().
+ *
+ * MEMOIZED per request (the optimization pass, 2026-11-07): one public page
+ * serve used to run this up to FIVE times (load() once, contentFilters()
+ * and placeholderFills() each asking all() + effective()) — each pass a
+ * fresh scandir + json_decode of every manifest. Mutations forget via
+ * forget(); setState() and a mid-request wares install call it.
  */
-function scan(): array
+function scan(bool $wipe = false): array
 {
+    static $memo = null;
+    if ($wipe) {
+        $memo = null; // forget()'s word — the next call re-reads the shelf
+        return [];
+    }
+    if ($memo !== null) {
+        return $memo;
+    }
     $state = enabled();
     $plugins = [];
     $map = [];
@@ -71,7 +85,14 @@ function scan(): array
         $plugins[] = [...$clean, 'enabled' => $state[$name] ?? false];
     }
     usort($plugins, fn($a, $b) => strcmp((string)$a['name'], (string)$b['name']));
-    return [$plugins, $map, $state];
+    return $memo = [$plugins, $map, $state];
+}
+
+/** Drop the scan memo — the shelf changed under it (state write, wares
+ *  install). The next scan re-reads the truth from disk. */
+function forget(): void
+{
+    scan(true); // the boolean is the wipe word
 }
 
 /**
@@ -159,10 +180,14 @@ function validate(string $name, array $manifest): array|string
     }
     $requires = array_map(fn($req) => \Chain\describe($req), $requiresParsed);
 
-    // Placeholders: namespaced by law — every placeholder must start with "<name>_".
+    // Placeholders: namespaced by law — every placeholder must start with the
+    // plugin's UNDERSCORED prefix (the fill function answers as
+    // plugin_<prefix>_placeholders, so the manifest gate must speak the same
+    // alphabet: the dashed `$name` gate made dashed-name plugins' placeholders
+    // structurally unspeakable — boundary audit, fixed 2026-11-07).
     $placeholders = [];
     foreach ((array)($caps['placeholders'] ?? []) as $ph) {
-        if (is_string($ph) && str_starts_with($ph, $name . '_') && preg_match('/^[a-z0-9_]+$/', $ph) === 1) {
+        if (is_string($ph) && str_starts_with($ph, prefix($name) . '_') && preg_match('/^[a-z0-9_]+$/', $ph) === 1) {
             $placeholders[] = $ph;
         }
     }
@@ -229,7 +254,9 @@ function validate(string $name, array $manifest): array|string
     // Drawer handles (2026-11-07, user law): quality-of-life edit handles the
     // admin drawer's retail band carries. Manifest-declared {label, href} —
     // label ≤ 60 chars, href root-relative (plugin routes live at
-    // /bridge/plugin/<name>/<route>) or absolute http(s). Everything foreign
+    // /bridge/plugin/<name>/<route>) or absolute http(s). A protocol-relative
+    // `//host` is an absolute in drag and browsers read `/\host` the same way —
+    // both refused (boundary audit B4, fixed 2026-11-07). Everything foreign
     // is refused here; eight handles per plugin is already a crowd.
     $drawer = [];
     foreach ((array)($caps['drawer'] ?? []) as $handle) {
@@ -241,7 +268,8 @@ function validate(string $name, array $manifest): array|string
         if ($label === '' || $href === '') {
             continue;
         }
-        if (str_starts_with($href, '/') || preg_match('#^https?://#i', $href) === 1) {
+        if (str_starts_with($href, '/') && !str_starts_with($href, '//') && !str_contains($href, '\\')
+            || preg_match('#^https?://#i', $href) === 1) {
             $drawer[] = ['label' => mb_substr($label, 0, 60), 'href' => $href];
         }
         if (count($drawer) >= 8) {
@@ -319,6 +347,7 @@ function setState(array $enabled): void
     if (function_exists('opcache_invalidate')) {
         opcache_invalidate(stateFile(), true);
     }
+    forget(); // the switches moved — no memo may remember the old intent
 }
 
 /** Load every EFFECTIVE plugin's code — the chain law's serve-time face: a
@@ -459,7 +488,12 @@ function dispatch(string $name, string $route, string $method): never
         @error_log("[schmarrn-plugins] '{$name}/{$route}' failed: {$e->getMessage()}");
         \Router\refuse(500, 'That plugin burned on the route.');
     }
-    http_response_code(is_array($result) && isset($result['_status']) ? (int)$result['_status'] : 200);
+    // A handler may return dough (a string, null, whatever): it answers JSON,
+    // never a fatal. _status is read only off arrays.
+    if (!is_array($result)) {
+        $result = ['body' => $result];
+    }
+    http_response_code(isset($result['_status']) ? (int)$result['_status'] : 200);
     unset($result['_status']);
     echo json_encode($result, JSON_UNESCAPED_SLASHES);
     exit;

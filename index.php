@@ -20,18 +20,23 @@ $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 // load except the operation itself (/bridge/core…) answers with a blank
 // plate — a first load during the swap never sees a half-swapped 404. Public
 // site and dashboard shell eat the plate; the API answers 503 JSON. ———
-if (is_file(__DIR__ . '/bridge/cache/core-blank') && !str_starts_with($path, '/bridge/core')) {
+if (is_file(__DIR__ . '/bridge/cache/core-blank')) {
     require_once __DIR__ . '/bridge/core.php';
-    if (str_starts_with($path, '/bridge/')) {
+    // the marker's own TTL answers here (audit U5): a hard kill mid-update
+    // never blanks the site until a hand climbs FTP — a stale marker is
+    // swept at the read and the request walks on, un-blanked.
+    if (\Core\blankKnives() && !str_starts_with($path, '/bridge/core')) {
+        if (str_starts_with($path, '/bridge/')) {
+            http_response_code(503);
+            header('Content-Type: application/json');
+            header('Retry-After: 30');
+            exit(json_encode(['error' => \Core\blankoNote()]));
+        }
         http_response_code(503);
-        header('Content-Type: application/json');
+        header('Content-Type: text/html; charset=utf-8');
         header('Retry-After: 30');
-        exit(json_encode(['error' => \Core\blankoNote()]));
+        exit(\Core\blanko());
     }
-    http_response_code(503);
-    header('Content-Type: text/html; charset=utf-8');
-    header('Retry-After: 30');
-    exit(\Core\blanko());
 }
 
 // ——— /bridge/* always belongs to the JSON core, real file or not. The three
@@ -119,8 +124,22 @@ if ($path !== '/') {
         if (str_starts_with($rel, 'bridge/templates/') || str_starts_with($rel, 'bridge/assets/')
             || str_starts_with($rel, '_app/')
             || preg_match('#^bridge/plugins/[a-z0-9-]+/assets/#', $rel) === 1) {
-            if (PHP_SAPI === 'cli-server' && !$fromBuild) {
-                return false; // php -S serves it with proper MIME
+            // Ware-authored active documents (SVG/HTML in a theme's or a
+            // plugin's assets — boundary audit B8, 2026-11-07) ride the media
+            // sandbox law: a direct hit executes nothing on this origin, and
+            // the file stays a perfectly good <img>/CSS/JS source. Core-owned
+            // assets are trusted and stay free. These stream by hand EVEN on
+            // php -S: `return false` hands the file back but DISCARDS every
+            // router-set header — the sandbox would ride off the response
+            // (proven with a live probe against the built-in server).
+            $sandboxed = (str_ends_with($rel, '.svg') || str_ends_with($rel, '.html'))
+                && (str_starts_with($rel, 'bridge/templates/')
+                    || preg_match('#^bridge/plugins/[a-z0-9-]+/assets/#', $rel) === 1);
+            if (PHP_SAPI === 'cli-server' && !$fromBuild && !$sandboxed) {
+                return false; // php -S serves it with proper MIME, no custom headers needed
+            }
+            if ($sandboxed) {
+                header('Content-Security-Policy: default-src \'none\'; style-src \'unsafe-inline\'; sandbox');
             }
             // Streamed by hand: exotic SAPIs without rewrite, and anything resolved
             // out of build/ (php -S can't serve what isn't at the path it knows).

@@ -37,6 +37,12 @@ RewriteRule ^bridge(/|$) index.php [L]
 # would serve stale decks/themes after an FTP update.
 <IfModule mod_headers.c>
   Header set Cache-Control "max-age=3600, must-revalidate" "expr=%{REQUEST_URI} =~ m#^/?(bridge/assets|bridge/templates)/# || %{REQUEST_URI} =~ m#^/?bridge/plugins/[a-z0-9-]+/assets/#"
+  # Ware-authored active documents (an SVG or HTML riding in a theme's or a
+  # plugin's assets — boundary audit B8, 2026-11-07) ride the media sandbox
+  # law: a direct hit renders as a document but executes nothing on this
+  # origin — no script, no same-origin reach. The file stays a perfectly good
+  # <img>, CSS or JS source; core-owned assets are trusted and stay free.
+  Header set Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; sandbox" "expr=(%{REQUEST_URI} =~ m#^/?bridge/templates/# || %{REQUEST_URI} =~ m#^/?bridge/plugins/[a-z0-9-]+/assets/#) && %{REQUEST_URI} =~ m#\.(svg|html)$#"
   # Public-page header law. The API sets its own in PHP — scoped out here so
   # headers never double up. `set` (not `always`) keeps one value per table.
   Header set X-Content-Type-Options "nosniff"

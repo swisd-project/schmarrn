@@ -39,18 +39,53 @@ function assertIdentifier(string $value, string $what): void
     }
 }
 
+// ——— request-local memos (the optimization pass, 2026-11-07): the serve
+// path read the SAME page file four times per request (existence, draft
+// sniff, style peek, title peek) and the nav read every sibling once more;
+// listAll ran twice per request when no home slug was set. The memos live
+// ONE request; every mutator forgets them (below) — no staleness window. ———
+
+/** Drop the request-local memos — every mutator calls this before it answers. */
+function forget(): void
+{
+    $reads = &readMemo();
+    $reads = [];
+    $lists = &listMemo();
+    $lists = [];
+}
+
+/** @internal the read memo's storage, BY REFERENCE — forget() wipes it. */
+function &readMemo(): array
+{
+    static $memo = [];
+    return $memo;
+}
+
+/** @internal the listAll memo's storage, BY REFERENCE — forget() wipes it. */
+function &listMemo(): array
+{
+    static $memo = [];
+    return $memo;
+}
+
 /** All pages: {type: [{slug, updatedAt, draft}...]} — existence is truth.
  *  PHP only regex-sniffs the draft flag (no Markdown parsing, byte-peek discipline).
- *  hasDraft tells the dashboard an unpublished editorial copy (.draft.md) is sitting there. */
+ *  hasDraft tells the dashboard an unpublished editorial copy (.draft.md) is sitting there.
+ *  Memoized per request per auth view; forget() clears it on every mutation. */
 function listAll(): array
 {
+    $includeDrafts = \Auth\check();
+    $view = (int)$includeDrafts;
+    $memo = &listMemo();
+    if (array_key_exists($view, $memo)) {
+        return $memo[$view];
+    }
     $result = [];
     foreach (scandir(root()) ?: [] as $type) {
         $typeDir = root() . '/' . $type;
         if (!is_dir($typeDir) || str_starts_with($type, '.')) {
             continue;
         }
-        $includeDrafts = \Auth\check();
         $pages = [];
         foreach (scandir($typeDir) ?: [] as $slug) {
             $file = $typeDir . '/' . $slug . '/index.md';
@@ -58,6 +93,10 @@ function listAll(): array
                 continue;
             }
             $raw = (string)file_get_contents($file);
+            // prime the read memo with bytes already in hand — the nav's
+            // title peeks then cost nothing (the optimization pass)
+            $reads = &readMemo();
+            $reads[$type . '/' . $slug] = $raw;
             $draft = preg_match('/^draft:\s*true\b/m', $raw) === 1;
             if ($draft && !$includeDrafts) {
                 continue;
@@ -72,6 +111,7 @@ function listAll(): array
         usort($pages, fn($a, $b) => $a['slug'] <=> $b['slug']);
         $result[$type] = $pages;
     }
+    $memo[$view] = $result;
     return $result;
 }
 
@@ -82,14 +122,24 @@ function isDraft(string $type, string $slug): bool
     return $raw !== null && preg_match('/^draft:\s*true\b/m', $raw) === 1;
 }
 
+/** One page's raw bytes — memoized per request (the serve path asks up to
+ *  four times: existence, draft sniff, style peek, title peek; the nav asks
+ *  once per sibling). Mutators forget via forget(). */
 function read(string $type, string $slug): ?string
 {
+    $memo = &readMemo();
+    $key = $type . '/' . $slug;
+    if (array_key_exists($key, $memo)) {
+        return $memo[$key];
+    }
     $file = pageDir($type, $slug) . '/index.md';
     if (!is_file($file)) {
+        $memo[$key] = null;
         return null;
     }
     $raw = file_get_contents($file);
-    return $raw === false ? null : $raw;
+    $memo[$key] = $raw === false ? null : $raw;
+    return $memo[$key];
 }
 
 // ——— editorial copy: .draft.md sits beside index.md, dot-prefixed so listings never trip on it ———
@@ -140,6 +190,7 @@ function writeDraft(string $type, string $slug, string $raw, ?string $baseHash =
         @unlink($tmp);
         \Router\refuse(500, 'The draft fell into the batter — write failed.');
     }
+    forget(); // the sidecar changes listAll's hasDraft — the memo answers stale otherwise
     return hash('sha256', $raw);
 }
 
@@ -164,6 +215,7 @@ function publish(string $type, string $slug): void
         \Router\refuse(500, 'The publish collapsed in the oven.');
     }
     @unlink($draft);
+    forget(); // index.md just changed under the memo's nose
 }
 
 /** Unpublish: current published copy becomes the editorial copy; index.md is flagged draft (hidden). */
@@ -230,6 +282,7 @@ function remove(string $type, string $slug): void
     if (!@rmdir($dir)) {
         Router\refuse(500, "Cannot delete page dir: {$type}/{$slug}");
     }
+    forget(); // the page is gone — no memo may remember it
 }
 
 /** Rename: move the page dir to a new slug. Content untouched, both caches dropped by caller.
@@ -249,6 +302,7 @@ function move(string $type, string $slug, string $newSlug): void
     if (!@\rename($from, $to)) {
         \Router\refuse(500, 'Rename burned on the stove — the page is untouched.');
     }
+    forget(); // both keys moved — the memo remembers neither
 }
 
 // ——— page-local media: immutable uploads beside index.md, referenced by filename ———
@@ -411,6 +465,7 @@ function write(string $type, string $slug, string $raw): void
         @unlink($tmp);
         \Router\refuse(500, 'The write came out raw — try again.');
     }
+    forget(); // fresh bytes on disk — the memo must not answer from memory
 }
 
 function assertNonEmpty(string $raw): void

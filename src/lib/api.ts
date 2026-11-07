@@ -304,6 +304,8 @@ export function deleteTemplate(name: string): Promise<{ ok: boolean; name: strin
 export interface CoreStatus {
   readonly current: string;
   readonly latest: string | null;
+  readonly dashboard?: string | null;
+  readonly updatable?: boolean;
   readonly localVersion?: string | null;
   readonly error?: string;
 }

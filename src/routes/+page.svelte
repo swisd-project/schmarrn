@@ -560,7 +560,7 @@
   }
 
   // ——— the core's self-update (admin, part of "Plugins & Templates") ———
-  let core = $state<{ current: string; latest: string | null; error: string; localVersion: string | null } | null>(null);
+  let core = $state<{ current: string; latest: string | null; error: string; localVersion: string | null; updatable: boolean; dashboard: string | null } | null>(null);
   let coreBusy = $state(false);
   let coreError = $state('');
   let coreNote = $state('');
@@ -579,10 +579,11 @@
     return false;
   }
 
-  // ——— the updates verdicts (below the state they read) ———
+  // ——— the updates verdicts (the SERVER's word — one law, one place: newer
+  // floor, or equal floor with a lagging face — the client only displays it) ———
   const templateUpdates = $derived(vitrine.filter((w) => w.kind === 'template' && w.state === 'update' && w.missing.length === 0));
   const pluginUpdates = $derived(vitrine.filter((w) => w.kind === 'plugin' && w.state === 'update' && w.missing.length === 0));
-  const coreUpdateAvailable = $derived(core !== null && core.latest !== null && versionGreater(core.latest, core.current));
+  const coreUpdateAvailable = $derived(core !== null && core.updatable);
   const updatesAvailable = $derived(coreUpdateAvailable || templateUpdates.length > 0 || pluginUpdates.length > 0);
   // the preview's mannequin: the tree's first page wears whichever theme you fit it in
   const previewSlug = $derived((index?.['pages'] ?? [])[0]?.slug ?? '');
@@ -593,7 +594,7 @@
     coreError = '';
     try {
       const st = await coreStatus();
-      core = { current: st.current, latest: st.latest, error: st.error ?? '', localVersion: st.localVersion ?? null };
+      core = { current: st.current, latest: st.latest, error: st.error ?? '', localVersion: st.localVersion ?? null, updatable: st.updatable === true, dashboard: st.dashboard ?? null };
     } catch (e) {
       coreError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -1470,14 +1471,14 @@
               <div class="min-w-0">
                 <p class="m-0 font-bold">
                   Schmarrn core <span class="text-xs text-ink-soft">
-                    {#if coreUpdateAvailable}v{core.current} → v{core.latest}{:else if core.localVersion}v{core.current} — packet v{core.localVersion} parked{:else}v{core.current}{/if}
+                    {#if coreUpdateAvailable && core.latest !== null && core.latest !== core.current}v{core.current} → v{core.latest}{:else if coreUpdateAvailable}v{core.current} — the dashboard lags the floor: repair ride{:else if core.localVersion}v{core.current} — packet v{core.localVersion} parked{:else}v{core.current}{/if}
                   </span>
                 </p>
                 <p class="m-0 text-xs text-ink-soft">Core files only — plugins, templates, dressed pagetypes and your settings never move. Visitors see a blank page while the knife is out.</p>
               </div>
               {#if coreUpdateAvailable}
                 <button class="btn btn-secondary shrink-0" disabled={updatesBusy || coreBusy} onclick={() => updateCoreNow('hub')}>
-                  {#if updatesBusy || coreBusy}…{:else}Core update → {core.latest}{/if}
+                  {#if updatesBusy || coreBusy}…{:else if core.latest !== null && core.latest !== core.current}Core update → {core.latest}{:else}Repair the dashboard{/if}
                 </button>
               {/if}
               {#if core.localVersion}

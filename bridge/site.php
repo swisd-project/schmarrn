@@ -30,9 +30,19 @@ function configFile(): string
     return __DIR__ . '/config/site.local.php';
 }
 
-/** Merged settings: template < local. Unknown keys ignored — the contract is the array. */
-function load(): array
+/** Merged settings: template < local. Unknown keys ignored — the contract is the array.
+ *  MEMOIZED per request (the optimization pass, 2026-11-07): the serve path
+ *  asks 2-3 times per request; save() forgets the memo — the only writer. */
+function load(bool $wipe = false): array
 {
+    static $memo = null;
+    if ($wipe) {
+        $memo = null; // forget()'s word — the next call re-reads both files
+        return [];
+    }
+    if ($memo !== null) {
+        return $memo;
+    }
     $settings = DEFAULTS;
     $template = is_file(__DIR__ . '/config/site.php') ? (array)(require __DIR__ . '/config/site.php') : [];
     foreach (KEYS as $key) {
@@ -48,7 +58,13 @@ function load(): array
             }
         }
     }
-    return $settings;
+    return $memo = $settings;
+}
+
+/** Drop the load() memo — save() calls it; the settings just changed on disk. */
+function forget(): void
+{
+    load(true); // the boolean is the wipe word
 }
 
 /** Write the local settings file (var_export — data, never code). */
@@ -72,6 +88,7 @@ function save(array $settings): void
     if (function_exists('opcache_invalidate')) {
         opcache_invalidate(configFile(), true);
     }
+    forget(); // the settings changed — no memo may serve the old site
 }
 
 // ——— site-level assets (the logo's home): src/content/.assets/ — a dot-dir,

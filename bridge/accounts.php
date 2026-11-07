@@ -35,16 +35,27 @@ function storePath(): string
     return is_file(realPath()) ? realPath() : templatePath();
 }
 
-/** Normalize the accounts map (numbered arrays, missing roles). Never leaks file errors to the caller. */
-function all(): array
+/** Normalize the accounts map (numbered arrays, missing roles). Never leaks file errors to the caller.
+ *  MEMOIZED per request (the optimization pass, 2026-11-07): Auth\check()
+ *  asks the store 3-4 times per request and every ask re-required the file;
+ *  save() forgets the memo — the only writer. */
+function all(bool $wipe = false): array
 {
+    static $memo = null;
+    if ($wipe) {
+        $memo = null; // forget()'s word — the next call re-reads the store
+        return [];
+    }
+    if ($memo !== null) {
+        return $memo;
+    }
     try {
         $accounts = require storePath();
     } catch (\Throwable) {
-        return [];
+        return $memo = [];
     }
     if (!is_array($accounts)) {
-        return [];
+        return $memo = [];
     }
     $clean = [];
     foreach ($accounts as $user => $record) {
@@ -73,7 +84,13 @@ function all(): array
         } catch (\Throwable) {
         }
     }
-    return $clean;
+    return $memo = $clean;
+}
+
+/** Drop the all() memo — save() calls it; the store just changed on disk. */
+function forget(): void
+{
+    all(true); // the boolean is the wipe word
 }
 
 /** Persist atomically about as defensively as Store\write does. */
@@ -98,6 +115,7 @@ function save(array $accounts): void
     if (function_exists('opcache_invalidate')) {
         @opcache_invalidate($target, true);
     }
+    forget(); // the store changed — no memo may serve the old accounts
 }
 
 function assertKnownRole(string $role): void

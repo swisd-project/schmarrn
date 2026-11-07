@@ -95,4 +95,5 @@
 │   ├── GOSPEL.md                 # the law
 │   ├── BACKLOG.md                # the ledger
 │   ├── GUIDE.md                  # the kinks
+│   ├── guardrails.md             # the pipeline guardrails (wares + update cycle, flowcharts, audit)
 │   └── FILETREE.md               # this sanity check
