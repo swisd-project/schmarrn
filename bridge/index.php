@@ -306,7 +306,11 @@ try {
             if (!Auth\isAdmin()) {
                 Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
             }
-            echo json_encode(Site\load());
+            $settings = Site\load();
+            // The theme handles ride along: the active theme's declared knobs
+            // with their effective value (the stored override, else the default).
+            $settings['handles'] = \Serve\handlesFor($settings);
+            echo json_encode($settings);
             break;
 
         case $method === 'PUT' && $path === 'site':
@@ -333,6 +337,39 @@ try {
             }
             if ($settings['home'] !== '' && preg_match('#^[a-z0-9]+(?:-[a-z0-9]+)*$#', $settings['home']) !== 1) {
                 Router\refuse(400, 'The home slice needs a slug — or an empty plate.');
+            }
+            // ——— the theme handles: a PATCH over the active theme's stored
+            // ——— overrides. A value sets a handle, an EMPTY value resets it
+            // ——— (back to the theme's default), an absent handle stands.
+            // ——— Only DECLARED handles are honored; the theme's word is the
+            // ——— contract. ———
+            $handles = $body['handles'] ?? null;
+            if (is_array($handles)) {
+                $stored = is_array($settings['styles'][$settings['theme']] ?? null)
+                    ? $settings['styles'][$settings['theme']]
+                    : [];
+                foreach (\Serve\themeHandles($settings) as $handle) {
+                    if (!array_key_exists($handle['var'], $handles)) {
+                        continue; // not on the tray — the stored value stands
+                    }
+                    $value = $handles[$handle['var']];
+                    if (!is_string($value)) {
+                        continue;
+                    }
+                    $value = trim($value);
+                    if ($value === '') {
+                        unset($stored[$handle['var']]); // empty = back to the default
+                        continue;
+                    }
+                    if (!\Serve\validHandleValue($handle['type'], $value)) {
+                        Router\refuse(400, "The handle {$handle['var']} refuses that value.");
+                    }
+                    $stored[$handle['var']] = $value;
+                }
+                $settings['styles'] = array_merge(
+                    is_array($settings['styles'] ?? null) ? $settings['styles'] : [],
+                    [$settings['theme'] => $stored]
+                );
             }
             Site\save($settings);
             echo json_encode(['ok' => true]);
@@ -455,6 +492,22 @@ try {
             echo json_encode(['ok' => true]);
             break;
 
+        // ——— plugin deletion (2026-11-10, user order): the shelf loses it. ———
+        // No plugin is undeletable — the preinstalled default (hello) goes
+        // like any other; the house-default law is a TEMPLATE law.
+        case $method === 'POST' && $path === 'plugin/delete':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $name = is_string($body['name'] ?? null) ? $body['name'] : '';
+            echo json_encode(Wares\removePlugin((string)$name), JSON_UNESCAPED_SLASHES);
+            break;
+
         // ——— page types (p6-era UX): pre-made, fillable scaffolds from pagetypes/ ———
         case $method === 'GET' && $path === 'pagetypes':
             if (!Auth\check()) {
@@ -552,6 +605,9 @@ try {
             if (!Auth\isAdmin()) {
                 Router\refuse(403, 'Admins only — the fitting room is not for strangers.');
             }
+            // The fitting room answers a PAGE, not the API's JSON (2026-11-10):
+            // the theme preview is a dressed page, so the door says so.
+            header('Content-Type: text/html; charset=utf-8');
             [, $themeName, $type, $slug] = explode('/', $path);
             if (!is_file(__DIR__ . '/templates/' . $themeName . '/theme.json')) {
                 Router\refuse(404, "No such theme: {$themeName}");
@@ -640,7 +696,10 @@ try {
                     'version' => is_string($manifest['version'] ?? null) ? $manifest['version'] : '0.0.0',
                     'description' => is_string($manifest['description'] ?? null) ? $manifest['description'] : '',
                     'styles' => (array)($manifest['styles'] ?? []),
+                    'defaultStyle' => is_string($manifest['defaultStyle'] ?? null) ? $manifest['defaultStyle'] : '',
+                    'default' => $name === \Site\DEFAULTS['theme'],
                     'active' => $activeTheme === $name,
+                    'preview' => \Serve\themePreview($name), // the shelf image, or null
                 ];
             }
             usort($wares, fn($a, $b) => strcmp((string)$a['name'], (string)$b['name']));
@@ -773,7 +832,14 @@ try {
         case $method === 'GET' && $path === 'pages':
             // Public listing for strangers (drafts filtered inside), full tree for editors.
             // The home page wears its crown (2026-11-07): the desk refuses to delete it.
+            // Titles ride with the index (2026-11-10, closes the BACKLOG item): titleOf
+            // is a memo hit — listAll primed it with the bytes already in hand.
             $tree = Store\listAll();
+            foreach ($tree as $type => $pages) {
+                foreach ($pages as $i => $p) {
+                    $tree[$type][$i]['title'] = Serve\titleOf((string)$type, (string)$p['slug'], (string)$p['slug']);
+                }
+            }
             $home = \Serve\homeSlug(\Site\load());
             if ($home !== '' && isset($tree['pages'])) {
                 foreach ($tree['pages'] as $i => $p) {
@@ -783,6 +849,19 @@ try {
                 }
             }
             echo json_encode($tree, JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'GET' && $path === 'search':
+            // The Contents desk's needle: authed only — it reads drafts. A byte
+            // search over the editorial copies, the listAll shape back.
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            $q = is_string($_GET['q'] ?? null) ? trim((string)$_GET['q']) : '';
+            if ($q === '') {
+                Router\refuse(400, 'The search needs a needle — q cannot be empty.');
+            }
+            echo json_encode(Store\search($q), JSON_UNESCAPED_SLASHES);
             break;
 
         // ——— edit locks: heartbeat in warm, silence and polite exit free ———

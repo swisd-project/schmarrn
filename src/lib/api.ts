@@ -14,6 +14,7 @@ export interface PageRef {
   readonly draft?: boolean;
   readonly hasDraft?: boolean;
   readonly home?: boolean;
+  readonly tags?: readonly string[];
 }
 export type PageIndex = Readonly<Record<string, readonly PageRef[]>>;
 
@@ -48,6 +49,12 @@ async function json<T>(res: Response): Promise<T> {
 
 export function pageCount(): Promise<PageIndex> {
   return fetch('/bridge/pages').then((r) => json<PageIndex>(r));
+}
+
+/** The Contents desk's text search — authed (it reads drafts), a byte search
+ *  over the editorial copies server-side; the same grouped shape as pageCount. */
+export function searchPages(q: string): Promise<PageIndex> {
+  return fetch(`/bridge/search?q=${encodeURIComponent(q)}`).then((r) => json<PageIndex>(r));
 }
 
 // ——— editorial flow ———
@@ -176,6 +183,17 @@ export function runSetup(payload: {
 
 // ——— brand settings (admin) ———
 
+/** A theme handle — a CSS variable the active theme declares in theme.json
+ *  "handles" and the Settings tab may turn. `value` is the effective one:
+ *  the stored override, else the theme's default. */
+export interface ThemeHandle {
+  readonly var: string;
+  readonly label: string;
+  readonly type: 'color' | 'text';
+  readonly default: string;
+  readonly value: string;
+}
+
 export interface SiteSettings {
   readonly name: string;
   readonly claim: string;
@@ -183,17 +201,34 @@ export interface SiteSettings {
   readonly theme: string;
   readonly home: string;
   readonly style: string;
+  readonly handles: readonly ThemeHandle[];
 }
+
+/** The settings patch. The handles ride as a map of var → value — the ACTIVE
+ *  theme's overrides; an absent handle falls back to the theme's default
+ *  (that is how a handle is reset). */
+export type SiteSettingsPatch = Partial<Omit<SiteSettings, 'handles'>> & { handles?: Record<string, string> };
 
 export function getSiteSettings(): Promise<SiteSettings> {
   return fetch('/bridge/site').then((r) => json<SiteSettings>(r));
 }
 
-export function saveSiteSettings(settings: SiteSettings): Promise<void> {
+export function saveSiteSettings(settings: SiteSettingsPatch): Promise<void> {
   return fetch('/bridge/site', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
     body: JSON.stringify(settings)
+  }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
+}
+
+/** Crown a page as the home (or clear the crown with '') — one key of the
+ *  settings PUT; the server merges the rest of Site\load() back in. The
+ *  home's ONLY writer: the crown toggle in the page settings modal. */
+export function setHomePage(slug: string): Promise<void> {
+  return fetch('/bridge/site', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({ home: slug })
   }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
 }
 
@@ -216,6 +251,8 @@ export interface PluginRef {
   readonly enabled: boolean;
   readonly error?: string;
   readonly requires?: readonly string[];
+  /** The plugin's shelf image (assets/preview.png & friends) — null when it ships none. */
+  readonly preview?: string | null;
 }
 
 export function listPlugins(): Promise<readonly PluginRef[]> {
@@ -229,6 +266,16 @@ export function setPlugins(enabled: Readonly<Record<string, boolean>>): Promise<
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
     body: JSON.stringify({ enabled })
   }).then((r) => json<{ ok: boolean }>(r).then(() => undefined));
+}
+
+/** Delete an installed plugin — its folder, its lock line and its switch leave.
+ *  No plugin is undeletable (the preinstalled default included). */
+export function deletePlugin(name: string): Promise<{ ok: boolean; name: string }> {
+  return fetch('/bridge/plugin/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({ name })
+  }).then((r) => json<{ ok: boolean; name: string }>(r));
 }
 
 // ——— the Vitrine (public wares showcase: fetch + install, admin) ———
@@ -245,6 +292,10 @@ export interface WareRef {
   readonly state: 'installable' | 'installed' | 'update';
   readonly installedVersion?: string | null;
   readonly missing: readonly string[];
+  /** The ware's shelf image — the registry's own preview file, served raw. */
+  readonly previewUrl?: string;
+  /** The styles a template ware offers (the registry mirrors the manifest). */
+  readonly styles?: readonly string[];
 }
 
 export interface VitrineShelf {
@@ -276,7 +327,11 @@ export interface TemplateRef {
   readonly version: string;
   readonly description: string;
   readonly styles: readonly string[];
+  readonly defaultStyle?: string;
+  readonly default: boolean;
   readonly active: boolean;
+  /** The theme's shelf image (preview.png & friends) — null when it ships none. */
+  readonly preview: string | null;
 }
 
 export function listTemplates(): Promise<readonly TemplateRef[]> {

@@ -216,35 +216,199 @@ function manifest(array $site): array
     return $memo[$dir];
 }
 
-/** Page style: frontmatter byte-peek wins, else the theme's declared default. */
-function styleOf(string $type, string $slug, array $site): string
+/** The active theme's declared styles — the style enum is the theme's word
+ *  now, not the core's (2026-11-09, user order): a theme adds a style by
+ *  declaring it in theme.json "styles" and shipping its <style>.html.
+ *  Slug-shaped names only; anything else in the list is dust. */
+function themeStyles(array $site): array
 {
-    // Precedence: the page's own frontmatter (the dropdown — an override, kept for
-    // the page-type future) → the GLOBAL template (site setting, the everyday dial)
-    // → the theme's default style.
-    $raw = \Store\read($type, $slug);
-    if ($raw !== null && preg_match('/^style:\s*["\']?(slide|classical)["\']?\s*$/m', $raw, $m) === 1) {
-        return $m[1];
+    $styles = manifest($site)['styles'] ?? null;
+    if (!is_array($styles)) {
+        return [];
     }
-    if (($site['style'] ?? '') === 'slide' || ($site['style'] ?? '') === 'classical') {
-        return (string)$site['style'];
+    $out = [];
+    foreach ($styles as $style) {
+        if (is_string($style) && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $style) === 1) {
+            $out[] = $style;
+        }
     }
-    return (manifest($site)['defaultStyle'] ?? null) === 'slide' ? 'slide' : 'classical';
+    return $out;
 }
 
-/** Template for a style; a theme without slide.html falls back to its classical floor. */
+/** Page style. THE FRONTPAGE LAW (2026-11-09, user order): the home page
+ *  wears the theme's `frontpage` style automatically — the crown IS the
+ *  frontpage, unique by law (one home), never written to frontmatter, and
+ *  the name is reserved there (frontmatter frontpage on a non-home page is
+ *  dust). Else the page's own frontmatter style, honored only when the
+ *  theme declares it; else the site's global style, same rule; else the
+ *  theme's declared default; else '' — the theme's base template. */
+function styleOf(string $type, string $slug, array $site): string
+{
+    $styles = themeStyles($site);
+    if ($slug === homeSlug($site) && in_array('frontpage', $styles, true)) {
+        return 'frontpage';
+    }
+    $raw = \Store\read($type, $slug);
+    if ($raw !== null
+        && preg_match('/^style:\s*["\']?([a-z0-9]+(?:-[a-z0-9]+)*)["\']?\s*$/m', $raw, $m) === 1
+        && $m[1] !== 'frontpage' && in_array($m[1], $styles, true)) {
+        return $m[1];
+    }
+    if (($site['style'] ?? '') !== '' && in_array((string)$site['style'], $styles, true)) {
+        return (string)$site['style'];
+    }
+    $default = manifest($site)['defaultStyle'] ?? '';
+    return is_string($default) && in_array($default, $styles, true) ? $default : '';
+}
+
+/** Template for a style: the style's own file when the theme ships one
+ *  (<style>.html), else the theme's base floor (page.html) — a declared
+ *  style without its file renders on the base. */
 function themeTemplate(array $site, string $style): array
 {
     $dir = themeDir($site);
     $base = '/bridge/templates/' . basename($dir) . '/';
-    $candidates = $style === 'slide' ? ['slide.html', 'page.html'] : ['page.html'];
+    $candidates = $style !== '' ? [$style . '.html', 'page.html'] : ['page.html'];
     foreach ($candidates as $candidate) {
         $file = $dir . '/' . $candidate;
         if (is_file($file)) {
             return ['base' => $base, 'template' => (string)file_get_contents($file)];
         }
     }
+    // ——— THE THEME SAFEGUARD (2026-11-09, user order — closes the BACKLOG): a
+    // missing or broken configured theme never leaves the site standing on the
+    // bare floor — the house default (bakery, undeletable by the same word)
+    // serves before `houseTemplate()` would. Same candidates, same law: if the
+    // house default is whole, its face carries the page; only a broken house
+    // default falls to the bare floor. ———
+    $house = \Site\DEFAULTS['theme'];
+    if (basename($dir) !== $house) {
+        foreach ($candidates as $candidate) {
+            $file = __DIR__ . '/templates/' . $house . '/' . $candidate;
+            if (is_file($file)) {
+                return ['base' => '/bridge/templates/' . $house . '/', 'template' => (string)file_get_contents($file)];
+            }
+        }
+    }
     return ['base' => $base, 'template' => houseTemplate()];
+}
+
+// ——— the theme handles: the CSS variables a theme offers to the Settings tab.
+// ——— THE THEME'S WORD (2026-11-10): theme.json "handles" declares them, the
+// ——— core only carries the stored values to the page. The core hardcodes nothing.
+
+/** The handle value lid: a color is a color, a text is a short safe token.
+ *  The value lands in a <style> block on the public face — nothing that could
+ *  close that block survives the door. */
+function validHandleValue(string $type, string $value): bool
+{
+    if ($value === '' || strlen($value) > 80) {
+        return false;
+    }
+    if ($type === 'color') {
+        if (preg_match('/^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/', $value) === 1) {
+            return true;
+        }
+        if (preg_match('/^(?:rgb|rgba|hsl|hsla)\([0-9a-zA-Z.,%\/ ]{1,60}\)$/', $value) === 1) {
+            return true;
+        }
+        return preg_match('/^[a-zA-Z]{3,24}$/', $value) === 1; // a named color
+    }
+    return preg_match('/^[#a-zA-Z0-9 ,.%()\/_-]{1,80}$/', $value) === 1;
+}
+
+/** The active theme's declared handles — {var, label, type, default}. A handle
+ *  that does not pass the lid does not exist: the name must be a CSS custom
+ *  property, the type a known one, the default a value of that type. */
+function themeHandles(array $site): array
+{
+    $declared = manifest($site)['handles'] ?? null;
+    if (!is_array($declared)) {
+        return [];
+    }
+    $out = [];
+    foreach ($declared as $handle) {
+        if (!is_array($handle)) {
+            continue;
+        }
+        $var = is_string($handle['var'] ?? null) ? trim((string)$handle['var']) : '';
+        if (preg_match('/^--[a-z0-9-]{1,40}$/', $var) !== 1) {
+            continue;
+        }
+        $type = is_string($handle['type'] ?? null) ? trim((string)$handle['type']) : 'color';
+        if (!in_array($type, ['color', 'text'], true)) {
+            continue;
+        }
+        $default = is_string($handle['default'] ?? null) ? trim((string)$handle['default']) : '';
+        if (!validHandleValue($type, $default)) {
+            continue;
+        }
+        $label = is_string($handle['label'] ?? null) ? trim((string)$handle['label']) : trim($var, '-');
+        $out[] = ['var' => $var, 'label' => mb_substr($label, 0, 60), 'type' => $type, 'default' => $default];
+    }
+    return $out;
+}
+
+/**
+ * The theme's SHELF IMAGE (2026-11-10, user order): a theme may hold a
+ * preview image next to its theme.json — preview.png, preview.jpg, preview.jpeg
+ * or preview.webp. The URL, or null when the theme ships none (the dashboard
+ * draws a little notice instead — an honest absence, never a broken picture).
+ * The file IS the image: nothing is generated, nothing is fetched, nothing is
+ * rendered on the server.
+ */
+function themePreview(string $name): ?string
+{
+    if (preg_match(IDENTIFIER, $name) !== 1) {
+        return null;
+    }
+    foreach (['png', 'jpg', 'jpeg', 'webp'] as $ext) {
+        if (is_file(__DIR__ . '/templates/' . $name . '/preview.' . $ext)) {
+            return '/bridge/templates/' . $name . '/preview.' . $ext;
+        }
+    }
+    return null;
+}
+
+/** The chosen theme's handles with their effective value — the stored override, else the
+ *  theme's default. This is what the Settings tab draws. */
+function handlesFor(array $site): array
+{
+    $stored = \Site\styles((string)$site['theme']);
+    $out = [];
+    foreach (themeHandles($site) as $handle) {
+        $value = $stored[$handle['var']] ?? '';
+        if (!is_string($value) || !validHandleValue($handle['type'], $value)) {
+            $value = $handle['default'];
+        }
+        $handle['value'] = $value;
+        $out[] = $handle;
+    }
+    return $out;
+}
+
+/** The stored handle values as a CSS :root block — empty when the theme
+ *  declares no handles or nothing was changed. It lands LAST in the document,
+ *  so the theme's own :root loses to it (same specificity, later wins). */
+function themeVars(array $site): string
+{
+    $handles = themeHandles($site);
+    if ($handles === []) {
+        return '';
+    }
+    $stored = \Site\styles((string)$site['theme']);
+    $decls = [];
+    foreach ($handles as $handle) {
+        $value = $stored[$handle['var']] ?? '';
+        if (!is_string($value) || $value === '' || !validHandleValue($handle['type'], $value)) {
+            continue;
+        }
+        $decls[] = $handle['var'] . ':' . $value;
+    }
+    if ($decls === []) {
+        return '';
+    }
+    return '<style id="sm-theme-vars">:root{' . implode(';', $decls) . '}</style>';
 }
 
 /** Last-resort template when the configured theme is missing or broken. */
@@ -297,7 +461,25 @@ function fill(array $theme, array $site, string $title, string $bodyHtml, string
     $replacements['{{navHtml}}'] = navHtml($site, $currentSlug);
     $replacements['{{themeBase}}'] = htmlspecialchars($theme['base'], ENT_QUOTES);
     $replacements['{{year}}'] = date('Y');
-    return str_replace(array_keys($replacements), array_values($replacements), $theme['template']);
+    $out = str_replace(array_keys($replacements), array_values($replacements), $theme['template']);
+    return withThemeVars($out, $site);
+}
+
+/** The theme handles ride the page as a :root block — LAST in the document,
+ *  so they beat the theme's own :root (same specificity, later wins). The
+ *  theme's stylesheet still owns the layout; this only turns the knobs the
+ *  theme declared. */
+function withThemeVars(string $html, array $site): string
+{
+    $vars = themeVars($site);
+    if ($vars === '') {
+        return $html;
+    }
+    $pos = stripos($html, '</body>');
+    if ($pos === false) {
+        return $html . $vars;
+    }
+    return substr($html, 0, $pos) . $vars . substr($html, $pos);
 }
 
 /** The menu: published pages of "pages" as links — the navitem entity, core-owned.
@@ -381,7 +563,7 @@ function notFound(array $site): never
 {
     http_response_code(404);
     header('Content-Type: text/html; charset=utf-8');
-    $theme = themeTemplate($site, 'classical');
+    $theme = themeTemplate($site, ''); // the theme's base floor carries the 404
     $body = '<article class="sm-notfound"><h1>404</h1>'
         . '<p>This page has left the display case.</p>'
         . '<p><a href="/">Back to the front</a></p></article>';

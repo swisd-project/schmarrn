@@ -2,9 +2,9 @@
   "name": "bakery",
   "title": "Bakery",
   "version": "0.1.0",
-  "style": "classical",
-  "defaultStyle": "classical",
-  "styles": ["classical", "slide"],
+  "style": "sub-page-1",
+  "defaultStyle": "sub-page-1",
+  "styles": ["frontpage", "sub-page-1"],
   "description": "The house loaf — warm bakery default theme.",
   "placeholders": [
     "siteName",
@@ -17,5 +17,15 @@
     "seoHead",
     "themeBase",
     "year"
+  ],
+  "handles": [
+    { "var": "--crust", "label": "Crust — panels & header", "type": "color", "default": "#f6e7d7" },
+    { "var": "--batter", "label": "Batter — the page", "type": "color", "default": "#fff8ef" },
+    { "var": "--blossom", "label": "Blossom — rules & borders", "type": "color", "default": "#f2b8c6" },
+    { "var": "--sky", "label": "Sky — notes", "type": "color", "default": "#bcd9ea" },
+    { "var": "--jam", "label": "Jam — links & accents", "type": "color", "default": "#e2543e" },
+    { "var": "--ink", "label": "Ink — text", "type": "color", "default": "#3a2e26" },
+    { "var": "--ink-soft", "label": "Soft ink — secondary text", "type": "color", "default": "#6f5d4f" },
+    { "var": "--line", "label": "Line — hairlines", "type": "color", "default": "#e5d5c0" }
   ]
 }

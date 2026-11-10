@@ -4,8 +4,10 @@
  * 1. Relative path: bridge/site.php
  * 2. Description: Global brand/site settings loader — template defaults, overridden by
  *                 site.local.php (git-ignored). Pure data, no I/O beyond the two files.
+ *                 Also the home of the THEME HANDLES: the stored per-theme overrides of
+ *                 the CSS variables a theme declares in theme.json "handles".
  * 3. Expects: bridge/config/site.php (+ optional site.local.php).
- * 4. Provides: Site\load(), Site\save() for the setup wizard / settings UI.
+ * 4. Provides: Site\load(), Site\save(), Site\styles() for the setup wizard / settings UI.
  * 5. SPDX-License-Identifier: MPL-2.0
  * 6. Copyright (c) 2026 Homahuki GmbH
  */
@@ -20,10 +22,50 @@ const DEFAULTS = [
     'logo' => '',
     'theme' => 'bakery',
     'home' => '',
-    'style' => '', // the GLOBAL template: '' = theme default, else 'classical' | 'slide'
+    'style' => '', // the GLOBAL style: '' = theme default, else a theme-declared style
+    'styles' => [], // the theme handles: ['<theme>' => ['--var' => 'value', …]]
 ];
 
 const KEYS = ['name', 'claim', 'logo', 'theme', 'home', 'style'];
+
+/** The handle map's shape lid: theme names, CSS variable names, safe values.
+ *  The value lands in a <style> block on the public face — nothing that could
+ *  close that block survives the door. The TYPE lid (is this a color?) lives
+ *  with the theme contract in Serve\validHandleValue(). */
+function sanitizeStyles(mixed $styles): array
+{
+    if (!is_array($styles)) {
+        return [];
+    }
+    $out = [];
+    foreach ($styles as $theme => $map) {
+        if (!is_string($theme) || preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $theme) !== 1 || !is_array($map)) {
+            continue;
+        }
+        $vars = [];
+        foreach ($map as $var => $value) {
+            if (!is_string($var) || preg_match('/^--[a-z0-9-]{1,40}$/', $var) !== 1) {
+                continue;
+            }
+            if (!is_string($value) || preg_match('/^[#a-zA-Z0-9 ,.%()\/_-]{1,80}$/', $value) !== 1) {
+                continue;
+            }
+            $vars[$var] = $value;
+        }
+        if ($vars !== []) {
+            $out[$theme] = $vars;
+        }
+    }
+    return $out;
+}
+
+/** The stored handle overrides of ONE theme — ['--crust' => '#fff', …]. */
+function styles(string $theme): array
+{
+    $all = load()['styles'] ?? [];
+    $mine = is_array($all[$theme] ?? null) ? $all[$theme] : [];
+    return is_array($mine) ? $mine : [];
+}
 
 function configFile(): string
 {
@@ -57,6 +99,11 @@ function load(bool $wipe = false): array
                 $settings[$key] = $local[$key];
             }
         }
+        // The theme handles ride along in the same file (runtime state, never
+        // in the shipped template config).
+        if (isset($local['styles']) && is_array($local['styles'])) {
+            $settings['styles'] = $local['styles'];
+        }
     }
     return $memo = $settings;
 }
@@ -73,11 +120,12 @@ function save(array $settings): void
     $clean = [];
     foreach (KEYS as $key) {
         $value = isset($settings[$key]) && is_string($settings[$key]) ? $settings[$key] : DEFAULTS[$key];
-        if ($key === 'style' && !in_array($value, ['', 'classical', 'slide'], true)) {
+        if ($key === 'style' && $value !== '' && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $value) !== 1) {
             $value = '';
         }
         $clean[$key] = $value;
     }
+    $clean['styles'] = sanitizeStyles($settings['styles'] ?? []);
     $export = "<?php\n\ndeclare(strict_types=1);\n\nreturn " . var_export($clean, true) . ";\n";
     if (file_put_contents(configFile(), $export) === false) {
         \Router\refuse(500, 'Site settings slid off the plate — write failed.');

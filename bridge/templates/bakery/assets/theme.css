@@ -1,16 +1,42 @@
-/* Bakery — the house theme. Warm hipster bakery tokens: peach paper, vanilla
-   batter, cherry blossom, baby blue, one jam-red accent. Nothing fancy; the
-   content is the pastry. */
+/* ═══════════════════════════════════════════════════════════════════
+   BAKERY — the house theme, and the BLUEPRINT for every theme after it.
+
+   ONE STYLESHEET. Every style this theme wears lives in THIS file.
+   The theme's HTML files only LINK it — nothing carries styles inline,
+   nothing is split over three stylesheets. A new theme is this folder
+   copied over: rename theme.json, rewrite the markup, restyle HERE.
+
+   THE TOKEN LAYER (top of the file, below). Each custom property in
+   :root is a HANDLE: it is declared in theme.json under "handles" and
+   can be turned from the dashboard's Settings tab by anyone — no CSS
+   knowledge needed. Keep the two in sync: a handle's "default" in
+   theme.json MUST equal its value here, or the Settings tab lies.
+
+   The rules below consume the tokens and never hardcode a colour.
+   Change a token, the whole theme follows.
+
+   YOUR SHELF IMAGE (the theme's own face on the Templates tab): drop a
+   preview.png next to theme.json (preview.jpg, preview.jpeg and preview.webp
+   work too — SQUARE is the shape the shelf draws) and the shelf shows your
+   theme as a thumbnail, and your chosen theme's picture in full. This
+   folder's own preview.png is a real screenshot of this theme in use. A theme
+   without one shows a small "no preview" notice — an honest absence, never a
+   broken picture — so ship it or don't, your call.
+
+   Warm hipster bakery tokens: peach paper, vanilla batter, cherry
+   blossom, baby blue, one jam-red accent. Nothing fancy; the content
+   is the pastry.
+   ═══════════════════════════════════════════════════════════════════ */
 
 :root {
-  --crust: #f6e7d7;
-  --batter: #fff8ef;
-  --blossom: #f2b8c6;
-  --sky: #bcd9ea;
-  --jam: #e2543e;
-  --ink: #3a2e26;
-  --ink-soft: #6f5d4f;
-  --line: #e5d5c0;
+  --crust: #f6e7d7;      /* handle: Crust — panels, header, code blocks   */
+  --batter: #fff8ef;    /* handle: Batter — the page itself              */
+  --blossom: #f2b8c6;   /* handle: Blossom — rules, borders, tips         */
+  --sky: #bcd9ea;        /* handle: Sky — notes, cool accents              */
+  --jam: #e2543e;        /* handle: Jam — links, the one loud accent      */
+  --ink: #3a2e26;        /* handle: Ink — body text                        */
+  --ink-soft: #6f5d4f;   /* handle: Soft ink — secondary text, meta        */
+  --line: #e5d5c0;       /* handle: Line — hairlines, dividers            */
 }
 
 * { box-sizing: border-box; }

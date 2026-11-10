@@ -9,10 +9,12 @@
 export const backParam = 'back';
 
 /** The drawer's ride: open the overlay, carrying the page it was born on —
- *  and optionally the tab to land on (contents|settings|wares|users). */
+ *  and optionally the tab to land on (contents|settings|wares|users).
+ *  Canonical /_/ path (trailing slash) — avoids the server's /_ → /_/ redirect
+ *  which would otherwise risk stripping intent params. */
 export function backHref(pathname: string, hash = '', tab = ''): string {
   const tabPart = tab !== '' ? `&tab=${encodeURIComponent(tab)}` : '';
-  return `/_?${backParam}=${encodeURIComponent(pathname + hash)}${tabPart}`;
+  return `/_/?${backParam}=${encodeURIComponent(pathname + hash)}${tabPart}`;
 }
 
 /**
@@ -53,5 +55,7 @@ export function adminCloseTarget(search: string): string | null {
   if (target === null) return null;
   if (target === '/_' || target.startsWith('/_/')) return target;
   if (target === '/') return null; // no specific page — let the caller pick a live admin landing
+  // KEEP ADMIN MODE: a plain carried path is ridden under /_ so the editor
+  // never drops. Logout is the only way out — never return a plain page URL.
   return '/_' + target;
 }

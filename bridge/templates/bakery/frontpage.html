@@ -1,0 +1,32 @@
+<!doctype html>
+<!--
+  The frontpage style — the home page's layout. The crown applies it
+  automatically (one home, one frontpage); the name is reserved and is
+  never written into a page's frontmatter. Theme authors: declare
+  "frontpage" in theme.json "styles" and ship this file; the core serves
+  the home page through it.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {{seoHead}}
+  <link rel="stylesheet" href="{{themeBase}}assets/theme.css">
+  <script src="{{themeBase}}assets/deck.js" defer></script>
+</head>
+<body class="frontpage">
+  <header class="slide-brand">
+    <a href="/">{{siteName}}</a>
+    {{navHtml}}
+  </header>
+
+  <main class="slide-stage">
+{{bodyHtml}}
+  </main>
+
+  <footer class="slide-foot">
+    <span class="site-name">{{siteName}}</span>
+    <span>© {{year}}</span>
+  </footer>
+</body>
+</html>

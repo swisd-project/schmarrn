@@ -1,0 +1,36 @@
+<!doctype html>
+<!--
+  sub-page-1 — a worked example of a page style. The default template ships
+  it so a developer can see the whole path:
+    1. declare the style in theme.json  ->  "styles": ["frontpage", "sub-page-1"]
+    2. ship this file, named after it   ->  sub-page-1.html
+  The create-page modal offers every declared style; the page's frontmatter
+  carries the choice (`style: sub-page-1`), and the core serves this file
+  for it. A declared style without its file renders on the base (page.html).
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {{seoHead}}
+  <link rel="stylesheet" href="{{themeBase}}assets/theme.css">
+</head>
+<body class="sub-page-1">
+  <header class="site-head">
+    <a class="brand" href="/">
+      {{logoHtml}}
+      <span class="site-name">{{siteName}}</span>
+    </a>
+    {{navHtml}}
+    {{claimHtml}}
+  </header>
+
+  <main>
+{{bodyHtml}}
+  </main>
+
+  <footer class="site-foot">
+    <p>© {{year}} {{siteName}}</p>
+  </footer>
+</body>
+</html>

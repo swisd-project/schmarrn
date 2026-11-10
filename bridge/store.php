@@ -68,6 +68,28 @@ function &listMemo(): array
     return $memo;
 }
 
+/** The frontmatter's tag list, byte-peeked — the app's own flow-array shape
+ *  (tags: ["a", "b"], JSON-quoted by the settings form), JSON-decoded in one
+ *  move; anything else answers []. No Markdown parsing — the same peek
+ *  discipline the draft flag rides. */
+function tagsOf(string $raw): array
+{
+    if (preg_match('/^tags:\s*\[(.*)\]\s*$/m', $raw, $m) !== 1) {
+        return [];
+    }
+    $tags = json_decode('[' . trim($m[1]) . ']', true);
+    if (!is_array($tags)) {
+        return [];
+    }
+    $out = [];
+    foreach ($tags as $tag) {
+        if (is_string($tag) && trim($tag) !== '') {
+            $out[] = $tag;
+        }
+    }
+    return $out;
+}
+
 /** All pages: {type: [{slug, updatedAt, draft}...]} — existence is truth.
  *  PHP only regex-sniffs the draft flag (no Markdown parsing, byte-peek discipline).
  *  hasDraft tells the dashboard an unpublished editorial copy (.draft.md) is sitting there.
@@ -106,6 +128,7 @@ function listAll(): array
                 'updatedAt' => filemtime($file),
                 'draft' => $draft,
                 'hasDraft' => is_file($typeDir . '/' . $slug . '/.draft.md'),
+                'tags' => tagsOf($raw),
             ];
         }
         usort($pages, fn($a, $b) => $a['slug'] <=> $b['slug']);
@@ -120,6 +143,30 @@ function isDraft(string $type, string $slug): bool
 {
     $raw = read($type, $slug);
     return $raw !== null && preg_match('/^draft:\s*true\b/m', $raw) === 1;
+}
+
+/** The Contents desk's text search: every editorial copy (the sidecar draft
+ *  when one sits there, else the published file) whose bytes CONTAIN the
+ *  needle — case-insensitive stripos, no Markdown parsing, the same byte-peek
+ *  discipline as the draft flag. Answers the listAll shape (grouped by type,
+ *  tags included) so the desk renders one tree either way. Authed callers
+ *  only — drafts are editorial property. */
+function search(string $q): array
+{
+    $needle = trim($q);
+    if ($needle === '') {
+        return [];
+    }
+    $out = [];
+    foreach (listAll() as $type => $pages) {
+        foreach ($pages as $page) {
+            $raw = readDraft($type, (string)$page['slug']);
+            if ($raw !== null && stripos($raw, $needle) !== false) {
+                $out[$type][] = $page;
+            }
+        }
+    }
+    return $out;
 }
 
 /** One page's raw bytes — memoized per request (the serve path asks up to

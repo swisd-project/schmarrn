@@ -142,6 +142,18 @@ function registry(): array
                 'description' => is_string($ware['description'] ?? null) ? $ware['description'] : '',
                 'requiresSchmarrn' => is_string($ware['requiresSchmarrn'] ?? null) ? $ware['requiresSchmarrn'] : '',
                 'path' => (string)$ware['path'],
+                // the shelf image: the ware's own preview file in THIS repo
+                // ("preview": "templates/catflash/preview.png") — the URL is
+                // built from the raw base, so a mirror serves its own pictures.
+                'preview' => (is_string($ware['preview'] ?? null) && safeUnder((string)$ware['preview']))
+                    ? (string)$ware['preview']
+                    : '',
+                // the styles a THEME ware offers (the manifest's own words,
+                // mirrored here so the shelf can show them before the install)
+                'styles' => (array)array_values(array_filter(
+                    (array)($ware['styles'] ?? []),
+                    fn($s) => is_string($s) && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $s) === 1
+                )),
                 'requires' => (array)array_values(array_filter(
                     (array)($ware['requires'] ?? []),
                     fn($dep) => is_string($dep) && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $dep) === 1
@@ -212,7 +224,13 @@ function status(): array
                 $missing[] = $dep;
             }
         }
-        $wares[] = [...$ware, 'state' => $state, 'installedVersion' => $have, 'missing' => $missing];
+        // the shelf image: the ware's own preview file, served from the raw
+        // base (the mirror's own pictures for a mirrored registry)
+        $preview = '';
+        if (($ware['preview'] ?? '') !== '') {
+            $preview = rtrim((string)config()['rawUrl'], '/') . '/' . ltrim((string)$ware['preview'], '/');
+        }
+        $wares[] = [...$ware, 'state' => $state, 'installedVersion' => $have, 'missing' => $missing, 'previewUrl' => $preview];
     }
     return ['wares' => $wares, 'host' => hostVersion()];
 }
@@ -532,6 +550,16 @@ function install(string $name): array
                 . (is_string($verdict) ? ": {$verdict} — nothing installed." : ' — nothing installed.'));
         }
         $incoming = is_string($manifest['version'] ?? null) ? $manifest['version'] : '0.0.0';
+        // ——— the code lid (2026-11-10, user law): the ware's CODE must
+        // resolve too — a mangled identifier (a duplicated letter) survives
+        // the grammar but dies at the call site, hours later, on the host.
+        // The core lides the ware: read the code here, and a ware whose code
+        // cannot resolve never lands. ———
+        $codeFault = \Plugins\codeCheck($wareDir);
+        if ($codeFault !== null) {
+            partWith($scratch);
+            \Router\refuse(400, "'{$name}' arrived with code this core refuses: {$codeFault} Nothing installed.");
+        }
     } else {
         $manifest = json_decode((string)@file_get_contents($wareDir . '/theme.json'), true);
         if (!is_array($manifest)) {
@@ -680,6 +708,48 @@ function lockForget(string $name): void
 }
 
 /**
+ * ONE deletion of an installed PLUGIN (2026-11-10, user order): the shelf
+ * loses the folder, the lock forgets it, the switches drop it. NO plugin is
+ * undeletable — "the house default is undeletable" is a TEMPLATE law (the
+ * site must never stand on nothing); a plugin is decoration, and the
+ * preinstalled default plugin (hello) is deletable like any other.
+ * Atomicity: the shelf dir is renamed into the writable cache first (never a
+ * half-deleted plugin on the shelf), then dusted. Refuses in 4xx JSON.
+ */
+function removePlugin(string $name): array
+{
+    if (preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $name) !== 1) {
+        \Router\refuse(400, 'That plugin name is unbaked dough.');
+    }
+    $dir = __DIR__ . '/plugins/' . $name;
+    if (!is_file($dir . '/plugin.json')) {
+        \Router\refuse(404, "'{$name}' is not an installed plugin.");
+    }
+    // ——— the chain law: a ware an EFFECTIVE ware stands on is not deleted ———
+    foreach (\Plugins\all() as $p) {
+        if (isset($p['error']) || empty($p['effective'])) {
+            continue;
+        }
+        foreach ($p['requiresParsed'] as $req) {
+            if ($req['name'] === $name) {
+                \Router\refuse(409, "'{$p['title']}' stands on '{$name}' — disable it before the deletion.");
+            }
+        }
+    }
+    $tomb = scratchDir();
+    if (!@rename($dir, $tomb . '/' . $name)) {
+        partWith($tomb);
+        \Router\refuse(500, "The shelf would not let '{$name}' go — the deletion is off, nothing removed.");
+    }
+    partWith($tomb); // best effort — leftover dust is cache's, never the shelf's
+    lockForget($name);
+    // The switches forget it too — a ghost intent for a plugin that no longer
+    // exists is a lie the state file must not tell.
+    \Plugins\forgetState($name);
+    return ['ok' => true, 'name' => $name];
+}
+
+/**
  * ONE deletion of an installed template (theme): the ACTIVE theme is
  * untouchable — the site stands on it. Atomicity: the shelf dir is renamed
  * into the writable cache first (never a half-deleted theme on the shelf),
@@ -689,6 +759,11 @@ function removeTemplate(string $name): array
 {
     if (preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $name) !== 1) {
         \Router\refuse(400, 'That template name is unbaked dough.');
+    }
+    // THE HOUSE FALLBACK (2026-11-09, user order): the core's default theme
+    // is undeletable — it is the floor every broken theme lands on.
+    if ($name === \Site\DEFAULTS['theme']) {
+        \Router\refuse(409, "'{$name}' is the house default — the fallback when a theme fails. It cannot be deleted.");
     }
     if (\Site\load()['theme'] === $name) {
         \Router\refuse(409, "'{$name}' is the live theme — activate another template before deleting it.");

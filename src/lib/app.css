@@ -207,6 +207,52 @@ textarea.input { resize: vertical; min-height: 5rem; }
 }
 .card:hover { transform: translateY(-3px); box-shadow: var(--hover-lift-deep); }
 
+/* the shelf card: the picture bleeds to the card's edges (no gap on the left)
+   and fills its height — the theme's shelf image, SQUARE, on the card's edge.
+   The card's height is fixed (h-32 in the markup) so every shelf image is the
+   same square; the text block carries its own padding. */
+.card-shelf {
+  padding: 0;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.75rem;
+  overflow: hidden;
+}
+.card-shelf > .shelf-shot {
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  align-self: stretch;
+  object-fit: cover;
+  flex: none;
+}
+/* a card whose height varies (the shelf's wares): the picture keeps its own
+   square instead of stretching the card's height. */
+.card-shelf > .shelf-shot-fixed {
+  height: 6rem;
+  width: 6rem;
+  aspect-ratio: auto;
+  align-self: flex-start;
+  object-fit: cover;
+  flex: none;
+}
+.card-shelf > .shelf-shot-missing {
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  flex: none;
+  border-right: 1px dashed var(--color-line);
+  display: grid;
+  place-items: center;
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
+  text-align: center;
+  padding: 0.25rem;
+}
+
+/* the status label: the same box as a button, but it does nothing — the
+   "active" face of a theme that is already live. */
+.btn-static { cursor: default; }
+.btn-static:hover { transform: none; box-shadow: none; }
+
 /* ————————————————————————————————————————————————
    08a · CONTENTS DESK — the raw editor's stage. The DOM itself never
    scrolls (fixed height off the viewport); the tree and the sheet scroll
@@ -216,8 +262,8 @@ textarea.input { resize: vertical; min-height: 5rem; }
    ———————————————————————————————————————————————— */
 .sm-desk {
   display: flex; gap: 1rem;
-  height: calc(100dvh - 8.75rem);
-  min-height: 20rem;
+  height: 100%; /* fills the overlay's remaining space — the old
+                   calc(100dvh - 8.75rem) magic number left the bottom gap */
   overflow: hidden;
 }
 .sm-desk-tree {

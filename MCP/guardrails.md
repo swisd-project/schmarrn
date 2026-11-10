@@ -10,7 +10,9 @@
    runtime through removal. (II) THE UPDATE FLOWCHART (mermaid). (III) Audit
    record + open TODOs. (IV) The bullet-proof update cycle. (V) The core-update
    second pass. (VI) The template/plugin × core boundary audit (the 16-case
-   boundary battery). Batteries: /tmp/opencode/wares-battery.php (30 cases) and
+   boundary battery). (VII) The preview door — a page, not a frame (the
+   withdrawn SAMEORIGIN exception). (VIII) The Bienenstich (API) ware — the
+   boundary audit (the 51-case battery). Batteries: /tmp/opencode/wares-battery.php (30 cases) and
    /tmp/opencode/boundary-battery.php (16 cases) against the sandbox
    /tmp/opencode/schmarrn-audit (rerun: rebuild sandbox from the bakery tree,
    fake shelf served via file:// in bridge/config/wares.local.php).
@@ -74,16 +76,30 @@ named 4xx/5xx JSON before anything moves.
    `requires` dies: shape, self-require, cross-checks live in `Chain\parse`).
    Templates: `theme.json` must at least be a legible JSON object; deeper
    theme shape is validated at activation/deletion law below.
-7. **Truth gate** — the MANIFEST is the truth, the shelf may lie. The ridden
+7. **Code gate** — the ware's CODE must resolve: `Plugins\codeCheck()` reads
+   every PHP file of the arriving ware, and every global call inside must
+   resolve inside the ware's own code or in PHP itself. A ware whose code
+   calls a function it never declares died in transit — a duplicated letter
+   inside an identifier survives the grammar (`php -l` is quiet, the eye sees
+   nothing) but not the runtime, and the call burns at the door hours later,
+   on the host. The refusal names the call and its line (400, nothing
+   installed): "its code calls 'lint_brokenn_helper' (line 28) — functions the
+   ware never declares (a mangled transfer, most likely). Nothing installed."
+   Namespaced calls (`\Store\listAll()`) and method calls (`$x->foo()`,
+   `new Foo()`) are none of this gate's business; a ware with no code at all
+   is not its business either — the runtime lid degrades, as always. A file
+   that is self-consistent (the declaration mangled the same way) is sound:
+   ugly names are not the lid's affair.
+8. **Truth gate** — the MANIFEST is the truth, the shelf may lie. The ridden
    manifest must still be strictly newer than the shelf (installed/equal →
    refuse, naming the shelf↔manifest drift when the two disagree).
-8. **Chain gate** — the manifest's OWN requirements ("name" or
+9. **Chain gate** — the manifest's OWN requirements ("name" or
    "name >= 1.2", never self) must be INSTALLED on the host at satisfying
    versions — install asks PRESENCE; the enable switch asks LIFE.
-9. **Swap** — old shelf backed into scratch, new hung, byte-opcache dropped;
+10. **Swap** — old shelf backed into scratch, new hung, byte-opcache dropped;
    plugins arrive DISABLED (`mapWithout`) and the enable stays the user's hand.
    Rollback on a failed rename — the old shelf stands, never a hole.
-10. **Lock** — `config/wares.lock.php` records who installed what, when,
+11. **Lock** — `config/wares.lock.php` records who installed what, when,
     with the requirements THE MANIFEST declared. Bookkeeping only, never the
     enforced truth (the Chain Law made the manifest the single source).
 
@@ -120,6 +136,18 @@ named 4xx/5xx JSON before anything moves.
 - Plugins: disable-first on upgrade (`mapWithout`) and intent removal rides
   the same switch law — a ware whose dependents are effective is refused by
   the enable switch before anything breaks.
+- **Plugin deletion (`POST /bridge/plugin/delete`, 2026-11-10, user order):**
+  admin + CSRF, refused by the core's own door before the shelf is touched;
+  a name that is not slug-shaped is 400; a plugin that is not installed is
+  404; a plugin an EFFECTIVE plugin stands on is 409 — "'Stop Motion' stands
+  on 'drunken-monk' — disable it before the deletion." **NO plugin is
+  undeletable:** the house-default law is a TEMPLATE law (the site must
+  never stand on nothing), a plugin is decoration, the preinstalled default
+  included. Atomicity: the shelf dir is renamed into the cache tomb first —
+  never a half-deleted plugin — then dusted; the provenance line leaves the
+  lock (`lockForget`) and the switch leaves the state file
+  (`Plugins\forgetState()` — the RAW map, since `enabled()` only carries the
+  switched-on entries and the switched-off ones must go too).
 
 ---
 
@@ -439,6 +467,13 @@ served-page byte-identity `7f2eecf2…` held before and after every fix.
   single-segment, mounted under `/bridge/plugin/<name>/`, core cases match
   first in the switch; `plugin.php` is whitelisted NOWHERE — a direct hit
   is the public 404 and the file is never the response. (C2, C2b)
+- **The plugin's shelf picture — HOLDS by the same boundary (2026-11-10).**
+  A plugin may ship its own preview as `assets/preview.png` (or
+  .jpg/.jpeg/.webp); `Plugins\shelfShot()` (bridge/plugins.php) finds it and
+  `GET /bridge/plugins` carries `preview` (null when none). Deliberate spot:
+  `assets/` is the ONLY place the plugin home serves — the plugin's CODE is
+  never whitelisted, so the picture lives where the front controller already
+  allows, and the door's sandbox law (B8) covers it like any ware asset.
 - **Foreign-namespace hijacks — REFUSED.** A plugin declaring another
   plugin's contentFilter key (or `bodyHtml` as a placeholder) has the key
   dropped at validate; the fill/filter never runs, and the real owner's
@@ -498,3 +533,65 @@ served-page byte-identity `7f2eecf2…` held before and after every fix.
   and SIGKILLs that PID; a port canary proves the door before probing.
 - The user's dev servers (8080, 8091) are sacred under the PORT LAW —
   battery ports are 8196+ and self-reaped.
+
+---
+
+## VII. The preview door (2026-11-10, user-ordered — a page, not a frame)
+
+The Templates tab's fitting room once framed the preview route; a frame needs
+a door, so the route answered `X-Frame-Options: SAMEORIGIN` while the API's
+blanket `X-Frame-Options: DENY` (`bridge/auth.php`) stood on every other
+door. The frame is GONE — the chosen theme shows its shelf image now, and the
+live door survives as the "Preview ↗" link (a new tab) — and with it the
+exception.
+
+### The law (as it stands)
+
+- **The preview door speaks HTML, not JSON.** `GET
+  /bridge/preview/<theme>/<type>/<slug>` answers `Content-Type: text/html;
+  charset=utf-8` (enforcing file: `bridge/index.php`, the preview route) — it
+  is a dressed page, not an API door. This half stays.
+- **The DENY stands on it, like everywhere else.** The SAMEORIGIN exception
+  is WITHDRAWN: the route inherits the API's blanket `X-Frame-Options: DENY`
+  (`bridge/auth.php`, `securityHeaders()`), and NOTHING on this core may be
+  framed — the fitting room included.
+- **The admin lid still holds.** A session (401) and the admin role (403)
+  before the page is dressed — the door is admin-only, framed or not.
+
+## VIII. The Bienenstich (API) ware — the boundary audit
+
+A shelf ware (Vitrine, 0.1.0) that gives the CMS its API surface: three
+public routes — `content` (the whole published site in one JSON call: the
+site face plus every page with title, slug, url, tags, updatedAt and the
+rendered body; `?body=0` for the light index, `?type=` to narrow), `search`
+(a byte needle over PUBLISHED markdown only, with the matching line as the
+excerpt), `status` (the heartbeat: site face, page count, version) — plus a
+drawer handle. Read-only by law: it never writes, never renders Markdown (PHP
+does not parse — the cache speaks) and never leaks a draft.
+
+- **Draft neutrality** — the API hides drafts even from an admin's own
+  session: the core's `/bridge/pages` lists drafts for editors, the ware's
+  API does not. Same answer to every hand.
+- **Battery 51 pass / 0 fail** (1 skip: the disposable rig carries no
+  dashboard build): method fuzz (POST/PUT/DELETE → 405, HEAD → 404),
+  parameter fuzz (path climbs, duplicate keys, array parameters, null byte,
+  a 64 KB needle, emoji, quotes and angle brackets), draft neutrality anon
+  AND admin, the ware's own files not served (`plugin.php` and `plugin.json`
+  → 404), cache honesty (a stale page reads `bodyHtml: null`, never stale
+  HTML), JSON always valid with the JSON content type, the CORS header
+  present for plain GETs, the public face and the core index still serving.
+- **Cost profile** (server-side strace, 52-page rig): 360–440 file ops per
+  request, against the core's own public doors at 344–362 — the same class,
+  not a new one. The slope is O(pages); pagination is the answer only if a
+  real site with hundreds of pages ever asks for it.
+- **CORS** — `Access-Control-Allow-Origin: *` on every response (published
+  content, no credentials). Plain GETs cross-origin; the core's OPTIONS
+  exit happens before a plugin route is reached, so no preflight and no
+  custom headers.
+- **Batteries on disk** — `/tmp/opencode/battery-bienenstich.php` (the ware,
+  51 cases), `/tmp/opencode/lid-battery.php` (the code lid, 10 cases) and the
+  byte gate's own battery at
+  `/home/homahuki/opencode-config/skills/byte-audit/references/gate-battery.php`
+  (6 cases). Two different doors, one scar: the CORE reads a ware's code at
+  the install knife (the code lid), the GATE is how a ware's author finds a
+  mangled identifier before it ever ships.

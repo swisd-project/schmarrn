@@ -11,7 +11,8 @@
  *                 Capabilities (v1): template placeholders + API routes. Editor blocks
  *                 are declared in the manifest shape but not yet wired (slice 2).
  * 3. Expects: bridge/plugins/ dir at the repo root; state in bridge/config/plugins.local.php.
- * 4. Provides: Plugins\all/enabled/effective/deriveEffective/setState/load/placeholderFills/dispatch.
+ * 4. Provides: Plugins\all/enabled/effective/deriveEffective/setState/load/placeholderFills/dispatch,
+ *              plus the CODE LID (codeCheck) the install knife reads an arriving ware with.
  * 5. SPDX-License-Identifier: MPL-2.0
  * 6. Copyright (c) 2026 Homahuki GmbH
  */
@@ -28,6 +29,23 @@ const IDENTIFIER = '/^[a-z0-9]+(?:-[a-z0-9]+)*$/';
 function prefix(string $name): string
 {
     return str_replace('-', '_', $name);
+}
+
+/**
+ * The plugin's shelf image (2026-11-10): a plugin may hold one in its assets
+ * folder — assets/preview.png (or .jpg/.jpeg/.webp). The assets folder is the
+ * only spot the plugin home serves (the plugin's CODE is never whitelisted),
+ * so that is where the picture lives. The URL, or null when the plugin ships
+ * none — the dashboard then wears one of the house's fallback pictures.
+ */
+function shelfShot(string $name, string $dir): ?string
+{
+    foreach (['png', 'jpg', 'jpeg', 'webp'] as $ext) {
+        if (is_file($dir . '/assets/preview.' . $ext)) {
+            return '/bridge/plugins/' . $name . '/assets/preview.' . $ext;
+        }
+    }
+    return null;
 }
 
 function stateFile(): string
@@ -67,7 +85,7 @@ function scan(bool $wipe = false): array
             continue;
         }
         if (preg_match(IDENTIFIER, $name) !== 1) {
-            $plugins[] = ['name' => $name, 'enabled' => false, 'error' => 'Invalid plugin directory name.'];
+            $plugins[] = ['name' => $name, 'enabled' => false, 'error' => 'Invalid plugin directory name.', 'preview' => null];
             continue;
         }
         $manifestFile = $dir . '/plugin.json';
@@ -78,11 +96,11 @@ function scan(bool $wipe = false): array
         }
         $clean = validate($name, $manifest);
         if (is_string($clean)) {
-            $plugins[] = ['name' => $name, 'enabled' => false, 'error' => $clean];
+            $plugins[] = ['name' => $name, 'enabled' => false, 'error' => $clean, 'preview' => null];
             continue;
         }
         $map[$name] = $clean;
-        $plugins[] = [...$clean, 'enabled' => $state[$name] ?? false];
+        $plugins[] = [...$clean, 'enabled' => $state[$name] ?? false, 'preview' => shelfShot($name, $dir)];
     }
     usort($plugins, fn($a, $b) => strcmp((string)$a['name'], (string)$b['name']));
     return $memo = [$plugins, $map, $state];
@@ -292,6 +310,100 @@ function validate(string $name, array $manifest): array|string
     ];
 }
 
+/** PHP's own words — never a call to something a ware must declare. */
+const CODE_WORDS = [
+    'isset', 'empty', 'array', 'list', 'echo', 'print', 'exit', 'die', 'eval',
+    'unset', 'include', 'include_once', 'require', 'require_once', 'new',
+    'clone', 'match', 'fn', 'static', 'self', 'parent', 'int', 'float', 'string',
+    'bool', 'void', 'mixed', 'never', 'true', 'false', 'null',
+];
+
+/**
+ * THE CODE LID (2026-11-10, user law): an arriving ware's CODE is read before
+ * it lands. A ware whose code calls a function it never declares died in
+ * transit — a duplicated letter inside an identifier survives the grammar
+ * (php -l stays quiet, the eye sees nothing) but not the runtime: the call
+ * burns at the door, hours later, on the host. The core lides the ware, never
+ * the ware's own diligence — so the code is read HERE, once, at the install
+ * knife. Namespaced calls (\Store\listAll()) and method calls ($x->foo()) live
+ * in other namespaces/objects and are none of this lid's business; a global
+ * call must resolve inside the ware's own code or in PHP itself.
+ *
+ * Returns null when the code resolves, or the reason it does not.
+ */
+function codeCheck(string $dir): ?string
+{
+    $files = [];
+    try {
+        $it = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($it as $file) {
+            if ($file->isFile() && strtolower($file->getExtension()) === 'php') {
+                $files[] = $file->getPathname();
+            }
+        }
+    } catch (\Throwable) {
+        return 'its code folder could not be read';
+    }
+    if ($files === []) {
+        return null; // no code at all — the runtime law degrades, as always
+    }
+    $declared = [];
+    $problems = [];
+    foreach ($files as $file) {
+        $src = @file_get_contents($file);
+        if ($src === false) {
+            $problems[] = 'an unreadable code file';
+            continue;
+        }
+        $tokens = @token_get_all($src);
+        $count = count($tokens);
+        for ($i = 0; $i < $count; $i++) {
+            $t = $tokens[$i];
+            if (!is_array($t)) {
+                continue;
+            }
+            if ($t[0] === T_FUNCTION) {
+                for ($j = $i + 1; $j < $count; $j++) {
+                    if (is_array($tokens[$j]) && $tokens[$j][0] === T_STRING) {
+                        $declared[$tokens[$j][1]] = true;
+                        break;
+                    }
+                }
+                continue;
+            }
+            if ($t[0] !== T_STRING) {
+                continue;
+            }
+            $name = $t[1];
+            $prev = $tokens[$i - 1] ?? null;
+            // a method call ($x->foo()), a static one (Foo::bar()) or a new
+            // object (new Foo()) — none of them a global function call
+            if (is_array($prev) && in_array($prev[0], [
+                T_OBJECT_OPERATOR, T_DOUBLE_COLON, T_NULLSAFE_OBJECT_OPERATOR, T_NEW,
+            ], true)) {
+                continue;
+            }
+            if (($tokens[$i + 1] ?? null) !== '(') {
+                continue; // not a call at all (a constant, a class name)
+            }
+            if (in_array(strtolower($name), CODE_WORDS, true)) {
+                continue;
+            }
+            if (isset($declared[$name]) || function_exists($name)) {
+                continue;
+            }
+            $problems[] = "'{$name}' (line {$t[2]})";
+        }
+    }
+    if ($problems === []) {
+        return null;
+    }
+    return 'its code calls ' . implode(', ', array_slice($problems, 0, 3))
+        . ' — functions the ware never declares (a mangled transfer, most likely).';
+}
+
 /** The enabled map from the local state file (missing file = nothing enabled). */
 function enabled(): array
 {
@@ -307,6 +419,27 @@ function enabled(): array
         }
     }
     return $clean;
+}
+
+/** Drop one plugin's switch from the state file — a plugin that no longer
+ *  exists takes its intent with it (a ghost switch is a lie the state file
+ *  must not tell). The RAW map is read here: enabled() only carries the
+ *  switched-on ones, and the switched-off entries must go too. */
+function forgetState(string $name): void
+{
+    $state = [];
+    if (is_file(stateFile())) {
+        try {
+            $state = (array)(require stateFile());
+        } catch (\Throwable) {
+            $state = [];
+        }
+    }
+    if (!array_key_exists($name, $state)) {
+        return;
+    }
+    unset($state[$name]);
+    setState($state); // the writer owns the file — opcache drop + memo wipe included
 }
 
 /** The retail band (2026-11-07, user law): drawer handles from EFFECTIVE

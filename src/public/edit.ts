@@ -71,16 +71,24 @@ const EDIT_CSS = `
   border-radius:6px 0 0 6px; box-shadow:0 1px 4px rgba(0,0,0,.10);
   transition:width .15s ease; cursor:pointer;
   display:flex; flex-direction:column;
+  z-index:9990; /* above every page/template menu; below editor modals (9999) */
   font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size:12.5px;
 }
-.sm-admin-root.open { cursor:auto; }
-.sm-admin-tri { display:block; width:0; height:0; margin:.35rem auto .45rem; flex:0 0 auto;
-  border-top:6px solid transparent; border-bottom:6px solid transparent;
-  border-right:7px solid #767676; pointer-events:none;
+/* identical to the overlay's close X (right edge, middle) but '<' — opens the
+   admin drawer; drawer links open the overlay. Visible only when collapsed. */
+.sm-admin-back {
+  position:fixed; right:0; top:50%; transform:translateY(-50%);
+  z-index:9991; /* above the drawer strip */
+  width:2.4rem; height:3.4rem;
+  background:#fff; border:2px solid #e3dccd; border-right:none;
+  border-radius:6px 0 0 6px; box-shadow:0 1px 4px rgba(0,0,0,.10);
+  font:inherit; font-size:1.1rem; font-weight:700; color:#767676;
+  cursor:pointer; display:none; /* shown when the drawer is collapsed */
+  align-items:center; justify-content:center;
 }
-.sm-admin-root.open .sm-admin-tri { transform:rotate(180deg); } /* open = points right (state flip, no tween) */
-.sm-admin-menu { visibility:hidden; display:flex; flex-direction:column; gap:.15rem; flex:1 1 auto; min-height:0; overflow-y:auto; }
-.sm-admin-root.open .sm-admin-menu { visibility:visible; }
+.sm-admin-back:hover { color:#4f4a42; background:#f4efe6; }
+.sm-admin-root.open { cursor:auto; }
+.sm-admin-menu { display:flex; flex-direction:column; gap:.15rem; flex:1 1 auto; min-height:0; overflow-y:auto; }
 /* the retail band: the shelf between the tabs and Log out — same item law,
    one hairline to mark where the menu ends and the market begins */
 .sm-admin-retail { display:flex; flex-direction:column; gap:.15rem; margin-top:.25rem; padding-top:.3rem; border-top:1px solid #e3dccd; }
@@ -337,7 +345,21 @@ async function boot(root: HTMLElement): Promise<void> {
         toggle();
       }
     });
-    door.append(el('span', { class: 'sm-admin-tri' }));
+    // The live-page twin of the overlay's X (process law, 2026-11): same
+    // right/middle button, '<' instead of 'x'. Clicking it OPENS THE DRAWER;
+    // drawer links open the overlay tabs. Visible only when collapsed — the
+    // open full-height drawer owns the edge. Admin state stays active.
+    const backBtn = el('button', {
+      type: 'button',
+      class: 'sm-admin-back',
+      'aria-label': 'Open admin drawer',
+      title: 'Open drawer',
+      onclick: (e) => {
+        e.stopPropagation();
+        applyOpen(true);
+      }
+    }, ['<']);
+    document.body.append(backBtn);
 
     const menu = document.createElement('div');
     menu.className = 'sm-admin-menu';
@@ -410,22 +432,23 @@ async function boot(root: HTMLElement): Promise<void> {
 
     // The width law (2026-11-07, user order): the drawer is a FULL-HEIGHT
     // panel (top to bottom, always) that opens to 1/5 of the viewport width
-    // (min 14rem) — no measuring ceremony, the open width is the law itself.
-    // Closed: the thin full-height tab with its triangle. Items scroll if the
-    // shelf ever outgrows the panel.
-    const doorStyle = getComputedStyle(door);
-    const framePad = parseFloat(doorStyle.paddingLeft) + parseFloat(doorStyle.paddingRight)
-      + parseFloat(doorStyle.borderLeftWidth) + parseFloat(doorStyle.borderRightWidth);
-    const tri = door.querySelector<HTMLElement>('.sm-admin-tri');
-    const closedW = Math.ceil(tri !== null ? tri.getBoundingClientRect().width : 7) + framePad;
+    // (min 14rem). Closed: fully hidden (user law) — only the '<' button shows.
+    // Triangle removed; no slim strip when closed.
     const openW = 'max(20vw, 14rem)';
 
     function applyOpen(next: boolean): void {
       open = next;
       door.classList.toggle('open', open);
       door.setAttribute('aria-expanded', open ? 'true' : 'false');
-      door.style.width = open ? openW : `${closedW}px`; // height: full, always
+      door.style.width = open ? openW : '0';
+      door.style.padding = open ? '' : '0';
+      door.style.borderWidth = open ? '' : '0';
+      door.style.overflow = open ? 'auto' : 'hidden';
+      door.style.pointerEvents = open ? '' : 'none';
+      // '<' shows only when the drawer is collapsed — it opens the drawer.
+      backBtn.style.display = open ? 'none' : 'flex';
     }
+    applyOpen(false); // born fully hidden; only the '<' control is visible
 
     document.addEventListener('click', (e) => {
       if (!open || (e.target as HTMLElement).closest('.sm-admin-root') !== null) return;

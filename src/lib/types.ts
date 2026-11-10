@@ -13,6 +13,7 @@ export interface PageRef {
   readonly draft?: boolean;
   readonly hasDraft?: boolean;
   readonly home?: boolean;
+  readonly tags?: readonly string[];
 }
 export type PageIndex = Readonly<Record<string, readonly PageRef[]>>;
 

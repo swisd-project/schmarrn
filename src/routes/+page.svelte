@@ -1,8 +1,9 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
   // a burger opens the full-screen overlay (Contents / Settings / Plugins & Templates / Users).
-  import { session, login, logout, pageCount, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, listTemplates, activateTemplate, deleteTemplate, coreStatus, uploadCorePacket, runCoreUpdate, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef } from '$lib/api';
+  import { session, login, logout, pageCount, searchPages, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, setHomePage, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, deletePlugin, listTemplates, activateTemplate, deleteTemplate, coreStatus, uploadCorePacket, runCoreUpdate, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, type PageRef, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef, type ThemeHandle } from '$lib/api';
   import { adminCloseTarget } from '$lib/back';
+  import { base } from '$app/paths';
   import { schemaFor, withDraftFlag } from '$lib/schema';
   import { splitFrontmatter } from '$lib/blocks';
   import { renderMdms } from '$lib/render';
@@ -23,22 +24,40 @@
   let setupThemes = $state<readonly string[]>([]);
   $effect(() => {
     session()
-      .then((s) => {
+      .then(async (s) => {
         authenticated = s.authenticated;
         user = s.user;
         role = s.role;
-        // Arriving at /_ while authed = the drawer sent you here — the ONE
-        // overlay opens itself, pre-selected on the carried ?tab= (editors
-        // are pinned to Contents; admins get all four).
         if (s.authenticated) {
-          const wanted = new URLSearchParams(window.location.search).get('tab') ?? '';
-          const allowed: readonly Tab[] = s.role === 'admin'
-            ? ['contents', 'settings', 'plugins', 'templates', 'updates', 'users']
-            : ['contents'];
-          if ((allowed as readonly string[]).includes(wanted)) showTab(wanted as Tab);
+          const params = new URLSearchParams(window.location.search);
+          // The overlay opens ONLY when the admin drawer sent you here (it
+          // carries ?back=&tab=). A direct /_ visit while authed must NOT throw
+          // you into the overlay — land on the admin-mode home page (visual
+          // editor, drawer closed). /_ unauth is the login door.
+          const drawerIntent = params.has('back') || params.has('tab');
+          if (drawerIntent) {
+            const wanted = params.get('tab') ?? '';
+            const allowed: readonly Tab[] = s.role === 'admin'
+              ? ['contents', 'settings', 'plugins', 'templates', 'updates', 'users']
+              : ['contents'];
+            if ((allowed as readonly string[]).includes(wanted)) showTab(wanted as Tab);
+            openMenu();
+            if (s.role === 'admin') {
+              void loadCore();
+              void loadWares();
+            }
+            return;
+          }
+          // Direct authed /_ → admin landing page (stay in admin mode). No pages
+          // yet → keep the dashboard overlay open so there's somewhere to work.
+          if (!import.meta.env.DEV) {
+            const landing = await landingSlug();
+            if (landing !== null) {
+              window.location.href = `/_/${landing}`;
+              return;
+            }
+          }
           openMenu();
-          // The Updates pill tells the truth from the boot, before any tab is
-          // opened — core status + the Vitrine shelf answer for it.
           if (s.role === 'admin') {
             void loadCore();
             void loadWares();
@@ -95,15 +114,25 @@
   }
 
   // ——— brand settings (admin) ———
-  let siteSettings = $state<{ name: string; claim: string; logo: string; theme: string; home: string; style: string } | null>(null);
+  let siteSettings = $state<{ name: string; claim: string; logo: string; theme: string; home: string; style: string; handles: readonly ThemeHandle[] } | null>(null);
   let siteBusy = $state(false);
   let siteError = $state('');
   let siteNote = $state('');
 
+  // ——— the theme handles: the active template's declared CSS variables, as the
+  // ——— pickers see them. The template's stylesheet keeps the layout; these
+  // ——— knobs only turn the colors it declared. ———
+  let handleValues = $state<Record<string, string>>({});
+  let styleBusy = $state(false);
+  let styleError = $state('');
+  let styleNote = $state('');
+
   async function loadSiteSettings() {
     if (siteSettings !== null) return;
     try {
-      siteSettings = { ...(await getSiteSettings()) };
+      const loaded = await getSiteSettings();
+      siteSettings = { ...loaded };
+      handleValues = Object.fromEntries(loaded.handles.map((h) => [h.var, h.value]));
     } catch (e) {
       siteError = e instanceof Error ? e.message : String(e);
     }
@@ -116,13 +145,54 @@
     siteError = '';
     siteNote = '';
     try {
-      await saveSiteSettings(siteSettings);
+      // the home's crown lives in the page settings modal now (2026-11-09,
+      // user order) — the settings form no longer owns it, and a stale
+      // snapshot here must never uncrown the page the modal crowned.
+      // style went the same road (2026-11-09, third telling): no settings
+      // surface speaks for style any more.
+      await saveSiteSettings({
+        name: siteSettings.name,
+        claim: siteSettings.claim,
+        logo: siteSettings.logo
+      });
       siteNote = 'Saved. The public face updates on the next serve.';
     } catch (e) {
       siteError = e instanceof Error ? e.message : String(e);
     } finally {
       siteBusy = false;
     }
+  }
+
+  /** The handles save: every declared handle rides along — its value, or an
+   *  EMPTY value when it sits on the template's default (that is the reset).
+   *  The server patches the active theme's stored overrides with it, so a
+   *  handle nobody touched keeps its standing. The brand form never sends
+   *  handles and the handle form never sends the brand: each writer owns its
+   *  keys (the crown's law, same shape). */
+  async function saveHandlesNow() {
+    if (siteSettings === null) return;
+    styleBusy = true;
+    styleError = '';
+    styleNote = '';
+    try {
+      const handles: Record<string, string> = {};
+      for (const h of siteSettings.handles) {
+        const value = handleValues[h.var] ?? h.default;
+        handles[h.var] = value === h.default ? '' : value;
+      }
+      await saveSiteSettings({ handles });
+      styleNote = 'Saved. The public face updates on the next serve.';
+    } catch (e) {
+      styleError = e instanceof Error ? e.message : String(e);
+    } finally {
+      styleBusy = false;
+    }
+  }
+
+  /** Back to the template's default: the handle leaves the map, the theme's
+   *  own :root speaks again. */
+  function resetHandle(name: string, fallback: string) {
+    handleValues = { ...handleValues, [name]: fallback };
   }
 
   /** Logo upload: straight into site assets, the URL lands in the form (save still explicit). */
@@ -202,6 +272,61 @@
     pageCount()
       .then((i) => (index = i))
       .catch((e) => (error = e.message));
+    if (searchQ.trim() !== '') onSearchInput(); // the needle re-runs — hits re-read
+  }
+
+  // ——— the desk's search + tag filter (2026-11-09, user order): the type
+  // headlines retired — a needle and a tag do the finding. Text rides the
+  // core's byte search (GET /bridge/search: authed, drafts included, no
+  // Markdown parsing); tags ride the page index; the tag filter is local. ———
+  let searchQ = $state('');
+  let tagFilter = $state('');
+  let searchBusy = $state(false);
+  let searchHits = $state<{ q: string; types: PageIndex } | null>(null); // keyed by the query it answered
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const activeQ = $derived(searchQ.trim());
+  const allTags = $derived.by(() => {
+    const tags = new Set<string>();
+    for (const pages of Object.values(index ?? {})) {
+      for (const p of pages) for (const t of p.tags ?? []) tags.add(t);
+    }
+    return [...tags].sort((a, b) => a.localeCompare(b));
+  });
+  const deskRows = $derived.by(() => {
+    // the needle's own answers while they are current; the stale list holds
+    // the fort while a newer one is in flight — no flicker, no blank flash
+    const source: PageIndex =
+      activeQ === '' ? (index ?? {}) : searchHits?.q === activeQ ? searchHits.types : (searchHits?.types ?? {});
+    const rows: { key: string; type: string; page: PageRef }[] = [];
+    for (const [type, pages] of Object.entries(source)) {
+      for (const p of pages) {
+        if (tagFilter !== '' && !(p.tags ?? []).includes(tagFilter)) continue;
+        rows.push({ key: `${type}/${p.slug}`, type, page: p });
+      }
+    }
+    return rows;
+  });
+
+  function onSearchInput() {
+    clearTimeout(searchTimer);
+    const q = searchQ.trim();
+    if (q === '') {
+      searchHits = null;
+      searchBusy = false;
+      return;
+    }
+    searchBusy = true;
+    searchTimer = setTimeout(() => {
+      searchPages(q)
+        .then((types) => {
+          if (searchQ.trim() === q) searchHits = { q, types }; // a stale answer never lands
+        })
+        .catch((e) => (deskError = e instanceof Error ? e.message : String(e)))
+        .finally(() => {
+          if (searchQ.trim() === q) searchBusy = false;
+        });
+    }, 250);
   }
 
   function select(type: string, slug: string) {
@@ -262,6 +387,7 @@
       unlocked = false; // the lock returns when the page is saved — the law
       deskNote = 'Draft saved — publish from ✑ when it is ready for the public face.';
       index = await pageCount(); // the tree's draft/edits badges re-read
+      if (searchQ.trim() !== '') onSearchInput(); // the needle re-runs over the fresh bytes
     } catch (e) {
       deskError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -280,6 +406,9 @@
   // ——— the burger overlay: Pages / Site / Accounts / Media / Plugins ———
   type Tab = 'contents' | 'settings' | 'plugins' | 'templates' | 'updates' | 'users';
   let menuOpen = $state(false);
+  let menuOpenedAt = 0;
+  let allowClose = false; // blocks spurious untrusted closes (drawer-intent mount artifacts)
+  let userClosing = false; // ONLY the X may trigger drawer-intent return
   let tab = $state<Tab>('contents');
 
   /** The dialog takes focus when it mounts (auto-open leaves nothing focused —
@@ -288,20 +417,26 @@
 
   function openMenu() {
     menuOpen = true;
+    menuOpenedAt = Date.now();
+    allowClose = false;
+    userClosing = false;
+    setTimeout(() => (allowClose = true), 1000);
     if (role === 'admin') void loadSiteSettings(); // warm the site form while the overlay opens
   }
 
-  async function closeMenu() {
+  async function closeMenu(e?: Event) {
+    // Drawer-intent (/_?back=&tab=): ONLY an explicit X (userClosing)
+    // may return to the carried admin page. Every spurious/programmatic close
+    // is ignored — this is what made the overlay "vanish immediately".
+    const intent = new URLSearchParams(window.location.search);
+    const drawerIntent = intent.has('back') || intent.has('tab');
+    if (drawerIntent && !userClosing) return;
+    userClosing = false;
+    if (!menuOpen && !drawerIntent) return;
     menuOpen = false;
-    // THE PAGE comes back — in ADMIN MODE (2026-11 fix, user law): closing the
-    // overlay must keep admin state active so the visual editor + drawer stay
-    // alive. The carried ?back= page is ridden in admin mode; with no carried
-    // page (the dashboard's own ride) we land on the admin-mode home page —
-    // never the plain public face. Only Logout in the sidebar leaves admin mode.
-    // Dev stays inside the SPA — the vite origin's / IS the dashboard itself.
     if (import.meta.env.DEV) return;
     const carried = adminCloseTarget(window.location.search);
-    if (carried !== null) {
+    if (carried !== null && (carried === '/_' || carried.startsWith('/_/'))) {
       window.location.href = carried;
       return;
     }
@@ -310,12 +445,19 @@
       window.location.href = `/_/${landing}`;
       return;
     }
-    // No pages to edit: stay on the dashboard (overlay now closed). Never kick
-    // to the public face — admin state remains; only Logout leaves admin mode.
   }
 
   function showTab(next: Tab) {
     tab = next;
+    // The drawer-intent URL carries the tab — keep it TRUE as the user walks
+    // the tabs (a refresh or any URL reader must never resurrect a tab the
+    // user already left). A plain /_ visit (no back, no tab) stays untouched:
+    // its refresh law is the admin landing page, not the overlay.
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('back') || params.has('tab')) {
+      params.set('tab', next);
+      window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
+    }
     if (next === 'contents') void loadAllMedia(); // the media pane pays for itself (lazy)
     if (next === 'users') void loadAccounts();
     if (next === 'plugins') {
@@ -348,6 +490,26 @@
     pluginsError = '';
     try {
       plugins = await listPlugins();
+    } catch (e) {
+      pluginsError = e instanceof Error ? e.message : String(e);
+    } finally {
+      pluginsBusy = false;
+    }
+  }
+
+  /** Delete a plugin — the folder, the lock line and the switch leave together.
+   *  No plugin is undeletable: the preinstalled default (hello) goes like any
+   *  other. The house-default law is a TEMPLATE law — a plugin is decoration. */
+  async function deletePluginNow(plugin: PluginRef) {
+    if (pluginsBusy) return;
+    if (!confirm(`Delete the ${plugin.title} plugin? Its placeholders and routes leave with it.`)) return;
+    pluginsBusy = true;
+    pluginsError = '';
+    pluginsNote = '';
+    try {
+      await deletePlugin(plugin.name);
+      plugins = await listPlugins();
+      pluginsNote = `${plugin.title} left the shelf — deleted.`;
     } catch (e) {
       pluginsError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -599,6 +761,101 @@
   // the preview's mannequin: the tree's first page wears whichever theme you fit it in
   const previewSlug = $derived((index?.['pages'] ?? [])[0]?.slug ?? '');
 
+  // ——— the house's fallback pictures (src/static, served from the build):
+  // ——— a theme or plugin that ships no preview image wears one of these at
+  // ——— random — the shelf is never a wall of "no preview" notices. ———
+  const HOUSE_SHOTS = ['01', '02', '03', '04', '05'];
+  const housePicks: Record<string, string> = {};
+
+  /** One of the house pictures, picked at random and KEPT (the card must not
+   *  shuffle itself on every re-render). */
+  function houseShot(key: string): string {
+    if (!housePicks[key]) {
+      housePicks[key] = `${base}/${HOUSE_SHOTS[Math.floor(Math.random() * HOUSE_SHOTS.length)]}.jpeg`;
+    }
+    return housePicks[key];
+  }
+
+  // ——— the templates tab: the 50/50 split ———
+  // RIGHT = every theme you could pick (installed AND the Vitrine shelf, one
+  // list); LEFT = the fitting room (the preview) + the details of the chosen
+  // one. The chosen theme is a NAME — the row is derived, so a theme that
+  // leaves the shelf cannot leave a stale selection behind.
+  type ThemeRow = {
+    name: string;
+    title: string;
+    version: string;
+    description: string;
+    styles: readonly string[];
+    requires: readonly string[];
+    missing: readonly string[];
+    active: boolean;
+    houseDefault: boolean;
+    installed: boolean;
+    state: 'active' | 'installed' | 'update' | 'installable';
+    preview: string | null;
+    template: TemplateRef | null;
+    ware: WareRef | null;
+  };
+
+  let selectedTheme = $state('');
+
+  // the shelf images that failed to load (a ware's preview may not be pushed
+  // yet) — a broken picture falls back to the notice, never to a broken icon.
+  let brokenPreviews = $state<Record<string, boolean>>({});
+
+  const themeRows = $derived.by((): ThemeRow[] => {
+    const rows: ThemeRow[] = templates.map((t) => {
+      const ware = vitrineTemplateWare(t.name);
+      return {
+        name: t.name,
+        title: t.title,
+        version: t.version,
+        description: t.description,
+        styles: t.styles,
+        requires: ware?.requires ?? [],
+        missing: ware?.missing ?? [],
+        active: t.active,
+        houseDefault: t.default,
+        installed: true,
+        state: t.active ? 'active' : (ware?.state === 'update' ? 'update' : 'installed'),
+        preview: t.preview ?? null,
+        template: t,
+        ware: ware ?? null
+      };
+    });
+    for (const w of vitrine) {
+      if (w.kind !== 'template' || w.state === 'installed') continue;
+      if (rows.some((r) => r.name === w.name)) continue; // the installed row speaks for it
+      rows.push({
+        name: w.name,
+        title: w.title,
+        version: w.version,
+        description: w.description,
+        styles: w.styles ?? [],
+        requires: w.requires,
+        missing: w.missing,
+        active: false,
+        houseDefault: false,
+        installed: false,
+        state: w.state === 'update' ? 'update' : 'installable',
+        preview: w.previewUrl && w.previewUrl !== '' ? w.previewUrl : null,
+        template: null,
+        ware: w
+      });
+    }
+    return rows;
+  });
+
+  // the list, split: what this host HAS on top, the Vitrine's window below
+  const installedRows = $derived(themeRows.filter((r) => r.installed));
+  const shelfRows = $derived(themeRows.filter((r) => !r.installed));
+
+  // the chosen theme: the picked one, else the live one, else the first on the shelf
+  const selectedRow = $derived(
+    themeRows.find((r) => r.name === selectedTheme) ?? themeRows.find((r) => r.active) ?? themeRows[0] ?? null
+  );
+
   async function loadCore() {
     if (coreBusy) return;
     coreBusy = true;
@@ -710,16 +967,27 @@
     }
   }
 
-  // ——— new page → modal: title, slug, a page-type scaffold, draft-vs-publish ———
+  // ——— new page → modal: title, slug, style, a page-type scaffold, draft-vs-publish ———
+  // The style is a creation-time choice (2026-11-09, user order): the options
+  // are the ACTIVE THEME's declared styles, the frontpage among them — picking
+  // it crowns the new page as the home (the frontpage style is derived from
+  // the crown, never written to frontmatter). Styles load lazily with the
+  // templates; no theme, no list, no selector.
   let pagetypes = $state<readonly PagetypeRef[]>([]);
-  let newModal = $state<null | { title: string; slug: string; scaffold: string; asDraft: boolean }>(null);
+  let newModal = $state<null | { title: string; slug: string; style: string; scaffold: string; asDraft: boolean }>(null);
   let creating = $state(false);
   let newError = $state('');
 
+  const activeTheme = $derived(templates.find((t) => t.active) ?? null);
+  const activeThemeStyles = $derived(activeTheme?.styles ?? []);
+  const prettyStyle = (style: string): string =>
+    style.split('-').filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+
   function openNew() {
     newError = '';
-    newModal = { title: '', slug: '', scaffold: 'article', asDraft: false };
+    newModal = { title: '', slug: '', style: activeTheme?.defaultStyle ?? '', scaffold: 'article', asDraft: false };
     void loadPagetypes(); // scaffolds pay for themselves — lazy load on modal open
+    if (activeThemeStyles.length === 0) void loadTemplates(); // the style list rides the theme
   }
 
   /** The Landing law (sidequest, 2026-11-07): the index page is the front door —
@@ -751,9 +1019,13 @@
     try {
       const today = new Date().toISOString().slice(0, 10);
       // JSON.stringify quotes the title — YAML-hostile colons stay harmless.
-      const frontmatter = `---\ntitle: ${JSON.stringify(m.title)}\nslug: ${m.slug}\npublished: true\ndraft: ${m.asDraft}\ndate: ${today}\ntags: []\n---`;
+      // The frontpage style is never written: the crown derives it; choosing
+      // frontpage here crowns the new page the moment it exists.
+      const styleLine = m.style !== '' && m.style !== 'frontpage' ? `\nstyle: ${m.style}` : '';
+      const frontmatter = `---\ntitle: ${JSON.stringify(m.title)}\nslug: ${m.slug}\npublished: true\ndraft: ${m.asDraft}\ndate: ${today}\ntags: []${styleLine}\n---`;
       const scaffold = pagetypes.find((p) => p.name === m.scaffold);
       await createPage('pages', m.slug, `${frontmatter}\n\n${scaffold?.body ?? ''}`.trimEnd() + '\n');
+      if (m.style === 'frontpage') await setHomePage(m.slug);
       refreshIndex();
       select('pages', m.slug); // onto the live page — fill it there
       newModal = null;
@@ -886,12 +1158,13 @@
 
   // ——— page settings: per-page frontmatter, ported from the retired editor burger ———
   // The ONE overlay law (2026-11-04): the dashboard carries the page's title,
-  // serve-as, date, tags and draft state. published/published flags are preserved
+  // date, tags and draft state. published/published flags are preserved
   // verbatim (publish/unpublish toggles stay a deliberate act, not a side effect);
   // baking reuses the editor's own path — PUT draft under the X-Base-Hash guard +
   // publish with the client-rendered body. Slug changes stay with rename (✎), so
-  // no URL surgery happens behind a settings form's back.
-  const STYLE_OPTIONS = [['', 'theme default'], ['classical', 'classical'], ['slide', 'slide']] as const;
+  // no URL surgery happens behind a settings form's back. The per-page style
+  // selector left 2026-11-09 (user order, third telling): template/style
+  // choice lives on the Templates tab alone.
 
   let pageSettings = $state<null | {
     type: string;
@@ -901,7 +1174,8 @@
     asDraft: boolean;
     date: string;
     tags: string;
-    style: string;
+    isHome: boolean;
+    wasHome: boolean;
     baseRaw: string;
     hash: string;
     saving: boolean;
@@ -914,6 +1188,10 @@
       const { frontmatter } = splitFrontmatter(raw);
       const peek = (key: string): string =>
         new RegExp(`^${key}:\\s*(.*)$`, 'm').exec(frontmatter)?.[1]?.trim().replace(/^["']|["']$/g, '') ?? '';
+      // the crown's face: the index carries the EFFECTIVE home (the pages
+      // endpoint crowns site.home, or the first published page as the
+      // fallback) — the same law the tree's badge and the delete lid ride
+      const wasHome = (index?.[type] ?? []).some((p) => p.slug === slug && p.home === true);
       pageSettings = {
         type,
         slug,
@@ -922,7 +1200,8 @@
         asDraft: peek('draft') === 'true',
         date: peek('date'),
         tags: peek('tags').replace(/^\[|\]$/g, ''),
-        style: peek('style'),
+        isHome: wasHome,
+        wasHome,
         baseRaw: raw,
         hash,
         saving: false,
@@ -955,7 +1234,6 @@
         `date: ${s.date !== '' ? s.date : new Date().toISOString().slice(0, 10)}`,
         `tags: [${tagList.map((t) => JSON.stringify(t)).join(', ')}]`
       ];
-      if (s.style !== '') lines.push(`style: ${s.style}`);
       lines.push('---');
       const nextRaw = `${lines.join('\n')}\n\n${body}`.trimEnd() + '\n';
       await putDraftRaw(s.type, s.slug, nextRaw, s.hash);
@@ -963,6 +1241,12 @@
       // regular publish path (frontmatter flags ride verbatim, store-side).
       if (s.published) {
         await publishDraft(s.type, s.slug, renderMdms(nextRaw, { type: s.type, slug: s.slug }).fullHtml);
+      }
+      // the crown moves only when the switch moved — one key of the settings
+      // PUT, the server merges the rest; '' hands the crown to the fallback
+      if (s.isHome !== s.wasHome) {
+        await setHomePage(s.isHome ? s.slug : '');
+        if (siteSettings !== null) siteSettings = { ...siteSettings, home: s.isHome ? s.slug : '' };
       }
       refreshIndex();
       pageSettings = null;
@@ -1028,22 +1312,20 @@
   {/if}
 </main>
 
-<svelte:window onkeydown={(e) => (menuOpen && e.key === 'Escape' ? closeMenu() : null)} />
-
+<!-- The ESC function is GONE (2026-11-09, user order): ESC left a modal open
+     over a page that wasn't there. The X is the overlay's one door; the
+     modals close by their X, Cancel, or a click on the dark. -->
 {#if menuOpen}
-  <!-- Escape lives on WINDOW (see the top-level <svelte:window>): the overlay
-       auto-opens at boot without focus, and a div listener is DEAD until
-       something inside is focused — a keyboard operator trapped in a
-       full-screen overlay is a bug, not a preference. The dialog takes focus
-       itself on mount. -->
-  <div class="fixed inset-0 z-40 overflow-auto" role="dialog" aria-modal="true" aria-label="Menu" tabindex="-1"
+  <!-- The dialog takes focus itself on mount; there is no Escape — the X is
+       the door (2026-11-09, user order). -->
+  <div class="fixed inset-0 z-40 flex flex-col overflow-hidden" role="dialog" aria-modal="true" aria-label="Menu" tabindex="-1"
     use:dialogFocus
     style="background: linear-gradient(145deg, #fffdf7 0%, #fff8ef 45%, #f9ecd9 100%);"
   >
     <!-- the overlay's chrome, slimmed by law (2026-11-07): tabs on top, the
          close X at the right edge where the live page wears its triangle,
          Log out lives in the drawer's foot — nothing else. -->
-    <button class="sm-overlay-x" aria-label="Close the overlay — back to the page" title="Back to the page" onclick={closeMenu}>×</button>
+    <button class="sm-overlay-x" aria-label="Close the overlay — back to the page" title="Back to the page" onclick={(e) => { userClosing = true; closeMenu(e); }}>×</button>
     <nav class="flex gap-2 px-4 pb-4 flex-wrap" aria-label="Menu sections">
       <button class="btn {tab === 'contents' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('contents')}>Contents</button>
       {#if role === 'admin'}
@@ -1064,70 +1346,85 @@
       {/if}
     </nav>
 
-    <div class="px-4 mx-auto w-full {tab === 'contents' ? 'pb-4 max-w-none' : 'pb-12 max-w-4xl'}">
+    <div class="flex-1 min-h-0 px-4 mx-auto w-full {tab === 'contents' || tab === 'templates' ? 'pb-4 max-w-none' : 'pb-12 max-w-4xl overflow-y-auto'}">
       {#if tab === 'contents'}
         <div class="sm-desk">
-          <!-- the tree: every md file in use, its folder is the group, the draft
-               state rides as badges; the row verbs stay (rename, settings, delete,
-               open live) — management never left, it just moved into the margin -->
+          <!-- the tree: every md file in use — no type headlines (2026-11-09,
+               user order: redundant); a needle and a tag do the finding. The
+               draft state rides as badges; the row verbs stay in the margin -->
           <aside class="sm-desk-tree">
+            <div class="flex flex-col gap-1">
+              <input
+                class="input"
+                type="search"
+                placeholder="Search the pages…"
+                aria-label="Search page text"
+                bind:value={searchQ}
+                oninput={onSearchInput}
+              />
+              <select class="input" aria-label="Filter by tag" bind:value={tagFilter}>
+                <option value="">All tags</option>
+                {#each allTags as t (t)}<option value={t}>{t}</option>{/each}
+              </select>
+            </div>
             <div class="sm-desk-tree-list">
               {#if index === null}
                 <p class="italic text-ink-soft">Opening the drawer…</p>
+              {:else if deskRows.length === 0}
+                <p class="italic text-ink-soft">
+                  {#if searchBusy}Searching…{:else}Nothing found{activeQ !== '' ? ` for “${activeQ}”` : ''}{tagFilter !== '' ? ` tagged “${tagFilter}”` : ''}.{/if}
+                </p>
               {:else}
-                {#each Object.entries(index) as [type, pages] (type)}
-                  <p class="mg-h mt-3 first:mt-0">{type}</p>
-                  <ul class="list-none p-0 m-0 flex flex-col gap-1">
-                    {#each pages as page (page.slug)}
-                      <li>
-                        <div class="flex items-center gap-1">
+                <ul class="list-none p-0 m-0 flex flex-col gap-1">
+                  {#each deskRows as row (row.key)}
+                    <li>
+                      <div class="flex items-center gap-1">
+                        <button
+                          class="btn btn-secondary flex-1 justify-start min-w-0"
+                          class:btn-primary={sel?.type === row.type && sel?.slug === row.page.slug}
+                          title={`${row.type}/${row.page.slug}/index.md`}
+                          onclick={() => openRaw(row.type, row.page.slug)}
+                        >
+                          <span class="truncate">{row.page.slug}</span>
+                          {#if row.page.home}<span class="badge">home</span>{/if}
+                          {#if row.page.draft}<span class="badge badge-draft">draft</span>{/if}
+                          {#if row.page.hasDraft}<span class="badge badge-live">edits</span>{/if}
+                        </button>
+                        <button class="btn-ghost" title="Rename" onclick={() => startRename(row.type, row.page.slug)}>✎</button>
+                        <button class="btn-ghost" title="Page settings" onclick={() => openPageSettings(row.type, row.page.slug)}>✑</button>
+                        {#if row.page.home}
+                          <!-- the home page stands: no delete, ever (the lid is server-side too) -->
+                        {:else}
                           <button
-                            class="btn btn-secondary flex-1 justify-start min-w-0"
-                            class:btn-primary={sel?.type === type && sel?.slug === page.slug}
-                            title={`${type}/${page.slug}/index.md`}
-                            onclick={() => openRaw(type, page.slug)}
-                          >
-                            <span class="truncate">{page.slug}</span>
-                            {#if page.home}<span class="badge">home</span>{/if}
-                            {#if page.draft}<span class="badge badge-draft">draft</span>{/if}
-                            {#if page.hasDraft}<span class="badge badge-live">edits</span>{/if}
-                          </button>
-                          <button class="btn-ghost" title="Rename" onclick={() => startRename(type, page.slug)}>✎</button>
-                          <button class="btn-ghost" title="Page settings" onclick={() => openPageSettings(type, page.slug)}>✑</button>
-                          {#if page.home}
-                            <!-- the home page stands: no delete, ever (the lid is server-side too) -->
-                          {:else}
-                            <button
-                              class="btn-ghost danger"
-                              title={sel?.type === type && sel?.slug === page.slug && unlocked ? 'Delete page' : 'Open the page and press Unlock first — deletion follows the unlock'}
-                              disabled={!(sel?.type === type && sel?.slug === page.slug && unlocked)}
-                              onclick={() => removePage(type, page.slug)}
-                            >×</button>
-                          {/if}
-                          <button class="btn-ghost" title="Open the live page" onclick={() => select(type, page.slug)}>↗</button>
-                        </div>
-                        {#if renaming?.type === type && renaming?.slug === page.slug}
-                          {@const to = renaming.value.trim().toLowerCase()}
-                          {@const unchanged = to === renaming?.slug}
-                          {@const taken = (index?.[type] ?? []).some((p) => p.slug === to && p.slug !== renaming?.slug)}
-                          <form class="rename flex gap-1 flex-wrap items-center mt-1" onsubmit={commitRename}>
-                            <input class="input max-w-40" bind:value={renaming.value} pattern="[a-z0-9]+(-[a-z0-9]+)*" required />
-                            <button type="submit" class="btn btn-primary" disabled={unchanged || taken}
-                              title={unchanged ? 'Name unchanged' : taken ? 'Already taken' : 'Rename'}>✓</button>
-                            <button type="button" class="btn btn-secondary" onclick={() => (renaming = null)}>×</button>
-                            {#if unchanged}
-                              <span class="text-xs text-ink-soft">Same name.</span>
-                            {:else if taken}
-                              <span class="text-xs text-error">Another page already uses “{to}”.</span>
-                            {:else if renameError}
-                              <span class="text-xs text-error">{renameError}</span>
-                            {/if}
-                          </form>
+                            class="btn-ghost danger"
+                            title={sel?.type === row.type && sel?.slug === row.page.slug && unlocked ? 'Delete page' : 'Open the page and press Unlock first — deletion follows the unlock'}
+                            disabled={!(sel?.type === row.type && sel?.slug === row.page.slug && unlocked)}
+                            onclick={() => removePage(row.type, row.page.slug)}
+                          >×</button>
                         {/if}
-                      </li>
-                    {/each}
-                  </ul>
-                {/each}
+                        <button class="btn-ghost" title="Open the live page" onclick={() => select(row.type, row.page.slug)}>↗</button>
+                      </div>
+                      {#if renaming?.type === row.type && renaming?.slug === row.page.slug}
+                        {@const to = renaming.value.trim().toLowerCase()}
+                        {@const unchanged = to === renaming?.slug}
+                        {@const taken = (index?.[row.type] ?? []).some((p) => p.slug === to && p.slug !== renaming?.slug)}
+                        <form class="rename flex gap-1 flex-wrap items-center mt-1" onsubmit={commitRename}>
+                          <input class="input max-w-40" bind:value={renaming.value} pattern="[a-z0-9]+(-[a-z0-9]+)*" required />
+                          <button type="submit" class="btn btn-primary" disabled={unchanged || taken}
+                            title={unchanged ? 'Name unchanged' : taken ? 'Already taken' : 'Rename'}>✓</button>
+                          <button type="button" class="btn btn-secondary" onclick={() => (renaming = null)}>×</button>
+                          {#if unchanged}
+                            <span class="text-xs text-ink-soft">Same name.</span>
+                          {:else if taken}
+                            <span class="text-xs text-error">Another page already uses “{to}”.</span>
+                          {:else if renameError}
+                            <span class="text-xs text-error">{renameError}</span>
+                          {/if}
+                        </form>
+                      {/if}
+                    </li>
+                  {/each}
+                </ul>
               {/if}
             </div>
             <div class="sm-desk-foot">
@@ -1194,7 +1491,6 @@
         {#if siteSettings}
           <form class="mg flex flex-col gap-3 max-w-md" onsubmit={saveSiteNow}>
             <h4 class="mg-h">Site settings</h4>
-            <p class="m-0 text-xs text-ink-soft">The live template (theme) hangs in Plugins &amp; Templates now — activate it there.</p>
             <label class="field"><span>Site name</span><input class="input" bind:value={siteSettings.name} required /></label>
             <label class="field"><span>Claim</span><input class="input" bind:value={siteSettings.claim} /></label>
             <label class="field">
@@ -1205,22 +1501,39 @@
                 {siteBusy ? 'Uploading…' : 'Upload logo…'}
               </label>
             </label>
-            <label class="field"><span>Template <span class="hint">(the whole site — a page's own "Served as" overrides)</span></span>
-              <select class="input" bind:value={siteSettings.style}>
-                <option value="">theme default</option>
-                <option value="classical">classical</option>
-                <option value="slide">slide</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Home slug <span class="hint">(empty = first page)</span></span>
-              <input class="input" bind:value={siteSettings.home} pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                title="lowercase, digits, hyphens — or empty" />
-            </label>
             <button type="submit" class="btn btn-primary self-start" disabled={siteBusy}>{siteBusy ? 'Saving…' : 'Save site'}</button>
             {#if siteError}<p class="alert alert-err m-0" role="alert">{siteError}</p>{/if}
             {#if siteNote}<p class="alert alert-ok m-0">{siteNote}</p>{/if}
           </form>
+
+          <section class="mg mt-4">
+            <h4 class="mg-h">Theme style</h4>
+            {#if siteSettings.handles.length === 0}
+              <p class="italic text-ink-soft m-0">The active template declares no handles — its stylesheet is the only way in.</p>
+            {:else}
+              <p class="hint m-0">
+                The active template <b>{siteSettings.theme}</b> offers these knobs. Turn them here; the template's stylesheet keeps the layout.
+              </p>
+              <div class="grid grid-cols-2 gap-3 mt-3">
+                {#each siteSettings.handles as handle (handle.var)}
+                  <div class="field">
+                    <span>{handle.label}</span>
+                    <div class="flex items-center gap-2">
+                      {#if handle.type === 'color'}
+                        <input type="color" class="h-9 w-14 cursor-pointer p-0" bind:value={handleValues[handle.var]} aria-label={handle.label} />
+                      {:else}
+                        <input class="input" bind:value={handleValues[handle.var]} aria-label={handle.label} />
+                      {/if}
+                      <button type="button" class="btn-ghost" title="Back to the template's default" onclick={() => resetHandle(handle.var, handle.default)}>↺</button>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+              <button type="button" class="btn btn-primary self-start mt-3" onclick={saveHandlesNow} disabled={styleBusy}>{styleBusy ? 'Saving…' : 'Save style'}</button>
+              {#if styleError}<p class="alert alert-err m-0" role="alert">{styleError}</p>{/if}
+              {#if styleNote}<p class="alert alert-ok m-0">{styleNote}</p>{/if}
+            {/if}
+          </section>
         {:else}
           <p class="italic text-ink-soft">Reaching for the settings…</p>
         {/if}
@@ -1270,22 +1583,48 @@
           {:else}
             <ul class="list-none p-0 m-0 flex flex-col gap-2">
               {#each plugins as plugin (plugin.name)}
-                <li class="card flex items-start justify-between gap-3">
-                  <div class="min-w-0">
-                    <p class="m-0 font-bold">
-                      {plugin.title} <span class="text-xs text-ink-soft">v{plugin.version}</span>
-                      {#if plugin.error}<span class="badge">broken</span>{/if}
-                    </p>
-                    {#if plugin.description}<p class="m-0 text-sm text-ink-soft">{plugin.description}</p>{/if}
+                <li class="card card-shelf h-36">
+                  {#if plugin.preview}
+                    <img src={plugin.preview} alt="" class="shelf-shot" loading="lazy" />
+                  {:else}
+                    <img src={houseShot(plugin.name)} alt="" class="shelf-shot" loading="lazy" />
+                  {/if}
+                  <div class="flex-1 min-w-0 py-2 pr-3 flex flex-col gap-1 overflow-hidden">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="min-w-0">
+                        <p class="m-0 font-bold truncate">
+                          {plugin.title} <span class="text-xs text-ink-soft">v{plugin.version}</span>
+                          {#if plugin.error}<span class="badge">broken</span>{/if}
+                        </p>
+                      </div>
+                      <div class="flex shrink-0 items-start gap-2">
+                        {#if !plugin.error}
+                          <button
+                            class="btn {plugin.enabled ? 'btn-secondary' : 'btn-primary'}"
+                            disabled={pluginsBusy}
+                            onclick={() => togglePlugin(plugin)}
+                          >
+                            {#if pluginsBusy}…{:else if plugin.enabled}Disable{:else}Enable{/if}
+                          </button>
+                        {/if}
+                        <button
+                          class="btn-ghost danger"
+                          title="Delete plugin"
+                          disabled={pluginsBusy}
+                          onclick={() => deletePluginNow(plugin)}
+                        >×</button>
+                      </div>
+                    </div>
+                    {#if plugin.description}<p class="m-0 text-sm text-ink-soft leading-snug line-clamp-2">{plugin.description}</p>{/if}
                     {#if !plugin.enabled && (plugin.requires ?? []).length > 0}
                       {@const sleeping = (plugin.requires ?? []).filter((r) => !plugins.some((p) => p.name === r && p.enabled))}
-                      <p class="m-0 text-xs {sleeping.length > 0 ? 'text-error' : 'text-ink-soft'}">
+                      <p class="m-0 text-xs {sleeping.length > 0 ? 'text-error' : 'text-ink-soft'} truncate">
                         requires: {(plugin.requires ?? []).join(', ')}
                         {sleeping.length > 0 ? `— sleeping: ${sleeping.join(', ')}` : '(all enabled ✓)'}
                       </p>
                     {/if}
                     {#if plugin.error}
-                      <p class="m-0 text-sm text-ink-soft">{plugin.error}</p>
+                      <p class="m-0 text-sm text-ink-soft truncate">{plugin.error}</p>
                     {:else}
                       <p class="m-0 text-xs text-ink-soft">
                         {plugin.placeholders.length} placeholder{plugin.placeholders.length === 1 ? '' : 's'}
@@ -1293,15 +1632,6 @@
                       </p>
                     {/if}
                   </div>
-                  {#if !plugin.error}
-                    <button
-                      class="btn {plugin.enabled ? 'btn-secondary' : 'btn-primary'}"
-                      disabled={pluginsBusy}
-                      onclick={() => togglePlugin(plugin)}
-                    >
-                      {#if pluginsBusy}…{:else if plugin.enabled}Disable{:else}Enable{/if}
-                    </button>
-                  {/if}
                 </li>
               {/each}
             </ul>
@@ -1318,13 +1648,41 @@
           {:else}
             <ul class="list-none p-0 m-0 flex flex-col gap-2">
               {#each vitrine.filter((w) => w.kind === 'plugin' && w.state !== 'installed') as ware (ware.name)}
-                <li class="card flex items-start justify-between gap-3">
-                  <div class="min-w-0">
-                    <p class="m-0 font-bold">
-                      {ware.title} <span class="text-xs text-ink-soft">v{ware.version}</span>
-                      {#if ware.state === 'update'}<span class="badge">update</span>{/if}
-                    </p>
-                    {#if ware.description}<p class="m-0 text-sm text-ink-soft">{ware.description}</p>{/if}
+                <li class="card card-shelf">
+                  {#if ware.previewUrl && !brokenPreviews[ware.name]}
+                    <img
+                      src={ware.previewUrl}
+                      alt=""
+                      class="shelf-shot-fixed"
+                      loading="lazy"
+                      onerror={() => (brokenPreviews = { ...brokenPreviews, [ware.name]: true })}
+                    />
+                  {:else}
+                    <img src={houseShot(ware.name)} alt="" class="shelf-shot-fixed" loading="lazy" />
+                  {/if}
+                  <div class="flex-1 min-w-0 py-3 pr-3 flex flex-col gap-1">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="min-w-0">
+                        <p class="m-0 font-bold truncate">
+                          {ware.title} <span class="text-xs text-ink-soft">v{ware.version}</span>
+                          {#if ware.state === 'update'}<span class="badge">update</span>{/if}
+                        </p>
+                      </div>
+                      <div class="shrink-0">
+                        {#if ware.state === 'installable'}
+                          <button
+                            class="btn btn-primary"
+                            disabled={vitrineBusy || ware.missing.length > 0}
+                            onclick={() => installWareByName(ware)}
+                          >
+                            {#if vitrineBusy}…{:else}Install{/if}
+                          </button>
+                        {:else if ware.state === 'update'}
+                          <span class="text-xs text-ink-soft self-center">update waiting — see Updates</span>
+                        {/if}
+                      </div>
+                    </div>
+                    {#if ware.description}<p class="m-0 text-sm text-ink-soft leading-snug line-clamp-2">{ware.description}</p>{/if}
                     {#if ware.missing.length > 0}
                       <p class="m-0 text-xs text-error">
                         requires {ware.requires.join(', ')} — missing: {ware.missing.join(', ')}. The dependency must be installed first.
@@ -1340,19 +1698,6 @@
                           : 'not installed on this host'}
                     </p>
                   </div>
-                  <div>
-                    {#if ware.state === 'installable'}
-                      <button
-                        class="btn btn-primary"
-                        disabled={vitrineBusy || ware.missing.length > 0}
-                        onclick={() => installWareByName(ware)}
-                      >
-                        {#if vitrineBusy}…{:else}Install{/if}
-                      </button>
-                    {:else if ware.state === 'update'}
-                      <span class="text-xs text-ink-soft self-center">update waiting — see Updates</span>
-                    {/if}
-                  </div>
                 </li>
               {/each}
             </ul>
@@ -1361,105 +1706,187 @@
           {#if vitrineNote}<p class="alert alert-ok">{vitrineNote}</p>{/if}
         </section>
       {:else if tab === 'templates' && role === 'admin'}
-        <section class="mg flex flex-col gap-2">
-          <h4 class="mg-h">Templates</h4>
-          {#if templatesBusy && templates.length === 0}
-            <p class="italic text-ink-soft">Reading the bake-shop wall…</p>
-          {:else if templatesError && templates.length === 0}
-            <p class="alert alert-err" role="alert">{templatesError}</p>
-          {:else}
-            <ul class="list-none p-0 m-0 flex flex-col gap-2">
-              {#each templates as template (template.name)}
-                {@const ware = vitrineTemplateWare(template.name)}
-                <li class="card flex items-start justify-between gap-3">
-                  <div class="min-w-0">
-                    <p class="m-0 font-bold">
-                      {template.title} <span class="text-xs text-ink-soft">v{template.version}</span>
-                      {#if template.active}<span class="badge badge-live ml-2">active</span>{/if}
-                    </p>
-                    {#if template.description}<p class="m-0 text-sm text-ink-soft">{template.description}</p>{/if}
-                    {#if template.styles.length > 0}
-                      <p class="m-0 text-xs text-ink-soft">styles: {template.styles.join(', ')}</p>
-                    {/if}
-                    {#if ware && ware.state === 'update'}
-                      <p class="m-0 text-xs text-ink-soft">installed: v{ware.installedVersion} — update waiting in Updates</p>
-                    {/if}
-                  </div>
-                  <div class="flex shrink-0 items-start gap-2">
-                    {#if previewSlug !== ''}
-                      <a
-                        class="btn btn-secondary"
-                        href={`/bridge/preview/${template.name}/pages/${previewSlug}`}
-                        target="_blank"
-                        rel="noopener"
-                        title="See your page dressed in this theme — the fitting room, nothing saved"
-                      >Preview ↗</a>
-                    {/if}
-                    {#if template.active}
-                      <span class="text-xs text-ink-soft self-center text-right">live — activate another before deleting</span>
+        <!-- THE 50/50 SPLIT (2026-11-10, user order): LEFT = the fitting room
+             (the preview) with the theme's details at its bottom; RIGHT = every
+             theme you could pick — installed AND the Vitrine shelf, one list. -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-4 h-full min-h-0">
+          <section class="mg flex flex-col gap-3 min-h-0">
+            <h4 class="mg-h">The chosen theme</h4>
+            {#if selectedRow}
+              <div class="flex-1 min-h-0 grid grid-rows-1 place-items-center">
+                {#if selectedRow.preview && !brokenPreviews[selectedRow.name]}
+                  <img
+                    src={selectedRow.preview}
+                    alt="Preview of {selectedRow.title}"
+                    class="w-full h-full object-cover"
+                    onerror={() => (brokenPreviews = { ...brokenPreviews, [selectedRow.name]: true })}
+                  />
+                {:else}
+                  <img src={houseShot(selectedRow.name)} alt="Preview of {selectedRow.title}" class="w-full h-full object-cover" />
+                {/if}
+              </div>
+              <div class="flex-none flex flex-col gap-2 border-t border-line pt-3">
+                <p class="m-0 font-bold">
+                  {selectedRow.title} <span class="text-xs text-ink-soft">v{selectedRow.version}</span>
+                  {#if selectedRow.active}<span class="badge badge-live ml-2">active</span>{/if}
+                  {#if selectedRow.houseDefault}<span class="badge ml-2">house default</span>{/if}
+                </p>
+                {#if selectedRow.description}<p class="m-0 text-sm text-ink-soft">{selectedRow.description}</p>{/if}
+                {#if selectedRow.styles.length > 0}
+                  <p class="m-0 text-xs text-ink-soft">
+                    {#each selectedRow.styles as style (style)}<span class="tag mr-1">{style}</span>{/each}
+                  </p>
+                {/if}
+                {#if selectedRow.missing.length > 0}
+                  <p class="m-0 text-xs text-error">
+                    requires {selectedRow.requires.join(', ')} — missing: {selectedRow.missing.join(', ')}. The dependency must be installed first.
+                  </p>
+                {/if}
+                <div class="flex items-center gap-2">
+                  {#if selectedRow.installed}
+                    {#if selectedRow.active}
+                      <span class="btn btn-secondary btn-static">active</span>
                     {:else}
                       <button
                         class="btn btn-primary"
                         disabled={templatesBusy}
-                        onclick={() => activateTemplateNow(template)}
+                        onclick={() => selectedRow.template && activateTemplateNow(selectedRow.template)}
                       >
                         {#if templatesBusy}…{:else}Activate{/if}
                       </button>
-                      <button
-                        class="btn-ghost danger"
-                        title="Delete template"
-                        disabled={templatesBusy}
-                        onclick={() => deleteTemplateNow(template)}
-                      >×</button>
+                      {#if !selectedRow.houseDefault}
+                        <button
+                          class="btn-ghost danger"
+                          title="Delete template"
+                          disabled={templatesBusy}
+                          onclick={() => selectedRow.template && deleteTemplateNow(selectedRow.template)}
+                        >×</button>
+                      {/if}
+                      {#if previewSlug !== ''}
+                        <a
+                          class="btn btn-secondary"
+                          href={`/bridge/preview/${selectedRow.name}/pages/${previewSlug}`}
+                          target="_blank"
+                          rel="noopener"
+                          title="Open the fitting room in a new tab"
+                        >Preview ↗</a>
+                      {/if}
                     {/if}
-                  </div>
-                </li>
-              {/each}
-            </ul>
-            {#if templatesError && templates.length > 0}<p class="alert alert-err" role="alert">{templatesError}</p>{/if}
-            {#if templatesNote}<p class="alert alert-ok">{templatesNote}</p>{/if}
-            <h4 class="mg-h mg-sub">From the Vitrine</h4>
+                  {:else if selectedRow.ware}
+                    <button
+                      class="btn btn-primary"
+                      disabled={vitrineBusy || selectedRow.missing.length > 0}
+                      onclick={() => selectedRow.ware && installWareByName(selectedRow.ware)}
+                    >
+                      {#if vitrineBusy}…{:else}Install{/if}
+                    </button>
+                  {:else if selectedRow.state === 'update'}
+                    <span class="text-xs text-ink-soft">update waiting — see Updates</span>
+                  {/if}
+                </div>
+                {#if templatesError}<p class="alert alert-err m-0" role="alert">{templatesError}</p>{/if}
+                {#if templatesNote}<p class="alert alert-ok m-0">{templatesNote}</p>{/if}
+              </div>
+            {:else}
+              <p class="italic text-ink-soft">No themes on the shelf yet.</p>
+            {/if}
+          </section>
+          <section class="mg flex flex-col gap-2 min-h-0">
+            <h4 class="mg-h">Available themes</h4>
             {#if vitrineDark}
               <p class="alert alert-warn">{vitrineDark}</p>
-            {:else if vitrineBusy && vitrine.length === 0}
-              <p class="italic text-ink-soft">Reading the window display…</p>
+            {/if}
+            {#if templatesBusy && templates.length === 0}
+              <p class="italic text-ink-soft">Reading the bake-shop wall…</p>
+            {:else if templatesError && templates.length === 0}
+              <p class="alert alert-err" role="alert">{templatesError}</p>
             {:else}
-              <ul class="list-none p-0 m-0 flex flex-col gap-2">
-                {#each vitrine.filter((w) => w.kind === 'template' && w.state !== 'installed') as ware (ware.name)}
-                  <li class="card flex items-start justify-between gap-3">
-                    <div class="min-w-0">
-                      <p class="m-0 font-bold">
-                        {ware.title} <span class="text-xs text-ink-soft">v{ware.version}</span>
-                        {#if ware.state === 'update'}<span class="badge">update</span>{/if}
-                      </p>
-                      {#if ware.description}<p class="m-0 text-sm text-ink-soft">{ware.description}</p>{/if}
-                      {#if ware.missing.length > 0}
-                        <p class="m-0 text-xs text-error">
-                          requires {ware.requires.join(', ')} — missing: {ware.missing.join(', ')}. The dependency must be installed first.
-                        </p>
-                      {:else if ware.requires.length > 0 && ware.state !== 'installed'}
-                        <p class="m-0 text-xs text-ink-soft">requires: {ware.requires.join(', ')} (all on this host ✓)</p>
+              {#snippet themeRow(row: ThemeRow)}
+                <li class="card card-shelf h-36">
+                  {#if row.preview && !brokenPreviews[row.name]}
+                    <img
+                      src={row.preview}
+                      alt=""
+                      class="shelf-shot"
+                      loading="lazy"
+                      onerror={() => (brokenPreviews = { ...brokenPreviews, [row.name]: true })}
+                    />
+                  {:else}
+                    <img src={houseShot(row.name)} alt="" class="shelf-shot" loading="lazy" />
+                  {/if}
+                  <div class="flex-1 min-w-0 py-2 pr-3 flex flex-col gap-1 overflow-hidden">
+                    <div class="flex items-start justify-between gap-2">
+                      <button class="text-left min-w-0" onclick={() => (selectedTheme = row.name)} title="Show {row.title} in the fitting room">
+                        <span class="block font-bold truncate {row.name === selectedRow?.name ? 'text-jam' : ''}">
+                          {row.title} <span class="text-xs text-ink-soft">v{row.version}</span>
+                        </span>
+                      </button>
+                      {#if row.installed && !row.active && !row.houseDefault}
+                        <button
+                          class="btn-ghost danger shrink-0"
+                          title="Delete template"
+                          disabled={templatesBusy}
+                          onclick={() => row.template && deleteTemplateNow(row.template)}
+                        >×</button>
                       {/if}
                     </div>
-                    <div>
-                      {#if ware.state === 'installable'}
+                    {#if row.description}
+                      <p class="m-0 text-sm text-ink-soft leading-snug line-clamp-2">{row.description}</p>
+                    {/if}
+                    <div class="flex items-center gap-2 mt-auto">
+                      {#if row.active}
+                        <span class="btn btn-secondary btn-static shrink-0">active</span>
+                      {:else if row.installed}
                         <button
-                          class="btn btn-primary"
-                          disabled={vitrineBusy || ware.missing.length > 0}
-                          onclick={() => installWareByName(ware)}
+                          class="btn btn-primary shrink-0"
+                          disabled={templatesBusy}
+                          onclick={() => row.template && activateTemplateNow(row.template)}
+                        >
+                          {#if templatesBusy}…{:else}Activate{/if}
+                        </button>
+                      {:else if row.ware}
+                        <button
+                          class="btn btn-primary shrink-0"
+                          disabled={vitrineBusy || row.missing.length > 0}
+                          onclick={() => row.ware && installWareByName(row.ware)}
                         >
                           {#if vitrineBusy}…{:else}Install{/if}
                         </button>
-                      {:else if ware.state === 'update'}
-                        <span class="text-xs text-ink-soft self-center">update waiting — see Updates</span>
+                      {:else if row.state === 'update'}
+                        <span class="text-xs text-ink-soft shrink-0">update waiting — see Updates</span>
                       {/if}
+                      <span class="flex-1 min-w-0 truncate text-right">
+                        {#each row.styles as style (style)}
+                          <span class="tag mr-1">{style}</span>
+                        {/each}
+                      </span>
                     </div>
-                  </li>
+                  </div>
+                </li>
+              {/snippet}
+              <ul class="list-none p-0 m-0 flex flex-col gap-2">
+                {#each installedRows as row (row.name)}
+                  {@render themeRow(row)}
                 {/each}
               </ul>
+              {#if shelfRows.length > 0}
+                <!-- the Vitrine divider: a thin line with the name in its middle -->
+                <div class="flex items-center gap-3 my-1 shrink-0" role="separator" aria-label="Vitrine">
+                  <span class="h-px flex-1 bg-line"></span>
+                  <span class="text-xs font-bold uppercase tracking-widest text-ink-soft">Vitrine</span>
+                  <span class="h-px flex-1 bg-line"></span>
+                </div>
+                <ul class="list-none p-0 m-0 flex flex-col gap-2">
+                  {#each shelfRows as row (row.name)}
+                    {@render themeRow(row)}
+                  {/each}
+                </ul>
+              {/if}
             {/if}
-          {/if}
-        </section>
+            {#if vitrineError && role === 'admin'}<p class="alert alert-err m-0" role="alert">{vitrineError}</p>{/if}
+            {#if vitrineNote}<p class="alert alert-ok m-0">{vitrineNote}</p>{/if}
+          </section>
+        </div>
       {:else if tab === 'updates' && role === 'admin'}
         <section class="mg flex flex-col gap-2">
           <h4 class="mg-h">Updates</h4>
@@ -1542,8 +1969,11 @@
 {/if}
 
 {#if mediaModal}
-  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50 p-4" role="dialog" aria-modal="true" aria-label="Media">
-    <div class="modal-card" style="width: min(60rem, 94vw)">
+  <!-- the dark closes the modal (2026-11-09, user order); ESC is gone by the same word — the keyboard path is deliberate absence, not an oversight -->
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50 p-4" role="dialog" aria-modal="true" aria-label="Media" tabindex="-1" onclick={() => (mediaModal = false)}>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="modal-card" style="width: min(60rem, 94vw)" onclick={(e) => e.stopPropagation()}>
       <header class="modal-head">
         <h3>Media</h3>
         <button type="button" class="close-x" onclick={() => (mediaModal = false)}>×</button>
@@ -1575,8 +2005,10 @@
 {/if}
 
 {#if uploadModal}
-  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50" role="dialog" aria-modal="true" aria-label="Upload markdown page">
-    <form class="modal-card" onsubmit={saveUpload}>
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50" role="dialog" aria-modal="true" aria-label="Upload markdown page" tabindex="-1" onclick={() => (uploadModal = null)}>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <form class="modal-card" onsubmit={saveUpload} onclick={(e) => e.stopPropagation()}>
       <header class="modal-head">
         <h3>Upload — {uploadModal.fileName}</h3>
         <button type="button" class="close-x" onclick={() => (uploadModal = null)}>×</button>
@@ -1621,8 +2053,10 @@
 {/if}
 
 {#if pageSettings}
-  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50" role="dialog" aria-modal="true" aria-label="Page settings">
-    <form class="modal-card" onsubmit={savePageSettings}>
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50" role="dialog" aria-modal="true" aria-label="Page settings" tabindex="-1" onclick={() => (pageSettings = null)}>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <form class="modal-card" onsubmit={savePageSettings} onclick={(e) => e.stopPropagation()}>
       <header class="modal-head">
         <h3>Settings — {pageSettings.type}/{pageSettings.slug}</h3>
         <button type="button" class="close-x" onclick={() => (pageSettings = null)}>×</button>
@@ -1638,14 +2072,6 @@
         <label class="check"><input type="radio" bind:group={pageSettings.asDraft} value={true} /> Draft — editors only until published</label>
       </fieldset>
       <label class="field">
-        <span>Template <span class="hint">(this page only — a "Served as" here overrides the site-wide one)</span></span>
-        <select class="input" bind:value={pageSettings.style}>
-          {#each STYLE_OPTIONS as [value, label] (value)}
-            <option value={value}>{label}</option>
-          {/each}
-        </select>
-      </label>
-      <label class="field">
         <span>Date</span>
         <input class="input" type="date" bind:value={pageSettings.date} />
       </label>
@@ -1653,6 +2079,12 @@
         <span>Tags (comma-separated)</span>
         <input class="input" bind:value={pageSettings.tags} />
       </label>
+      {#if role === 'admin'}
+        <label class="check">
+          <input type="checkbox" bind:checked={pageSettings.isHome} />
+          Home page <span class="hint">— the front door; the crown moves with this switch</span>
+        </label>
+      {/if}
 
       <p class="text-xs text-ink-soft m-0">Save writes the draft under the same conflict guard the editor used; a published page bakes live with the rendered body. Slug changes belong to the ✎ rename, not here.</p>
       {#if pageSettings.error}<p class="alert alert-err m-0" role="alert">{pageSettings.error}</p>{/if}
@@ -1665,8 +2097,10 @@
 {/if}
 
 {#if newModal}
-  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50" role="dialog" aria-modal="true" aria-label="New page">
-    <form class="modal-card" onsubmit={saveNew}>
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50" role="dialog" aria-modal="true" aria-label="New page" tabindex="-1" onclick={() => (newModal = null)}>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <form class="modal-card" onsubmit={saveNew} onclick={(e) => e.stopPropagation()}>
       <header class="modal-head">
         <h3>New page</h3>
         <button type="button" class="close-x" onclick={() => (newModal = null)}>×</button>
@@ -1681,6 +2115,19 @@
         <input class="input" bind:value={newModal.slug} required pattern="[a-z0-9]+(-[a-z0-9]+)*"
           title="lowercase letters, digits, hyphens" placeholder="my-tart" />
       </label>
+      {#if activeThemeStyles.length > 0}
+        <label class="field">
+          <span>Style <span class="hint">(the theme's word — {activeTheme?.title})</span></span>
+          <select class="input" bind:value={newModal.style}>
+            {#each activeThemeStyles as s (s)}
+              <option value={s}>{prettyStyle(s)}</option>
+            {/each}
+          </select>
+        </label>
+        {#if newModal?.style === 'frontpage'}
+          <p class="m-0 text-xs text-ink-soft">The frontpage is the home — creating it moves the crown here.</p>
+        {/if}
+      {/if}
       <label class="field">
         <span>Fill from a page type</span>
         <select class="input" bind:value={newModal.scaffold} onchange={() => pickScaffold(newModal?.scaffold ?? 'article')}>
