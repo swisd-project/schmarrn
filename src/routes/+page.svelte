@@ -1,7 +1,7 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
   // a burger opens the full-screen overlay (Contents / Settings / Plugins & Templates / Users).
-  import { session, login, logout, pageCount, searchPages, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, setHomePage, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, deletePlugin, listTemplates, activateTemplate, deleteTemplate, coreStatus, uploadCorePacket, runCoreUpdate, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, type PageRef, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef, type ThemeHandle } from '$lib/api';
+  import { session, login, logout, pageCount, searchPages, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, setHomePage, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, deletePlugin, savePluginSettings, listTemplates, activateTemplate, deleteTemplate, coreStatus, uploadCorePacket, runCoreUpdate, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, type PageRef, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef, type ThemeHandle } from '$lib/api';
   import { adminCloseTarget } from '$lib/back';
   import { base } from '$app/paths';
   import { schemaFor, withDraftFlag } from '$lib/schema';
@@ -691,9 +691,9 @@
     }
   }
 
-  /** The shelf's face for one installed template — undefined when the registry is dark. */
-  function vitrineTemplateWare(name: string): WareRef | undefined {
-    return vitrine.find((w) => w.kind === 'template' && w.name === name);
+  /** The shelf's face for one installed ware — undefined when the registry is dark. */
+  function vitrineWare(kind: WareRef['kind'], name: string): WareRef | undefined {
+    return vitrine.find((w) => w.kind === kind && w.name === name);
   }
 
   async function activateTemplateNow(template: TemplateRef) {
@@ -806,7 +806,7 @@
 
   const themeRows = $derived.by((): ThemeRow[] => {
     const rows: ThemeRow[] = templates.map((t) => {
-      const ware = vitrineTemplateWare(t.name);
+      const ware = vitrineWare('template', t.name);
       return {
         name: t.name,
         title: t.title,
@@ -854,6 +854,110 @@
   // the chosen theme: the picked one, else the live one, else the first on the shelf
   const selectedRow = $derived(
     themeRows.find((r) => r.name === selectedTheme) ?? themeRows.find((r) => r.active) ?? themeRows[0] ?? null
+  );
+
+  // ——— the plugins tab: the same 50/50 split ———
+  // RIGHT = every plugin (installed AND the Vitrine shelf, one list); LEFT =
+  // the chosen plugin: preview + title/version, description, tags, buttons,
+  // then the documentation / dependencies / settings detail tabs.
+  type PluginRow = {
+    name: string;
+    title: string;
+    version: string;
+    description: string;
+    documentation: string;
+    tags: readonly string[];
+    requires: readonly string[];
+    missing: readonly string[];
+    enabled: boolean;
+    installed: boolean;
+    error?: string;
+    state: 'enabled' | 'disabled' | 'update' | 'installable';
+    preview: string | null;
+    plugin: PluginRef | null;
+    ware: WareRef | null;
+  };
+
+  let selectedPlugin = $state('');
+  let pluginDetailTab = $state<'documentation' | 'dependencies' | 'settings'>('documentation');
+  // Plugin settings (2026-11-11): the draft mirrors the stored values; the
+  // $effect re-seats it whenever the selected plugin (or the shelf) changes.
+  let pluginSettingsDraft = $state<Record<string, string | boolean>>({});
+  let revealedSecrets = $state<Record<string, boolean>>({});
+  let settingsBusy = $state(false);
+  let settingsNote = $state('');
+
+  $effect(() => {
+    const row = selectedPluginRow;
+    pluginSettingsDraft = { ...(row?.plugin?.settingsValues ?? {}) };
+    revealedSecrets = {};
+    settingsNote = '';
+  });
+
+  async function savePluginSettingsNow() {
+    const row = selectedPluginRow;
+    if (!row?.plugin || settingsBusy) return;
+    settingsBusy = true;
+    settingsNote = '';
+    try {
+      await savePluginSettings(row.name, { ...pluginSettingsDraft });
+      plugins = await listPlugins(); // the shelf re-reads — the draft effect re-seats itself
+      settingsNote = 'Saved.';
+    } catch (e) {
+      settingsNote = e instanceof Error ? e.message : String(e);
+    } finally {
+      settingsBusy = false;
+    }
+  }
+
+  const pluginRows = $derived.by((): PluginRow[] => {
+    const rows: PluginRow[] = plugins.map((p) => {
+      const ware = vitrineWare('plugin', p.name);
+      return {
+        name: p.name,
+        title: p.title,
+        version: p.version,
+        description: p.description,
+        documentation: p.documentation ?? '',
+        tags: p.tags ?? [],
+        requires: ware?.requires ?? p.requires ?? [],
+        missing: ware?.missing ?? [],
+        enabled: p.enabled,
+        installed: true,
+        error: p.error,
+        state: ware?.state === 'update' ? 'update' : p.enabled ? 'enabled' : 'disabled',
+        preview: p.preview ?? null,
+        plugin: p,
+        ware: ware ?? null
+      };
+    });
+    for (const w of vitrine) {
+      if (w.kind !== 'plugin' || w.state === 'installed') continue;
+      if (rows.some((r) => r.name === w.name)) continue; // the installed row speaks for it
+      rows.push({
+        name: w.name,
+        title: w.title,
+        version: w.version,
+        description: w.description,
+        documentation: w.documentation ?? '',
+        tags: w.tags ?? [],
+        requires: w.requires,
+        missing: w.missing,
+        enabled: false,
+        installed: false,
+        state: w.state === 'update' ? 'update' : 'installable',
+        preview: w.previewUrl && w.previewUrl !== '' ? w.previewUrl : null,
+        plugin: null,
+        ware: w
+      });
+    }
+    return rows;
+  });
+  const installedPluginRows = $derived(pluginRows.filter((r) => r.installed));
+  const shelfPluginRows = $derived(pluginRows.filter((r) => !r.installed));
+
+  const selectedPluginRow = $derived(
+    pluginRows.find((r) => r.name === selectedPlugin) ?? pluginRows[0] ?? null
   );
 
   async function loadCore() {
@@ -1346,7 +1450,7 @@
       {/if}
     </nav>
 
-    <div class="flex-1 min-h-0 px-4 mx-auto w-full {tab === 'contents' || tab === 'templates' ? 'pb-4 max-w-none' : 'pb-12 max-w-4xl overflow-y-auto'}">
+    <div class="flex-1 min-h-0 px-4 mx-auto w-full {tab === 'contents' || tab === 'templates' || tab === 'plugins' || tab === 'settings' ? 'pb-4 max-w-none' : 'pb-12 max-w-4xl overflow-y-auto'}">
       {#if tab === 'contents'}
         <div class="sm-desk">
           <!-- the tree: every md file in use — no type headlines (2026-11-09,
@@ -1488,33 +1592,37 @@
           </div>
         </div>
       {:else if tab === 'settings' && role === 'admin'}
+        <!-- THE BENTO (2026-11-11, user order): 5 columns x 2 rows — site
+             settings 1x1, theme style 2x1; the empty cells wait for later
+             freight. Every tile scrolls inside itself: the page never moves. -->
         {#if siteSettings}
-          <form class="mg flex flex-col gap-3 max-w-md" onsubmit={saveSiteNow}>
-            <h4 class="mg-h">Site settings</h4>
-            <label class="field"><span>Site name</span><input class="input" bind:value={siteSettings.name} required /></label>
-            <label class="field"><span>Claim</span><input class="input" bind:value={siteSettings.claim} /></label>
-            <label class="field">
-              <span>Logo</span>
-              <input class="input" bind:value={siteSettings.logo} placeholder="URL, /path, or upload below" />
-              <label class="btn btn-secondary self-start cursor-pointer">
-                <input class="hidden" type="file" accept="image/*" onchange={onLogoPick} disabled={siteBusy} />
-                {siteBusy ? 'Uploading…' : 'Upload logo…'}
+          <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 min-h-0 overflow-y-auto">
+            <form class="mg flex flex-col gap-3 lg:col-span-1" onsubmit={saveSiteNow}>
+              <h4 class="mg-h">Site settings</h4>
+              <label class="field"><span>Site name</span><input class="input" bind:value={siteSettings.name} required /></label>
+              <label class="field"><span>Claim</span><input class="input" bind:value={siteSettings.claim} /></label>
+              <label class="field">
+                <span>Logo</span>
+                <input class="input" bind:value={siteSettings.logo} placeholder="URL, /path, or upload below" />
+                <label class="btn btn-secondary self-start cursor-pointer">
+                  <input class="hidden" type="file" accept="image/*" onchange={onLogoPick} disabled={siteBusy} />
+                  {siteBusy ? 'Uploading…' : 'Upload logo…'}
+                </label>
               </label>
-            </label>
-            <button type="submit" class="btn btn-primary self-start" disabled={siteBusy}>{siteBusy ? 'Saving…' : 'Save site'}</button>
-            {#if siteError}<p class="alert alert-err m-0" role="alert">{siteError}</p>{/if}
-            {#if siteNote}<p class="alert alert-ok m-0">{siteNote}</p>{/if}
-          </form>
+              <button type="submit" class="btn btn-primary self-start" disabled={siteBusy}>{siteBusy ? 'Saving…' : 'Save site'}</button>
+              {#if siteError}<p class="alert alert-err m-0" role="alert">{siteError}</p>{/if}
+              {#if siteNote}<p class="alert alert-ok m-0">{siteNote}</p>{/if}
+            </form>
 
-          <section class="mg mt-4">
-            <h4 class="mg-h">Theme style</h4>
+            <section class="mg flex flex-col gap-3 lg:col-span-2">
+              <h4 class="mg-h">Theme style</h4>
             {#if siteSettings.handles.length === 0}
               <p class="italic text-ink-soft m-0">The active template declares no handles — its stylesheet is the only way in.</p>
             {:else}
               <p class="hint m-0">
                 The active template <b>{siteSettings.theme}</b> offers these knobs. Turn them here; the template's stylesheet keeps the layout.
               </p>
-              <div class="grid grid-cols-2 gap-3 mt-3">
+              <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
                 {#each siteSettings.handles as handle (handle.var)}
                   <div class="field">
                     <span>{handle.label}</span>
@@ -1529,11 +1637,12 @@
                   </div>
                 {/each}
               </div>
-              <button type="button" class="btn btn-primary self-start mt-3" onclick={saveHandlesNow} disabled={styleBusy}>{styleBusy ? 'Saving…' : 'Save style'}</button>
+              <button type="button" class="btn btn-primary self-start" onclick={saveHandlesNow} disabled={styleBusy}>{styleBusy ? 'Saving…' : 'Save style'}</button>
               {#if styleError}<p class="alert alert-err m-0" role="alert">{styleError}</p>{/if}
               {#if styleNote}<p class="alert alert-ok m-0">{styleNote}</p>{/if}
             {/if}
-          </section>
+            </section>
+          </div>
         {:else}
           <p class="italic text-ink-soft">Reaching for the settings…</p>
         {/if}
@@ -1572,146 +1681,263 @@
           <button type="submit" class="btn btn-primary self-start">Add account</button>
         </form>
       {:else if tab === 'plugins' && role === 'admin'}
-        <section class="mg mb-6">
-          <h4 class="mg-h">Plugins</h4>
-          {#if pluginsBusy && plugins.length === 0}
-            <p class="italic text-ink-soft">Opening the pantry…</p>
-          {:else if pluginsError && plugins.length === 0}
-            <p class="alert alert-err" role="alert">{pluginsError}</p>
-          {:else if plugins.length === 0}
-            <p class="m-0 italic text-ink-soft">No plugins installed — drop a folder with plugin.json + plugin.php into plugins/.</p>
-          {:else}
-            <ul class="list-none p-0 m-0 flex flex-col gap-2">
-              {#each plugins as plugin (plugin.name)}
-                <li class="card card-shelf h-36">
-                  {#if plugin.preview}
-                    <img src={plugin.preview} alt="" class="shelf-shot" loading="lazy" />
+        <!-- THE 50/50 SPLIT (2026-11-11, user order): LEFT = the chosen plugin
+             (preview + title/version, description, tags, buttons, then the
+             documentation / dependencies / settings detail tabs); RIGHT = every
+             plugin you could pick — installed AND the Vitrine shelf, one list. -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-4 h-full min-h-0">
+          <section class="mg flex flex-col gap-3 min-h-0">
+            {#if selectedPluginRow}
+              <div class="flex-none flex gap-3 items-start">
+                {#if selectedPluginRow.preview && !brokenPreviews[selectedPluginRow.name]}
+                  <img
+                    src={selectedPluginRow.preview}
+                    alt="Preview of {selectedPluginRow.title}"
+                    class="w-20 h-20 object-cover border border-line"
+                    onerror={() => (brokenPreviews = { ...brokenPreviews, [selectedPluginRow.name]: true })}
+                  />
+                {:else}
+                  <img src={houseShot(selectedPluginRow.name)} alt="Preview of {selectedPluginRow.title}" class="w-20 h-20 object-cover border border-line" />
+                {/if}
+                <div class="min-w-0">
+                  <p class="m-0 font-bold">
+                    {selectedPluginRow.title} <span class="text-xs text-ink-soft">v{selectedPluginRow.version}</span>
+                    {#if selectedPluginRow.error}<span class="badge">broken</span>{/if}
+                    {#if selectedPluginRow.state === 'update'}<span class="badge ml-2">update</span>{/if}
+                    {#if selectedPluginRow.installed && selectedPluginRow.enabled}<span class="badge badge-live ml-2">enabled</span>{/if}
+                  </p>
+                  {#if selectedPluginRow.description}<p class="m-0 text-sm text-ink-soft leading-snug line-clamp-5">{selectedPluginRow.description}</p>{/if}
+                </div>
+              </div>
+              {#if selectedPluginRow.tags.length > 0}
+                <p class="m-0 text-xs text-ink-soft">
+                  {#each selectedPluginRow.tags as tag (tag)}<span class="tag mr-1">{tag}</span>{/each}
+                </p>
+              {/if}
+              <div class="flex-none flex items-center gap-2">
+                {#if selectedPluginRow.installed && !selectedPluginRow.error}
+                  <button
+                    class="btn {selectedPluginRow.enabled ? 'btn-secondary' : 'btn-primary'}"
+                    disabled={pluginsBusy}
+                    onclick={() => selectedPluginRow.plugin && togglePlugin(selectedPluginRow.plugin)}
+                  >
+                    {#if pluginsBusy}…{:else if selectedPluginRow.enabled}Disable{:else}Enable{/if}
+                  </button>
+                {:else if !selectedPluginRow.installed && selectedPluginRow.ware}
+                  <button
+                    class="btn btn-primary"
+                    disabled={vitrineBusy || selectedPluginRow.missing.length > 0}
+                    onclick={() => selectedPluginRow.ware && installWareByName(selectedPluginRow.ware)}
+                  >
+                    {#if vitrineBusy}…{:else}Install{/if}
+                  </button>
+                {:else if selectedPluginRow.state === 'update'}
+                  <span class="text-xs text-ink-soft">update waiting — see Updates</span>
+                {/if}
+                {#if selectedPluginRow.installed}
+                  <button
+                    class="btn-ghost danger"
+                    title="Delete plugin"
+                    disabled={pluginsBusy}
+                    onclick={() => selectedPluginRow.plugin && deletePluginNow(selectedPluginRow.plugin)}
+                  >×</button>
+                {/if}
+              </div>
+              {#if selectedPluginRow.error}
+                <p class="m-0 text-sm text-error">{selectedPluginRow.error}</p>
+              {/if}
+              {#if pluginsError && !selectedPluginRow.error}<p class="alert alert-err m-0" role="alert">{pluginsError}</p>{/if}
+              <div class="flex-none flex flex-col gap-2 border-t border-line pt-3">
+                <div class="flex gap-2">
+                  {#each ['documentation', 'dependencies', 'settings'] as detail (detail)}
+                    <button
+                      class="btn {pluginDetailTab === detail ? 'btn-primary' : 'btn-secondary'}"
+                      onclick={() => (pluginDetailTab = detail as typeof pluginDetailTab)}
+                    >{detail}</button>
+                  {/each}
+                </div>
+                {#if pluginDetailTab === 'documentation'}
+                  {#if selectedPluginRow.documentation}
+                    <p class="m-0 text-sm text-ink-soft whitespace-pre-line">{selectedPluginRow.documentation}</p>
                   {:else}
-                    <img src={houseShot(plugin.name)} alt="" class="shelf-shot" loading="lazy" />
+                    <p class="m-0 italic text-ink-soft">The plugin ships no documentation.</p>
+                  {/if}
+                {:else if pluginDetailTab === 'dependencies'}
+                  {#if selectedPluginRow.requires.length === 0}
+                    <p class="m-0 italic text-ink-soft">No dependencies — the plugin stands alone.</p>
+                  {:else if !selectedPluginRow.installed && selectedPluginRow.missing.length > 0}
+                    <p class="m-0 text-xs text-error">
+                      requires {selectedPluginRow.requires.join(', ')} — missing: {selectedPluginRow.missing.join(', ')}. The dependency must be installed first.
+                    </p>
+                  {:else if !selectedPluginRow.installed}
+                    <p class="m-0 text-xs text-ink-soft">requires: {selectedPluginRow.requires.join(', ')} (all on this host ✓)</p>
+                  {:else}
+                    <ul class="list-none p-0 m-0 flex flex-col gap-1">
+                      {#each selectedPluginRow.requires as dep (dep)}
+                        <li class="text-sm {plugins.some((p) => p.name === dep && p.enabled) ? 'text-ink-soft' : 'text-error'}">
+                          {dep} {plugins.some((p) => p.name === dep && p.enabled) ? '✓ enabled' : '— sleeping'}
+                        </li>
+                      {/each}
+                    </ul>
+                  {/if}
+                {:else if !selectedPluginRow.installed || selectedPluginRow.error}
+                  <p class="m-0 italic text-ink-soft">Install the plugin (enabled, unbroken) to set it up.</p>
+                {:else if (selectedPluginRow.plugin?.settings?.length ?? 0) === 0}
+                  <p class="m-0 italic text-ink-soft">This plugin declares no settings.</p>
+                {:else}
+                  <form
+                    class="flex flex-col gap-2"
+                    onsubmit={(e) => {
+                      e.preventDefault();
+                      savePluginSettingsNow();
+                    }}
+                  >
+                    {#each selectedPluginRow.plugin!.settings as s (s.key)}
+                      {#if s.type === 'toggle'}
+                        <label class="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={pluginSettingsDraft[s.key] === true}
+                            onchange={(e) => (pluginSettingsDraft[s.key] = e.currentTarget.checked)}
+                          />
+                          <span>{s.label}</span>
+                        </label>
+                      {:else}
+                        <label class="flex flex-col gap-1 text-sm">
+                          <span>{s.label}</span>
+                          <span class="flex gap-1">
+                            <input
+                              class="input flex-1"
+                              type={s.type === 'secret' && !revealedSecrets[s.key] ? 'password' : 'text'}
+                              bind:value={pluginSettingsDraft[s.key]}
+                              autocomplete="off"
+                            />
+                            {#if s.type === 'secret'}
+                              <button
+                                type="button"
+                                class="btn-ghost"
+                                title={revealedSecrets[s.key] ? 'Hide' : 'Show'}
+                                onclick={() => (revealedSecrets[s.key] = !revealedSecrets[s.key])}
+                              >{revealedSecrets[s.key] ? 'hide' : 'show'}</button>
+                            {/if}
+                          </span>
+                        </label>
+                      {/if}
+                    {/each}
+                    <div class="flex items-center gap-2">
+                      <button class="btn btn-primary" type="submit" disabled={settingsBusy}>
+                        {settingsBusy ? 'Saving…' : 'Save settings'}
+                      </button>
+                      {#if settingsNote}<span class="text-xs text-ink-soft">{settingsNote}</span>{/if}
+                    </div>
+                  </form>
+                {/if}
+              </div>
+            {:else}
+              <p class="italic text-ink-soft">No plugins on the shelf yet.</p>
+            {/if}
+          </section>
+          <section class="mg flex flex-col gap-2 min-h-0">
+            {#if vitrineDark}
+              <p class="alert alert-warn">{vitrineDark}</p>
+            {/if}
+            {#if pluginsBusy && plugins.length === 0}
+              <p class="italic text-ink-soft">Opening the pantry…</p>
+            {:else if pluginsError && plugins.length === 0}
+              <p class="alert alert-err" role="alert">{pluginsError}</p>
+            {:else}
+              {#snippet pluginRow(row: PluginRow)}
+                <!-- a11y: keyboard activation of the card is unwired (X = the one door law); the row's actions stay buttons -->
+                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+                <li class="card card-shelf h-36 cursor-pointer" onclick={() => (selectedPlugin = row.name)} title="Show {row.title} in the pantry">
+                  {#if row.preview && !brokenPreviews[row.name]}
+                    <img
+                      src={row.preview}
+                      alt=""
+                      class="shelf-shot"
+                      loading="lazy"
+                      onerror={() => (brokenPreviews = { ...brokenPreviews, [row.name]: true })}
+                    />
+                  {:else}
+                    <img src={houseShot(row.name)} alt="" class="shelf-shot" loading="lazy" />
                   {/if}
                   <div class="flex-1 min-w-0 py-2 pr-3 flex flex-col gap-1 overflow-hidden">
                     <div class="flex items-start justify-between gap-2">
-                      <div class="min-w-0">
-                        <p class="m-0 font-bold truncate">
-                          {plugin.title} <span class="text-xs text-ink-soft">v{plugin.version}</span>
-                          {#if plugin.error}<span class="badge">broken</span>{/if}
-                        </p>
-                      </div>
-                      <div class="flex shrink-0 items-start gap-2">
-                        {#if !plugin.error}
-                          <button
-                            class="btn {plugin.enabled ? 'btn-secondary' : 'btn-primary'}"
-                            disabled={pluginsBusy}
-                            onclick={() => togglePlugin(plugin)}
-                          >
-                            {#if pluginsBusy}…{:else if plugin.enabled}Disable{:else}Enable{/if}
-                          </button>
-                        {/if}
+                      <span class="block font-bold truncate {row.name === selectedPluginRow?.name ? 'text-jam' : ''}">
+                        {row.title} <span class="text-xs text-ink-soft">v{row.version}</span>
+                        {#if row.error}<span class="badge">broken</span>{/if}
+                      </span>
+                      {#if row.installed}
                         <button
-                          class="btn-ghost danger"
+                          class="btn-ghost danger shrink-0"
                           title="Delete plugin"
                           disabled={pluginsBusy}
-                          onclick={() => deletePluginNow(plugin)}
+                          onclick={(e) => { e.stopPropagation(); row.plugin && deletePluginNow(row.plugin); }}
                         >×</button>
-                      </div>
+                      {/if}
                     </div>
-                    {#if plugin.description}<p class="m-0 text-sm text-ink-soft leading-snug line-clamp-2">{plugin.description}</p>{/if}
-                    {#if !plugin.enabled && (plugin.requires ?? []).length > 0}
-                      {@const sleeping = (plugin.requires ?? []).filter((r) => !plugins.some((p) => p.name === r && p.enabled))}
-                      <p class="m-0 text-xs {sleeping.length > 0 ? 'text-error' : 'text-ink-soft'} truncate">
-                        requires: {(plugin.requires ?? []).join(', ')}
-                        {sleeping.length > 0 ? `— sleeping: ${sleeping.join(', ')}` : '(all enabled ✓)'}
-                      </p>
+                    {#if row.description}
+                      <p class="m-0 text-sm text-ink-soft leading-snug line-clamp-3">{row.description}</p>
                     {/if}
-                    {#if plugin.error}
-                      <p class="m-0 text-sm text-ink-soft truncate">{plugin.error}</p>
-                    {:else}
-                      <p class="m-0 text-xs text-ink-soft">
-                        {plugin.placeholders.length} placeholder{plugin.placeholders.length === 1 ? '' : 's'}
-                        · {plugin.routes.length} route{plugin.routes.length === 1 ? '' : 's'}
-                      </p>
-                    {/if}
+                    <div class="flex items-center gap-2 mt-auto">
+                      {#if row.installed && !row.error}
+                        <button
+                          class="btn {row.enabled ? 'btn-secondary' : 'btn-primary'} shrink-0"
+                          disabled={pluginsBusy}
+                          onclick={(e) => { e.stopPropagation(); row.plugin && togglePlugin(row.plugin); }}
+                        >
+                          {#if pluginsBusy}…{:else if row.enabled}Disable{:else}Enable{/if}
+                        </button>
+                      {:else if !row.installed && row.ware}
+                        <button
+                          class="btn btn-primary shrink-0"
+                          disabled={vitrineBusy || row.missing.length > 0}
+                          onclick={(e) => { e.stopPropagation(); row.ware && installWareByName(row.ware); }}
+                        >
+                          {#if vitrineBusy}…{:else}Install{/if}
+                        </button>
+                      {:else if row.state === 'update'}
+                        <span class="text-xs text-ink-soft shrink-0">update waiting — see Updates</span>
+                      {/if}
+                      <span class="flex-1 min-w-0 truncate text-right">
+                        {#each row.tags as tag (tag)}
+                          <span class="tag mr-1">{tag}</span>
+                        {/each}
+                      </span>
+                    </div>
                   </div>
                 </li>
-              {/each}
-            </ul>
-          {/if}
-          {#if pluginsError && plugins.length > 0}<p class="alert alert-err" role="alert">{pluginsError}</p>{/if}
-          {#if pluginsNote}<p class="alert alert-ok">{pluginsNote}</p>{/if}
-        </section>
-        <section class="mg flex flex-col gap-2">
-          <h4 class="mg-h">From the Vitrine</h4>
-          {#if vitrineDark}
-            <p class="alert alert-warn">{vitrineDark}</p>
-          {:else if vitrineBusy && vitrine.length === 0}
-            <p class="italic text-ink-soft">Reading the window display…</p>
-          {:else}
-            <ul class="list-none p-0 m-0 flex flex-col gap-2">
-              {#each vitrine.filter((w) => w.kind === 'plugin' && w.state !== 'installed') as ware (ware.name)}
-                <li class="card card-shelf">
-                  {#if ware.previewUrl && !brokenPreviews[ware.name]}
-                    <img
-                      src={ware.previewUrl}
-                      alt=""
-                      class="shelf-shot-fixed"
-                      loading="lazy"
-                      onerror={() => (brokenPreviews = { ...brokenPreviews, [ware.name]: true })}
-                    />
-                  {:else}
-                    <img src={houseShot(ware.name)} alt="" class="shelf-shot-fixed" loading="lazy" />
-                  {/if}
-                  <div class="flex-1 min-w-0 py-3 pr-3 flex flex-col gap-1">
-                    <div class="flex items-start justify-between gap-2">
-                      <div class="min-w-0">
-                        <p class="m-0 font-bold truncate">
-                          {ware.title} <span class="text-xs text-ink-soft">v{ware.version}</span>
-                          {#if ware.state === 'update'}<span class="badge">update</span>{/if}
-                        </p>
-                      </div>
-                      <div class="shrink-0">
-                        {#if ware.state === 'installable'}
-                          <button
-                            class="btn btn-primary"
-                            disabled={vitrineBusy || ware.missing.length > 0}
-                            onclick={() => installWareByName(ware)}
-                          >
-                            {#if vitrineBusy}…{:else}Install{/if}
-                          </button>
-                        {:else if ware.state === 'update'}
-                          <span class="text-xs text-ink-soft self-center">update waiting — see Updates</span>
-                        {/if}
-                      </div>
-                    </div>
-                    {#if ware.description}<p class="m-0 text-sm text-ink-soft leading-snug line-clamp-2">{ware.description}</p>{/if}
-                    {#if ware.missing.length > 0}
-                      <p class="m-0 text-xs text-error">
-                        requires {ware.requires.join(', ')} — missing: {ware.missing.join(', ')}. The dependency must be installed first.
-                      </p>
-                    {:else if ware.requires.length > 0 && ware.state !== 'installed'}
-                      <p class="m-0 text-xs text-ink-soft">requires: {ware.requires.join(', ')} (all on this host ✓)</p>
-                    {/if}
-                    <p class="m-0 text-xs text-ink-soft">
-                      {ware.state === 'installed'
-                        ? 'up to date on this host'
-                        : ware.state === 'update'
-                          ? `installed: v${ware.installedVersion} — update available`
-                          : 'not installed on this host'}
-                    </p>
+              {/snippet}
+              <div class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2">
+                <ul class="list-none p-0 m-0 flex flex-col gap-2">
+                  {#each installedPluginRows as row (row.name)}
+                    {@render pluginRow(row)}
+                  {/each}
+                </ul>
+                {#if shelfPluginRows.length > 0}
+                  <!-- the Vitrine divider: a thin line with the name in its middle -->
+                  <div class="flex items-center gap-3 my-1 shrink-0" role="separator" aria-label="Vitrine">
+                    <span class="h-px flex-1 bg-line"></span>
+                    <span class="text-xs font-bold uppercase tracking-widest text-ink-soft">Vitrine</span>
+                    <span class="h-px flex-1 bg-line"></span>
                   </div>
-                </li>
-              {/each}
-            </ul>
-          {/if}
-          {#if vitrineError && role === 'admin'}<p class="alert alert-err" role="alert">{vitrineError}</p>{/if}
-          {#if vitrineNote}<p class="alert alert-ok">{vitrineNote}</p>{/if}
-        </section>
+                  <ul class="list-none p-0 m-0 flex flex-col gap-2">
+                    {#each shelfPluginRows as row (row.name)}
+                      {@render pluginRow(row)}
+                    {/each}
+                  </ul>
+                {/if}
+              </div>
+            {/if}
+            {#if vitrineError && role === 'admin'}<p class="alert alert-err m-0" role="alert">{vitrineError}</p>{/if}
+          </section>
+        </div>
       {:else if tab === 'templates' && role === 'admin'}
         <!-- THE 50/50 SPLIT (2026-11-10, user order): LEFT = the fitting room
              (the preview) with the theme's details at its bottom; RIGHT = every
              theme you could pick — installed AND the Vitrine shelf, one list. -->
         <div class="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-4 h-full min-h-0">
           <section class="mg flex flex-col gap-3 min-h-0">
-            <h4 class="mg-h">The chosen theme</h4>
             {#if selectedRow}
               <div class="flex-1 min-h-0 grid grid-rows-1 place-items-center">
                 {#if selectedRow.preview && !brokenPreviews[selectedRow.name]}
@@ -1792,7 +2018,6 @@
             {/if}
           </section>
           <section class="mg flex flex-col gap-2 min-h-0">
-            <h4 class="mg-h">Available themes</h4>
             {#if vitrineDark}
               <p class="alert alert-warn">{vitrineDark}</p>
             {/if}
@@ -1802,7 +2027,9 @@
               <p class="alert alert-err" role="alert">{templatesError}</p>
             {:else}
               {#snippet themeRow(row: ThemeRow)}
-                <li class="card card-shelf h-36">
+                <!-- a11y: keyboard activation of the card is unwired (X = the one door law); the row's actions stay buttons -->
+                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+                <li class="card card-shelf h-36 cursor-pointer" onclick={() => (selectedTheme = row.name)} title="Show {row.title} in the fitting room">
                   {#if row.preview && !brokenPreviews[row.name]}
                     <img
                       src={row.preview}
@@ -1816,17 +2043,15 @@
                   {/if}
                   <div class="flex-1 min-w-0 py-2 pr-3 flex flex-col gap-1 overflow-hidden">
                     <div class="flex items-start justify-between gap-2">
-                      <button class="text-left min-w-0" onclick={() => (selectedTheme = row.name)} title="Show {row.title} in the fitting room">
-                        <span class="block font-bold truncate {row.name === selectedRow?.name ? 'text-jam' : ''}">
-                          {row.title} <span class="text-xs text-ink-soft">v{row.version}</span>
-                        </span>
-                      </button>
+                      <span class="block font-bold truncate {row.name === selectedRow?.name ? 'text-jam' : ''}">
+                        {row.title} <span class="text-xs text-ink-soft">v{row.version}</span>
+                      </span>
                       {#if row.installed && !row.active && !row.houseDefault}
                         <button
                           class="btn-ghost danger shrink-0"
                           title="Delete template"
                           disabled={templatesBusy}
-                          onclick={() => row.template && deleteTemplateNow(row.template)}
+                          onclick={(e) => { e.stopPropagation(); row.template && deleteTemplateNow(row.template); }}
                         >×</button>
                       {/if}
                     </div>
@@ -1840,7 +2065,7 @@
                         <button
                           class="btn btn-primary shrink-0"
                           disabled={templatesBusy}
-                          onclick={() => row.template && activateTemplateNow(row.template)}
+                          onclick={(e) => { e.stopPropagation(); row.template && activateTemplateNow(row.template); }}
                         >
                           {#if templatesBusy}…{:else}Activate{/if}
                         </button>
@@ -1848,7 +2073,7 @@
                         <button
                           class="btn btn-primary shrink-0"
                           disabled={vitrineBusy || row.missing.length > 0}
-                          onclick={() => row.ware && installWareByName(row.ware)}
+                          onclick={(e) => { e.stopPropagation(); row.ware && installWareByName(row.ware); }}
                         >
                           {#if vitrineBusy}…{:else}Install{/if}
                         </button>
@@ -1864,24 +2089,26 @@
                   </div>
                 </li>
               {/snippet}
-              <ul class="list-none p-0 m-0 flex flex-col gap-2">
-                {#each installedRows as row (row.name)}
-                  {@render themeRow(row)}
-                {/each}
-              </ul>
-              {#if shelfRows.length > 0}
-                <!-- the Vitrine divider: a thin line with the name in its middle -->
-                <div class="flex items-center gap-3 my-1 shrink-0" role="separator" aria-label="Vitrine">
-                  <span class="h-px flex-1 bg-line"></span>
-                  <span class="text-xs font-bold uppercase tracking-widest text-ink-soft">Vitrine</span>
-                  <span class="h-px flex-1 bg-line"></span>
-                </div>
+              <div class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2">
                 <ul class="list-none p-0 m-0 flex flex-col gap-2">
-                  {#each shelfRows as row (row.name)}
+                  {#each installedRows as row (row.name)}
                     {@render themeRow(row)}
                   {/each}
                 </ul>
-              {/if}
+                {#if shelfRows.length > 0}
+                  <!-- the Vitrine divider: a thin line with the name in its middle -->
+                  <div class="flex items-center gap-3 my-1 shrink-0" role="separator" aria-label="Vitrine">
+                    <span class="h-px flex-1 bg-line"></span>
+                    <span class="text-xs font-bold uppercase tracking-widest text-ink-soft">Vitrine</span>
+                    <span class="h-px flex-1 bg-line"></span>
+                  </div>
+                  <ul class="list-none p-0 m-0 flex flex-col gap-2">
+                    {#each shelfRows as row (row.name)}
+                      {@render themeRow(row)}
+                    {/each}
+                  </ul>
+                {/if}
+              </div>
             {/if}
             {#if vitrineError && role === 'admin'}<p class="alert alert-err m-0" role="alert">{vitrineError}</p>{/if}
             {#if vitrineNote}<p class="alert alert-ok m-0">{vitrineNote}</p>{/if}

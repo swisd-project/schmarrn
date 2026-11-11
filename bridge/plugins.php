@@ -168,6 +168,7 @@ function all(): array
         $plugins[$i]['blockedBy'] = $on && !isset($eff[$name])
             ? \Chain\unmet($map[$name]['requiresParsed'], \Chain\pool($versions, $eff))
             : [];
+        $plugins[$i]['settingsValues'] = storedSettings()[$name] ?? [];
     }
     return $plugins;
 }
@@ -182,6 +183,12 @@ function validate(string $name, array $manifest): array|string
     $version = is_string($manifest['version'] ?? null) ? $manifest['version'] : '0.0.0';
     $description = is_string($manifest['description'] ?? null) ? $manifest['description'] : '';
     $caps = is_array($manifest['capabilities'] ?? null) ? $manifest['capabilities'] : [];
+    $documentation = is_string($manifest['documentation'] ?? null) ? trim((string)$manifest['documentation']) : '';
+    // shelf tags: slugs, same alphabet the registry's styles speak.
+    $tags = array_values(array_filter(
+        (array)($manifest['tags'] ?? []),
+        fn($t) => is_string($t) && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $t) === 1
+    ));
 
     // The Chain Law (2026-11-07, user law): the manifest carries its own
     // dependency truth — "name" or "name >=1.2". A malformed list is a broken
@@ -259,6 +266,29 @@ function validate(string $name, array $manifest): array|string
         }
     }
 
+    // Plugin settings (2026-11-11): manifest-declared admin-editable fields.
+    // {key, label, type} — key is a storage slot under the plugin's own name
+    // (no shared namespace, so no prefix law), label ≤ 60 chars, type ∈
+    // text|secret|toggle. Sixteen fields is already a settings page.
+    $settings = [];
+    foreach ((array)($caps['settings'] ?? []) as $def) {
+        if (!is_array($def)) {
+            continue;
+        }
+        $key = is_string($def['key'] ?? null) ? (string)$def['key'] : '';
+        $label = is_string($def['label'] ?? null) ? trim((string)$def['label']) : '';
+        $type = is_string($def['type'] ?? null) ? (string)$def['type'] : 'text';
+        if (preg_match('/^[a-z0-9_]{1,63}$/', $key) !== 1
+            || $label === ''
+            || !in_array($type, ['text', 'secret', 'toggle'], true)) {
+            continue;
+        }
+        $settings[] = ['key' => $key, 'label' => mb_substr($label, 0, 60), 'type' => $type];
+        if (count($settings) >= 16) {
+            break;
+        }
+    }
+
     // Content filters (p6 slice 2): serve-time page transforms. The key IS the function
     // name's tail: entry "drunken_monk_page" → plugin_drunken_monk_page(). The lid here:
     // entry must start with the plugin's own underscored name — no cross-plugin hijinks.
@@ -300,11 +330,14 @@ function validate(string $name, array $manifest): array|string
         'title' => $title,
         'version' => $version,
         'description' => $description,
+        'documentation' => $documentation,
+        'tags' => $tags,
         'requires' => $requires,
         'requiresParsed' => $requiresParsed,
         'placeholders' => $placeholders,
         'routes' => $routes,
         'editorBlocks' => $editorBlocks,
+        'settings' => $settings,
         'contentFilters' => $contentFilters,
         'drawer' => $drawer,
     ];
@@ -481,6 +514,106 @@ function setState(array $enabled): void
         opcache_invalidate(stateFile(), true);
     }
     forget(); // the switches moved — no memo may remember the old intent
+}
+
+/** The plugin settings store — same home, same law as the state file: a
+ *  var_export'd PHP map, git-ignored, data never code. Shape:
+ *  [<plugin> => [<key> => string|bool]]. */
+function settingsFile(): string
+{
+    return __DIR__ . '/config/plugins.settings.local.php';
+}
+
+/** The stored settings, lid-cleaned: only slug plugins, only [a-z0-9_] keys,
+ *  only string|bool values. A broken file degrades to an empty store —
+ *  settings failing never kills the site. */
+function storedSettings(): array
+{
+    try {
+        $all = is_file(settingsFile()) ? (array)(require settingsFile()) : [];
+    } catch (\Throwable) {
+        return [];
+    }
+    $out = [];
+    foreach ($all as $plugin => $vals) {
+        if (!is_string($plugin) || preg_match(IDENTIFIER, $plugin) !== 1 || !is_array($vals)) {
+            continue;
+        }
+        $clean = [];
+        foreach ($vals as $key => $value) {
+            if (is_string($key) && preg_match('/^[a-z0-9_]{1,63}$/', $key) === 1
+                && (is_string($value) || is_bool($value))) {
+                $clean[$key] = $value;
+            }
+        }
+        if ($clean !== []) {
+            $out[$plugin] = $clean;
+        }
+    }
+    return $out;
+}
+
+/** One plugin setting, as stored — null when nothing was ever saved.
+ *  The plugin's own reading door (the gate asks here first). */
+function setting(string $plugin, string $key): string|bool|null
+{
+    $vals = storedSettings()[$plugin] ?? null;
+    return is_array($vals) && array_key_exists($key, $vals) ? $vals[$key] : null;
+}
+
+/** Write one setting (var_export — data, never code; stale bytecode dropped).
+ *  No manifest lid HERE by design: the writer is either the core's own
+ *  saveSettings() (manifest-lidded) or the plugin's code (its own manifest). */
+function setSetting(string $plugin, string $key, string|bool $value): void
+{
+    if (preg_match(IDENTIFIER, $plugin) !== 1 || preg_match('/^[a-z0-9_]{1,63}$/', $key) !== 1) {
+        \Router\refuse(400, 'That settings slot is unbaked dough.');
+    }
+    $all = storedSettings();
+    $all[$plugin][$key] = $value;
+    $export = "<?php\n\ndeclare(strict_types=1);\n\nreturn " . var_export($all, true) . ";\n";
+    if (!is_dir(__DIR__ . '/config')) {
+        @mkdir(__DIR__ . '/config', 0775, true);
+    }
+    if (file_put_contents(settingsFile(), $export, LOCK_EX) === false) {
+        \Router\refuse(500, 'Plugin settings will not save — the pantry shelf is full.');
+    }
+    if (function_exists('opcache_invalidate')) {
+        opcache_invalidate(settingsFile(), true);
+    }
+}
+
+/** The admin's save door: manifest-lidded. Only declared keys survive, values
+ *  are typed (toggle → bool, text/secret → trimmed string, '' = cleared).
+ *  Returns the clean map that landed. */
+function saveSettings(string $plugin, array $values): array
+{
+    [, $map,] = scan();
+    if (!isset($map[$plugin])) {
+        return ['ok' => false, 'error' => "No such plugin on the shelf: {$plugin}"];
+    }
+    $defs = [];
+    foreach ($map[$plugin]['settings'] as $def) {
+        $defs[$def['key']] = $def;
+    }
+    $clean = [];
+    foreach ($values as $key => $value) {
+        if (!isset($defs[$key])) {
+            continue; // a foreign key is dropped, not stored — the manifest is the only word
+        }
+        if ($defs[$key]['type'] === 'toggle') {
+            $clean[$key] = $value === true || $value === 1 || $value === '1';
+            continue;
+        }
+        if (!is_string($value)) {
+            continue;
+        }
+        $clean[$key] = mb_substr(trim($value), 0, 2000);
+    }
+    foreach ($clean as $key => $value) {
+        setSetting($plugin, $key, $value);
+    }
+    return ['ok' => true, 'settings' => $clean];
 }
 
 /** Load every EFFECTIVE plugin's code — the chain law's serve-time face: a

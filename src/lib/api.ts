@@ -245,6 +245,8 @@ export interface PluginRef {
   readonly title: string;
   readonly version: string;
   readonly description: string;
+  readonly documentation?: string;
+  readonly tags?: readonly string[];
   readonly placeholders: readonly string[];
   readonly routes: readonly PluginRoute[];
   readonly editorBlocks: readonly string[];
@@ -253,6 +255,16 @@ export interface PluginRef {
   readonly requires?: readonly string[];
   /** The plugin's shelf image (assets/preview.png & friends) — null when it ships none. */
   readonly preview?: string | null;
+  /** Manifest-declared settings fields ({key,label,type}) — the settings tab's word. */
+  readonly settings?: readonly PluginSetting[];
+  /** The stored values — one row per declared key. */
+  readonly settingsValues?: Readonly<Record<string, string | boolean>>;
+}
+
+export interface PluginSetting {
+  readonly key: string;
+  readonly label: string;
+  readonly type: 'text' | 'secret' | 'toggle';
 }
 
 export function listPlugins(): Promise<readonly PluginRef[]> {
@@ -278,6 +290,19 @@ export function deletePlugin(name: string): Promise<{ ok: boolean; name: string 
   }).then((r) => json<{ ok: boolean; name: string }>(r));
 }
 
+/** Save a plugin's declared settings — manifest-lidded on the core side;
+ *  foreign keys are dropped, values typed (toggle → bool, text/secret → string). */
+export function savePluginSettings(
+  name: string,
+  settings: Record<string, string | boolean>
+): Promise<{ ok: boolean; settings: Record<string, string | boolean> }> {
+  return fetch('/bridge/plugin/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({ name, settings })
+  }).then((r) => json<{ ok: boolean; settings: Record<string, string | boolean> }>(r));
+}
+
 // ——— the Vitrine (public wares showcase: fetch + install, admin) ———
 
 export interface WareRef {
@@ -286,6 +311,8 @@ export interface WareRef {
   readonly title: string;
   readonly version: string;
   readonly description: string;
+  readonly documentation?: string;
+  readonly tags?: readonly string[];
   readonly requiresSchmarrn: string;
   readonly path: string;
   readonly requires: readonly string[];

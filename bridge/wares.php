@@ -154,6 +154,13 @@ function registry(): array
                     (array)($ware['styles'] ?? []),
                     fn($s) => is_string($s) && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $s) === 1
                 )),
+                // tags + documentation: the manifest's own words, mirrored for
+                // plugin wares so the shelf shows them before the install.
+                'tags' => (array)array_values(array_filter(
+                    (array)($ware['tags'] ?? []),
+                    fn($t) => is_string($t) && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $t) === 1
+                )),
+                'documentation' => is_string($ware['documentation'] ?? null) ? (string)$ware['documentation'] : '',
                 'requires' => (array)array_values(array_filter(
                     (array)($ware['requires'] ?? []),
                     fn($dep) => is_string($dep) && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $dep) === 1

@@ -11,6 +11,7 @@ bridge/config/auth.local.php
 bridge/config/accounts.local.php
 bridge/config/site.local.php
 bridge/config/plugins.local.php
+bridge/config/plugins.settings.local.php
 bridge/config/wares.local.php
 bridge/config/wares.lock.php
 

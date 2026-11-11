@@ -508,6 +508,21 @@ try {
             echo json_encode(Wares\removePlugin((string)$name), JSON_UNESCAPED_SLASHES);
             break;
 
+        // ——— plugin settings (2026-11-11): the manifest-declared fields, admin+CSRF ———
+        case $method === 'POST' && $path === 'plugin/settings':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $name = is_string($body['name'] ?? null) ? $body['name'] : '';
+            $values = is_array($body['settings'] ?? null) ? $body['settings'] : [];
+            echo json_encode(Plugins\saveSettings((string)$name, $values), JSON_UNESCAPED_SLASHES);
+            break;
+
         // ——— page types (p6-era UX): pre-made, fillable scaffolds from pagetypes/ ———
         case $method === 'GET' && $path === 'pagetypes':
             if (!Auth\check()) {
