@@ -316,20 +316,34 @@ function remove(string $type, string $slug): void
 {
     assertPageExists($type, $slug);
     $dir = pageDir($type, $slug);
+    // The whole tin goes — index.md AND the page's own media folders. The old
+    // loop skipped subdirs and left rmdir facing a non-empty dir, so any page
+    // carrying media died with "Cannot delete page dir" (2026-11-12, live
+    // finding: pages/test/stop-motion blocked the whole delete).
+    if (!rmdirDeep($dir)) {
+        \Router\refuse(500, "Cannot delete page dir: {$type}/{$slug}");
+    }
+    forget(); // the page is gone — no memo may remember it
+}
+
+/** A dir and everything under it — the page's media dies with its page.
+ *  Symlinks are unlinked, never followed (a link is an entry, not a door). */
+function rmdirDeep(string $dir): bool
+{
     foreach (scandir($dir) ?: [] as $entry) {
         if (in_array($entry, ['.', '..'], true)) {
             continue;
         }
         $path = $dir . '/' . $entry;
         if (is_dir($path) && !is_link($path)) {
-            continue; // media lives flat; subdirs would be foreign — refuse silently via check below
+            if (!rmdirDeep($path)) {
+                return false;
+            }
+        } elseif (!@unlink($path)) {
+            return false;
         }
-        @unlink($path);
     }
-    if (!@rmdir($dir)) {
-        Router\refuse(500, "Cannot delete page dir: {$type}/{$slug}");
-    }
-    forget(); // the page is gone — no memo may remember it
+    return @rmdir($dir);
 }
 
 /** Rename: move the page dir to a new slug. Content untouched, both caches dropped by caller.

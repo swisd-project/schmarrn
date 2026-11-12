@@ -240,6 +240,47 @@ export interface PluginRoute {
   readonly csrf: boolean;
 }
 
+/** The plugin's own PANEL (2026-11-12): the core renders what the plugin
+ *  hands over and understands none of it. The plugin answers its declared
+ *  panel route — GET hands the descriptor, POST performs one action. */
+export interface PluginPanel {
+  readonly title?: string;
+  readonly note?: string;
+  readonly status?: { readonly label: string; readonly value: string };
+  readonly actions?: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly modal?: { readonly label: string; readonly type?: string; readonly placeholder?: string };
+  }[];
+  readonly list?: {
+    readonly label?: string;
+    readonly columns?: readonly { readonly key: string; readonly label: string }[];
+    readonly rows?: readonly {
+      readonly id?: string;
+      readonly cells?: Readonly<Record<string, string>>;
+      readonly actions?: readonly { readonly id: string; readonly label: string }[];
+    }[];
+  };
+  /** A one-time reveal (the plugin's own words, its own secret). */
+  readonly show?: { readonly label: string; readonly value: string };
+}
+
+export function fetchPluginPanel(name: string, route: string): Promise<PluginPanel> {
+  return fetch(`/bridge/plugin/${name}/${route}`).then((r) => json<PluginPanel>(r));
+}
+
+export function pluginPanelAction(
+  name: string,
+  route: string,
+  body: { action: string; id?: string; value?: string }
+): Promise<PluginPanel> {
+  return fetch(`/bridge/plugin/${name}/${route}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify(body)
+  }).then((r) => json<PluginPanel>(r));
+}
+
 export interface PluginRef {
   readonly name: string;
   readonly title: string;
@@ -259,6 +300,8 @@ export interface PluginRef {
   readonly settings?: readonly PluginSetting[];
   /** The stored values — one row per declared key. */
   readonly settingsValues?: Readonly<Record<string, string | boolean>>;
+  /** The plugin's own panel (null when it declares none). */
+  readonly panel?: { readonly route: string } | null;
 }
 
 export interface PluginSetting {
@@ -302,6 +345,7 @@ export function savePluginSettings(
     body: JSON.stringify({ name, settings })
   }).then((r) => json<{ ok: boolean; settings: Record<string, string | boolean> }>(r));
 }
+
 
 // ——— the Vitrine (public wares showcase: fetch + install, admin) ———
 
@@ -390,6 +434,90 @@ export interface CoreStatus {
   readonly updatable?: boolean;
   readonly localVersion?: string | null;
   readonly error?: string;
+  /** The release's own name ("v1.3.0 – Beauty") and the day it shipped. */
+  readonly releaseName?: string | null;
+  readonly published?: string | null;
+  /** GitHub's contributor list — the names not on GitHub ride the dashboard. */
+  readonly contributors?: readonly { readonly login: string; readonly url: string }[];
+}
+
+// ——— the GitHub door (Integrations card) ———
+
+export interface GithubStatus {
+  readonly connected: boolean;
+  readonly login: string | null;
+}
+
+/** The account's face — connected? whose? */
+export function githubStatus(): Promise<GithubStatus> {
+  return fetch('/bridge/github').then((r) => json<GithubStatus>(r));
+}
+
+/** Hand the core a Personal Access Token — the account opens. */
+export function githubConnect(token: string): Promise<GithubStatus> {
+  return fetch('/bridge/github/connect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({ token })
+  }).then((r) => json<GithubStatus>(r));
+}
+
+/** TEST a token — GitHub's verdict, nothing kept. */
+export function githubTest(
+  token: string
+): Promise<{ ok: boolean; login: string | null; error: string }> {
+  return fetch('/bridge/github/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({ token })
+  }).then((r) => json<{ ok: boolean; login: string | null; error: string }>(r));
+}
+
+/** Let the account go. */
+export function githubDisconnect(): Promise<GithubStatus> {
+  return fetch('/bridge/github/disconnect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({})
+  }).then((r) => json<GithubStatus>(r));
+}
+
+export interface GithubWare {
+  readonly kind: 'plugin' | 'template';
+  /** The ware's folder inside the repo ('' = the repo root). */
+  readonly path: string;
+  readonly name: string | null;
+  readonly title: string;
+  readonly version: string | null;
+  readonly description: string;
+  readonly error?: string;
+}
+
+export interface GithubLook {
+  readonly repo?: string;
+  readonly private?: boolean;
+  readonly branch?: string;
+  readonly description?: string;
+  readonly wares?: readonly GithubWare[];
+  readonly error?: string;
+}
+
+/** LOOK at a repo — is it a Schmarrn ware, and does its manifest answer? */
+export function githubInspect(repo: string): Promise<GithubLook> {
+  return fetch(`/bridge/github/inspect?repo=${encodeURIComponent(repo)}`).then((r) => json<GithubLook>(r));
+}
+
+/** STAGE a repo — the code is lided and copied, never run; it lands disabled. */
+export function githubInstall(
+  repo: string,
+  kind: 'plugin' | 'template',
+  path = ''
+): Promise<{ name: string; kind: string; version: string; repo: string; enabled: boolean }> {
+  return fetch('/bridge/github/install', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify({ repo, kind, path })
+  }).then((r) => json<{ name: string; kind: string; version: string; repo: string; enabled: boolean }>(r));
 }
 
 export function coreStatus(): Promise<CoreStatus> {

@@ -266,6 +266,18 @@ function validate(string $name, array $manifest): array|string
         }
     }
 
+    // The plugin's own PANEL (2026-11-12): the plugin hands the dashboard a
+    // descriptor (labels, buttons, a list) and owns every word in it — the
+    // core renders what it is told and never learns what the words mean.
+    $panel = null;
+    $pnl = $caps['panel'] ?? null;
+    if (is_array($pnl)) {
+        $pnlRoute = is_string($pnl['route'] ?? null) ? (string)$pnl['route'] : '';
+        if (preg_match(IDENTIFIER, $pnlRoute) === 1) {
+            $panel = ['route' => $pnlRoute];
+        }
+    }
+
     // Plugin settings (2026-11-11): manifest-declared admin-editable fields.
     // {key, label, type} — key is a storage slot under the plugin's own name
     // (no shared namespace, so no prefix law), label ≤ 60 chars, type ∈
@@ -338,6 +350,7 @@ function validate(string $name, array $manifest): array|string
         'routes' => $routes,
         'editorBlocks' => $editorBlocks,
         'settings' => $settings,
+        'panel' => $panel,
         'contentFilters' => $contentFilters,
         'drawer' => $drawer,
     ];

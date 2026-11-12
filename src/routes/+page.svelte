@@ -1,7 +1,7 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
   // a burger opens the full-screen overlay (Contents / Settings / Plugins & Templates / Users).
-  import { session, login, logout, pageCount, searchPages, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, setHomePage, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, deletePlugin, savePluginSettings, listTemplates, activateTemplate, deleteTemplate, coreStatus, uploadCorePacket, runCoreUpdate, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, type PageRef, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef, type ThemeHandle } from '$lib/api';
+  import { session, login, logout, pageCount, searchPages, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, setHomePage, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, deletePlugin, savePluginSettings, fetchPluginPanel, pluginPanelAction, listTemplates, activateTemplate, deleteTemplate, coreStatus, uploadCorePacket, runCoreUpdate, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, githubStatus, githubConnect, githubDisconnect, githubTest, githubInspect, githubInstall, type PageRef, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef, type ThemeHandle, type GithubLook, type PluginPanel } from '$lib/api';
   import { adminCloseTarget } from '$lib/back';
   import { base } from '$app/paths';
   import { schemaFor, withDraftFlag } from '$lib/schema';
@@ -353,12 +353,31 @@
   // gates NEW edits only — pending changes stay saveable (and dirty stays
   // truthful) even after a manual re-lock.
   let unlocked = $state(false);
+  // ——— the surgery flag (2026-11-12, user order): while the raw sheet is
+  // unlocked, the flag rides sessionStorage to the live page — the visual
+  // editor there shows the disabled cursor on its content edit buttons and
+  // stays deaf. Cleared on Lock/save (unlocked=false) and on the desk's next
+  // boot; it survives the ride to /_page on purpose — the surgery is still open.
+  $effect(() => {
+    if (unlocked && sel !== null) {
+      sessionStorage.setItem('sm-raw-surgery', `${sel.type}/${sel.slug}`);
+    } else {
+      sessionStorage.removeItem('sm-raw-surgery');
+    }
+  });
   const dirty = $derived(sel !== null && raw !== baseline);
   const selPath = $derived(sel === null ? '' : `${sel.type}/${sel.slug}/index.md`);
 
   async function openRaw(type: string, slug: string) {
     if (sel?.type === type && sel.slug === slug) return;
-    if (dirty && !window.confirm(`Unsaved changes on ${selPath} — leave without saving?`)) return;
+    if (dirty) {
+      askConfirm('Unsaved changes', `Unsaved changes on ${selPath} — leave without saving?`, () => openRawGo(type, slug));
+      return;
+    }
+    openRawGo(type, slug);
+  }
+
+  async function openRawGo(type: string, slug: string) {
     deskBusy = true;
     deskError = '';
     deskNote = '';
@@ -472,6 +491,8 @@
       void loadCore();
       void loadWares(); // the Vitrine shelf carries every installed-vs-registry verdict
     }
+    if (next === 'settings' && core === null) void loadCore(); // the attribution card wears the release's news
+    if (next === 'settings') void loadGithub(); // the integrations card asks the door who stands there
   }
 
   // The dashboard's drawer is GONE (2026-11-07, user law): the overlay carries
@@ -500,9 +521,12 @@
   /** Delete a plugin — the folder, the lock line and the switch leave together.
    *  No plugin is undeletable: the preinstalled default (hello) goes like any
    *  other. The house-default law is a TEMPLATE law — a plugin is decoration. */
-  async function deletePluginNow(plugin: PluginRef) {
+  function deletePluginNow(plugin: PluginRef) {
+    askConfirm('Delete plugin', `Delete the ${plugin.title} plugin? Its placeholders and routes leave with it.`, () => deletePluginGo(plugin));
+  }
+
+  async function deletePluginGo(plugin: PluginRef) {
     if (pluginsBusy) return;
-    if (!confirm(`Delete the ${plugin.title} plugin? Its placeholders and routes leave with it.`)) return;
     pluginsBusy = true;
     pluginsError = '';
     pluginsNote = '';
@@ -714,9 +738,12 @@
     }
   }
 
-  async function deleteTemplateNow(template: TemplateRef) {
+  function deleteTemplateNow(template: TemplateRef) {
+    askConfirm('Delete template', `Delete the ${template.title} template? Pages keep working — the site falls back to a house theme until another is activated.`, () => deleteTemplateGo(template));
+  }
+
+  async function deleteTemplateGo(template: TemplateRef) {
     if (templatesBusy) return;
-    if (!confirm(`Delete the ${template.title} template? Pages keep working — the site falls back to a house theme until another is activated.`)) return;
     templatesBusy = true;
     templatesError = '';
     templatesNote = '';
@@ -733,7 +760,142 @@
   }
 
   // ——— the core's self-update (admin, part of "Plugins & Templates") ———
-  let core = $state<{ current: string; latest: string | null; error: string; localVersion: string | null; updatable: boolean; dashboard: string | null } | null>(null);
+  let core = $state<{ current: string; latest: string | null; error: string; localVersion: string | null; updatable: boolean; dashboard: string | null; releaseName: string | null; published: string | null; contributors: readonly { login: string; url: string }[] } | null>(null);
+  // ——— the GitHub door (Integrations card) ———
+  let github = $state<{ connected: boolean; login: string | null } | null>(null);
+  let githubToken = $state('');
+  let githubRepo = $state('');
+  let githubLook = $state<GithubLook | null>(null);
+  let githubBusy = $state(false);
+  let githubError = $state('');
+  let githubNote = $state('');
+  let githubModal = $state(false);
+  let githubTested = $state<{ ok: boolean; login: string | null; error: string } | null>(null);
+
+  // ——— the house confirm (2026-11-12, user order): no system popups, ever —
+  // every "are you sure" is a modal wearing the house pattern.
+  let confirmModal = $state<{ title: string; message: string; run: () => void } | null>(null);
+
+  function askConfirm(title: string, message: string, run: () => void): void {
+    confirmModal = { title, message, run };
+  }
+
+  function confirmNow(): void {
+    const run = confirmModal?.run;
+    confirmModal = null;
+    run?.();
+  }
+
+  // ——— the foldable sections (2026-11-12, user order) ———
+  // The shelf sections fold away by default; the INSTALLED wares stay visible
+  // (an enabled plugin and a sleeping one both have to be seen at a glance).
+  // A section line carries its triangle at the very right: down = closed,
+  // up = open.
+  let openSections = $state<Record<string, boolean>>({});
+
+  function toggleSection(id: string): void {
+    openSections = { ...openSections, [id]: !openSections[id] };
+  }
+
+  async function loadGithub() {
+    if (githubBusy) return;
+    githubBusy = true;
+    try {
+      github = await githubStatus();
+    } catch (e) {
+      githubError = e instanceof Error ? e.message : String(e);
+    } finally {
+      githubBusy = false;
+    }
+  }
+
+  async function testGithubNow() {
+    if (githubBusy || githubToken.trim() === '') return;
+    githubBusy = true;
+    githubError = '';
+    githubNote = '';
+    githubTested = null;
+    try {
+      githubTested = await githubTest(githubToken.trim());
+      if (!githubTested.ok) {
+        githubError = githubTested.error;
+      }
+    } catch (e) {
+      githubError = e instanceof Error ? e.message : String(e);
+    } finally {
+      githubBusy = false;
+    }
+  }
+
+  async function connectGithubNow() {
+    if (githubBusy || githubToken.trim() === '') return;
+    githubBusy = true;
+    githubError = '';
+    githubNote = '';
+    try {
+      github = await githubConnect(githubToken.trim());
+      githubToken = ''; // the token does not linger in the browser
+      githubTested = null;
+      githubModal = false;
+      githubNote = `GitHub connected — ${github.login}.`;
+    } catch (e) {
+      githubError = e instanceof Error ? e.message : String(e);
+    } finally {
+      githubBusy = false;
+    }
+  }
+
+  async function disconnectGithubNow() {
+    if (githubBusy) return;
+    githubBusy = true;
+    githubError = '';
+    githubNote = '';
+    try {
+      github = await githubDisconnect();
+      githubTested = null;
+      githubModal = false;
+      githubNote = 'The account let go — private repos are out of reach again.';
+    } catch (e) {
+      githubError = e instanceof Error ? e.message : String(e);
+    } finally {
+      githubBusy = false;
+    }
+  }
+
+  async function lookGithubNow() {
+    if (githubBusy || githubRepo.trim() === '') return;
+    githubBusy = true;
+    githubError = '';
+    githubNote = '';
+    try {
+      githubLook = await githubInspect(githubRepo.trim());
+    } catch (e) {
+      githubError = e instanceof Error ? e.message : String(e);
+      githubLook = null;
+    } finally {
+      githubBusy = false;
+    }
+  }
+
+  async function stageGithubNow(kind: 'plugin' | 'template', path = '') {
+    if (githubBusy || githubRepo.trim() === '') return;
+    githubBusy = true;
+    githubError = '';
+    githubNote = '';
+    try {
+      const res = await githubInstall(githubRepo.trim(), kind, path);
+      githubNote = `${res.name} staged from ${res.repo} — disabled. The code does not run until you enable it.`;
+      githubLook = null;
+      githubRepo = '';
+      if (kind === 'plugin') await loadPlugins();
+      else await loadTemplates();
+    } catch (e) {
+      githubError = e instanceof Error ? e.message : String(e);
+    } finally {
+      githubBusy = false;
+    }
+  }
+
   let coreBusy = $state(false);
   let coreError = $state('');
   let coreNote = $state('');
@@ -887,11 +1049,71 @@
   let settingsBusy = $state(false);
   let settingsNote = $state('');
 
+  // The plugin's own PANEL (2026-11-12): the core renders what the plugin
+  // hands over and understands none of it — the words, the buttons, the list
+  // and the one-time reveal are the plugin's own. The plugin answers its
+  // declared panel route (GET = descriptor, POST = an action).
+  let panelData = $state<PluginPanel | null>(null);
+  let panelBusy = $state(false);
+  let panelNote = $state('');
+  let panelModal = $state<null | { id: string; label: string; type: string; placeholder: string }>(null);
+  let panelValue = $state('');
+  let panelShow = $state<{ label: string; value: string } | null>(null);
+
+  async function loadPanel(plugin: PluginRef | null) {
+    if (!plugin?.panel) {
+      panelData = null;
+      return;
+    }
+    try {
+      panelData = await fetchPluginPanel(plugin.name, plugin.panel.route);
+    } catch (e) {
+      panelNote = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function panelAction(action: { id: string; label: string }, rowId?: string) {
+    const plugin = selectedPluginRow?.plugin;
+    if (!plugin?.panel || panelBusy) return;
+    panelBusy = true;
+    panelNote = '';
+    try {
+      const data = await pluginPanelAction(plugin.name, plugin.panel.route, {
+        action: action.id,
+        id: rowId ?? '',
+        value: panelValue
+      });
+      panelData = data;
+      panelModal = null;
+      panelValue = '';
+      if (data.show) panelShow = { label: data.show.label, value: data.show.value };
+    } catch (e) {
+      panelNote = e instanceof Error ? e.message : String(e);
+    } finally {
+      panelBusy = false;
+    }
+  }
+
+  async function copyPanelShow() {
+    if (!panelShow) return;
+    try {
+      await navigator.clipboard.writeText(panelShow.value);
+      panelNote = 'Copied.';
+    } catch {
+      panelNote = 'Copy failed — select it by hand.';
+    }
+  }
+
+
+
   $effect(() => {
     const row = selectedPluginRow;
     pluginSettingsDraft = { ...(row?.plugin?.settingsValues ?? {}) };
     revealedSecrets = {};
     settingsNote = '';
+    panelShow = null;
+    panelNote = '';
+    void loadPanel(row?.plugin ?? null);
   });
 
   async function savePluginSettingsNow() {
@@ -966,7 +1188,7 @@
     coreError = '';
     try {
       const st = await coreStatus();
-      core = { current: st.current, latest: st.latest, error: st.error ?? '', localVersion: st.localVersion ?? null, updatable: st.updatable === true, dashboard: st.dashboard ?? null };
+      core = { current: st.current, latest: st.latest, error: st.error ?? '', localVersion: st.localVersion ?? null, updatable: st.updatable === true, dashboard: st.dashboard ?? null, releaseName: st.releaseName ?? null, published: st.published ?? null, contributors: st.contributors ?? [] };
     } catch (e) {
       coreError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -1223,8 +1445,11 @@
   let renaming = $state<{ type: string; slug: string; value: string } | null>(null);
   let renameError = $state('');
 
-  async function removePage(type: string, slug: string) {
-    if (!confirm(`Delete ${type}/${slug} for good? No undo, no tears.`)) return;
+  function removePage(type: string, slug: string) {
+    askConfirm('Delete page', `Delete ${type}/${slug} for good? No undo, no tears.`, () => removePageGo(type, slug));
+  }
+
+  async function removePageGo(type: string, slug: string) {
     try {
       await deletePage(type, slug);
       // the sheet never haunts a deleted file — it lets go
@@ -1416,6 +1641,47 @@
   {/if}
 </main>
 
+<!-- the plugin panel's modal: the plugin asks for one field (its own
+     wording, its own type) — the core only carries it -->
+{#if panelModal}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50" role="dialog" aria-modal="true" aria-label={panelModal.label} tabindex="-1" onclick={() => (panelModal = null)}>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <form
+      class="modal-card"
+      onsubmit={(e) => {
+        e.preventDefault();
+        const act = panelData?.actions?.find((a) => a.id === panelModal?.id);
+        if (act) panelAction(act);
+      }}
+      onclick={(e) => e.stopPropagation()}
+    >
+      <header class="modal-head">
+        <h3>{panelModal.label}</h3>
+        <button type="button" class="close-x" onclick={() => (panelModal = null)}>×</button>
+      </header>
+      <label class="field">
+        <span>{panelModal.label}</span>
+        <input
+          class="input"
+          type={panelModal.type}
+          bind:value={panelValue}
+          placeholder={panelModal.placeholder}
+          required
+          autocomplete="off"
+        />
+      </label>
+      {#if panelNote}<p class="alert alert-err m-0" role="alert">{panelNote}</p>{/if}
+      <footer class="modal-foot">
+        <button type="button" class="btn btn-secondary" onclick={() => (panelModal = null)}>Cancel</button>
+        <button type="submit" class="btn btn-primary" disabled={panelBusy}>Save</button>
+      </footer>
+    </form>
+  </div>
+{/if}
+
 <!-- The ESC function is GONE (2026-11-09, user order): ESC left a modal open
      over a page that wasn't there. The X is the overlay's one door; the
      modals close by their X, Cancel, or a click on the dark. -->
@@ -1451,6 +1717,75 @@
     </nav>
 
     <div class="flex-1 min-h-0 px-4 mx-auto w-full {tab === 'contents' || tab === 'templates' || tab === 'plugins' || tab === 'settings' ? 'pb-4 max-w-none' : 'pb-12 max-w-4xl overflow-y-auto'}">
+      {#snippet sectionLine(id: string, label: string)}
+        <!-- the foldable section line: the triangle rides the very right —
+             down while closed, up while open -->
+        <button
+          class="w-full flex items-center justify-between gap-3 py-1 my-1 shrink-0 cursor-pointer"
+          onclick={() => toggleSection(id)}
+          aria-expanded={openSections[id] === true}
+        >
+          <span class="text-xs font-bold uppercase tracking-widest text-ink-soft">{label}</span>
+          <span class="text-xs text-ink-soft">{openSections[id] ? '▲' : '▼'}</span>
+        </button>
+      {/snippet}
+      {#snippet githubShelf(kind: 'plugin' | 'template')}
+        <!-- THE GITHUB SHELF (2026-11-12, user order): under the Vitrine, one
+             row that takes a repo URL. The LOOK reads the manifest and tells
+             what the repo holds; STAGE copies it onto the shelf — lided,
+             DISABLED, its code UNRUN until the admin enables it. Without a
+             connected account only public repos answer; with one, the
+             account's private repos are in reach. -->
+        {@render sectionLine(kind === 'plugin' ? 'plugins-github' : 'templates-github', 'GitHub')}
+        {#if openSections[kind === 'plugin' ? 'plugins-github' : 'templates-github']}
+        <div class="card p-3 flex flex-col gap-2 shrink-0">
+          <label class="field">
+            <span>Repository</span>
+            <input class="input" bind:value={githubRepo} placeholder="owner/repo or a GitHub URL" />
+          </label>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button class="btn btn-secondary" disabled={githubBusy || githubRepo.trim() === ''} onclick={lookGithubNow}>
+              {githubBusy ? 'Looking…' : 'Look'}
+            </button>
+          </div>
+          {#if githubLook}
+            {#if githubLook.error}
+              <p class="m-0 text-xs text-error">{githubLook.error}</p>
+            {:else}
+              <p class="m-0 text-xs text-ink-soft">
+                {githubLook.repo}
+                {#if githubLook.private}<span class="badge">private</span>{/if}
+              </p>
+              <ul class="list-none p-0 m-0 flex flex-col gap-1">
+                {#each githubLook.wares ?? [] as ware (ware.kind + ':' + ware.path)}
+                  <li class="flex items-center justify-between gap-2 text-xs">
+                    <span class="min-w-0 truncate">
+                      <span class="badge">{ware.kind}</span>
+                      {ware.name ?? '—'}
+                      {#if ware.version}<span class="text-ink-soft">v{ware.version}</span>{/if}
+                      {#if ware.path}<span class="text-ink-soft">({ware.path})</span>{/if}
+                      {#if ware.error}<span class="text-error"> — {ware.error}</span>{/if}
+                    </span>
+                    {#if !ware.error && ware.kind === kind}
+                      <button
+                        class="btn btn-primary shrink-0"
+                        disabled={githubBusy}
+                        onclick={() => stageGithubNow(kind, ware.path)}
+                      >Stage</button>
+                    {/if}
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          {/if}
+          {#if githubError}<p class="alert alert-err m-0" role="alert">{githubError}</p>{/if}
+          {#if githubNote}<p class="alert alert-ok m-0">{githubNote}</p>{/if}
+          <p class="m-0 text-xs text-ink-soft">
+            A staged ware lands DISABLED — its code does not run until you enable it with your own hand.
+          </p>
+        </div>
+        {/if}
+      {/snippet}
       {#if tab === 'contents'}
         <div class="sm-desk">
           <!-- the tree: every md file in use — no type headlines (2026-11-09,
@@ -1494,19 +1829,23 @@
                           {#if row.page.draft}<span class="badge badge-draft">draft</span>{/if}
                           {#if row.page.hasDraft}<span class="badge badge-live">edits</span>{/if}
                         </button>
-                        <button class="btn-ghost" title="Rename" onclick={() => startRename(row.type, row.page.slug)}>✎</button>
-                        <button class="btn-ghost" title="Page settings" onclick={() => openPageSettings(row.type, row.page.slug)}>✑</button>
+                        <!-- while the sheet is unlocked (surgery), the row's
+                             edit icons wear the disabled cursor (2026-11-12,
+                             user order) — the eye reads surgery mode at a glance -->
+                        <button class="btn-ghost" class:cursor-not-allowed={unlocked} title="Rename" onclick={() => startRename(row.type, row.page.slug)}>✎</button>
+                        <button class="btn-ghost" class:cursor-not-allowed={unlocked} title="Page settings" onclick={() => openPageSettings(row.type, row.page.slug)}>✑</button>
                         {#if row.page.home}
                           <!-- the home page stands: no delete, ever (the lid is server-side too) -->
                         {:else}
                           <button
                             class="btn-ghost danger"
+                            class:cursor-not-allowed={unlocked}
                             title={sel?.type === row.type && sel?.slug === row.page.slug && unlocked ? 'Delete page' : 'Open the page and press Unlock first — deletion follows the unlock'}
                             disabled={!(sel?.type === row.type && sel?.slug === row.page.slug && unlocked)}
                             onclick={() => removePage(row.type, row.page.slug)}
                           >×</button>
                         {/if}
-                        <button class="btn-ghost" title="Open the live page" onclick={() => select(row.type, row.page.slug)}>↗</button>
+                        <button class="btn-ghost" class:cursor-not-allowed={unlocked} title="Open the live page" onclick={() => select(row.type, row.page.slug)}>↗</button>
                       </div>
                       {#if renaming?.type === row.type && renaming?.slug === row.page.slug}
                         {@const to = renaming.value.trim().toLowerCase()}
@@ -1568,7 +1907,7 @@
                 <button
                   class="btn btn-secondary ml-auto"
                   disabled={deskBusy}
-                  onclick={() => (unlocked = !unlocked)}
+                  onclick={() => (unlocked ? (unlocked = false) : askConfirm('Unlock the sheet', 'Raw markdown is surgery — a stray keystroke can knead the page beyond recognition. The lock returns on save.', () => (unlocked = true)))}
                   title={unlocked ? 'Lock the sheet again' : 'Raw markdown is surgery — unlock to edit; the lock returns on save'}
                 >
                   {unlocked ? 'Lock' : 'Unlock'}
@@ -1597,6 +1936,36 @@
              freight. Every tile scrolls inside itself: the page never moves. -->
         {#if siteSettings}
           <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 min-h-0 overflow-y-auto">
+            <!-- THE ATTRIBUTION CARD (2026-11-12, user order): first in the
+                 bento, 1x1. The release's own name + day, the people behind
+                 it, the way to support it, the door back to GitHub. -->
+            <section class="mg flex flex-col gap-2 lg:col-span-1">
+              <h4 class="mg-h">Schmarrn {core?.releaseName ?? core?.current ?? ''}</h4>
+              {#if core?.published}<p class="m-0 text-xs text-ink-soft">published {core.published}</p>{/if}
+              <hr class="border-line" />
+              <p class="m-0 text-sm">
+                Attribution:
+                {#each core?.contributors ?? [] as person (person.login)}
+                  <a href={person.url} target="_blank" rel="noopener" class="underline">{person.login}</a>{' '}
+                {/each}
+                <span>Cornelia Diomis, Chinami Sato</span>
+              </p>
+              <hr class="border-line" />
+              <p class="m-0 text-sm">Support the project via <span class="underline">Voxerl</span></p>
+              <hr class="border-line" />
+              <a
+                class="btn btn-secondary self-start"
+                href="https://github.com/swisd-project/schmarrn"
+                target="_blank"
+                rel="noopener"
+              >GitHub ↗</a>
+              <p class="m-0 text-xs text-ink-soft">
+                © {new Date().getFullYear()}
+                <a href="https://homahuki.eu" target="_blank" rel="noopener" class="underline">Homahuki</a>
+                ·
+                <a href="https://hideosnes.online" target="_blank" rel="noopener" class="underline">Hidéo Snes</a>
+              </p>
+            </section>
             <form class="mg flex flex-col gap-3 lg:col-span-1" onsubmit={saveSiteNow}>
               <h4 class="mg-h">Site settings</h4>
               <label class="field"><span>Site name</span><input class="input" bind:value={siteSettings.name} required /></label>
@@ -1641,6 +2010,35 @@
               {#if styleError}<p class="alert alert-err m-0" role="alert">{styleError}</p>{/if}
               {#if styleNote}<p class="alert alert-ok m-0">{styleNote}</p>{/if}
             {/if}
+            </section>
+
+            <!-- THE INTEGRATIONS CARD (2026-11-12, user order): last in the
+                 bento, 1x1. A rack of squares, two per row — GitHub is the
+                 first; a live logo wears the primary colour. -->
+            <section class="mg flex flex-col gap-3 lg:col-span-1">
+              <h4 class="mg-h">Integrations</h4>
+              <div class="grid grid-cols-2 gap-2">
+                <button
+                  class="flex flex-col items-center justify-center gap-2 aspect-square border border-line bg-batter/40 hover:bg-batter/70 transition-colors"
+                  title={github?.connected ? `GitHub — connected as ${github.login}` : 'GitHub — connect an account'}
+                  onclick={() => { githubModal = true; githubTested = null; githubError = ''; }}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    class="w-12 h-12 {github?.connected ? 'text-jam' : 'text-ink-soft'}"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+                  </svg>
+                  <span class="text-xs font-bold">GitHub</span>
+                </button>
+              </div>
+              {#if github?.connected}
+                <p class="m-0 text-xs text-ink-soft">connected as <b>{github.login}</b></p>
+              {/if}
+              {#if githubError}<p class="alert alert-err m-0" role="alert">{githubError}</p>{/if}
+              {#if githubNote}<p class="alert alert-ok m-0">{githubNote}</p>{/if}
             </section>
           </div>
         {:else}
@@ -1782,55 +2180,149 @@
                   {/if}
                 {:else if !selectedPluginRow.installed || selectedPluginRow.error}
                   <p class="m-0 italic text-ink-soft">Install the plugin (enabled, unbroken) to set it up.</p>
-                {:else if (selectedPluginRow.plugin?.settings?.length ?? 0) === 0}
-                  <p class="m-0 italic text-ink-soft">This plugin declares no settings.</p>
                 {:else}
-                  <form
-                    class="flex flex-col gap-2"
-                    onsubmit={(e) => {
-                      e.preventDefault();
-                      savePluginSettingsNow();
-                    }}
-                  >
-                    {#each selectedPluginRow.plugin!.settings as s (s.key)}
-                      {#if s.type === 'toggle'}
-                        <label class="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={pluginSettingsDraft[s.key] === true}
-                            onchange={(e) => (pluginSettingsDraft[s.key] = e.currentTarget.checked)}
-                          />
-                          <span>{s.label}</span>
-                        </label>
-                      {:else}
-                        <label class="flex flex-col gap-1 text-sm">
-                          <span>{s.label}</span>
-                          <span class="flex gap-1">
-                            <input
-                              class="input flex-1"
-                              type={s.type === 'secret' && !revealedSecrets[s.key] ? 'password' : 'text'}
-                              bind:value={pluginSettingsDraft[s.key]}
-                              autocomplete="off"
-                            />
-                            {#if s.type === 'secret'}
-                              <button
-                                type="button"
-                                class="btn-ghost"
-                                title={revealedSecrets[s.key] ? 'Hide' : 'Show'}
-                                onclick={() => (revealedSecrets[s.key] = !revealedSecrets[s.key])}
-                              >{revealedSecrets[s.key] ? 'hide' : 'show'}</button>
-                            {/if}
-                          </span>
-                        </label>
-                      {/if}
-                    {/each}
-                    <div class="flex items-center gap-2">
-                      <button class="btn btn-primary" type="submit" disabled={settingsBusy}>
-                        {settingsBusy ? 'Saving…' : 'Save settings'}
-                      </button>
-                      {#if settingsNote}<span class="text-xs text-ink-soft">{settingsNote}</span>{/if}
-                    </div>
-                  </form>
+                  <div class="flex flex-col gap-3">
+                    {#if selectedPluginRow.plugin?.panel}
+                      {@const panel = panelData}
+                      <div class="flex flex-col gap-2">
+                        {#if panel?.title}
+                          <h4 class="m-0 text-sm font-semibold">{panel.title}</h4>
+                        {/if}
+                        {#if panel?.note}
+                          <p class="m-0 text-xs text-ink-soft">{panel.note}</p>
+                        {/if}
+                        {#if panel?.status}
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-sm font-semibold">{panel.status.label}</span>
+                            <span class="badge">{panel.status.value}</span>
+                          </div>
+                        {/if}
+                        {#if (panel?.actions?.length ?? 0) > 0}
+                          <div class="flex items-center gap-2 flex-wrap">
+                            {#each panel?.actions ?? [] as a, ai (ai)}
+                              {#if a.modal}
+                                {@const modal = a.modal}
+                                <button
+                                  class="btn btn-secondary"
+                                  disabled={panelBusy}
+                                  onclick={() => {
+                                    panelValue = '';
+                                    panelModal = {
+                                      id: a.id,
+                                      label: modal.label,
+                                      type: modal.type ?? 'text',
+                                      placeholder: modal.placeholder ?? ''
+                                    };
+                                  }}
+                                >{a.label}</button>
+                              {:else}
+                                <button
+                                  class="btn btn-secondary"
+                                  disabled={panelBusy}
+                                  onclick={() => panelAction(a)}
+                                >{a.label}</button>
+                              {/if}
+                            {/each}
+                          </div>
+                        {/if}
+
+                        {#if panelShow}
+                          <div class="border border-line p-2 flex flex-col gap-1">
+                            <p class="m-0 text-xs text-ink-soft">{panelShow.label}</p>
+                            <code class="text-xs break-all select-all">{panelShow.value}</code>
+                            <div class="flex gap-2">
+                              <button class="btn btn-secondary" onclick={copyPanelShow}>Copy</button>
+                              <button class="btn-ghost" onclick={() => (panelShow = null)}>Dismiss</button>
+                            </div>
+                          </div>
+                        {/if}
+
+                        {#if panel?.list}
+                          <div class="flex items-center gap-2 text-xs uppercase tracking-wide text-ink-soft">
+                            <span class="h-px flex-1 bg-line"></span>
+                            <span>{panel.list.label ?? ''}</span>
+                            <span class="h-px flex-1 bg-line"></span>
+                          </div>
+                          {#if (panel.list.rows?.length ?? 0) === 0}
+                            <p class="m-0 italic text-ink-soft">Nothing here yet.</p>
+                          {:else}
+                            <ul class="list-none p-0 m-0 flex flex-col gap-1">
+                              {#each panel.list.rows ?? [] as row, i (row.id ?? i)}
+                                <li class="flex items-center gap-2 text-sm flex-wrap">
+                                  {#each panel.list.columns ?? [] as col (col.key)}
+                                    <span>{row.cells?.[col.key] ?? ''}</span>
+                                  {/each}
+                                  {#if (row.actions?.length ?? 0) > 0}
+                                    <span class="flex gap-1 ml-auto">
+                                      {#each row.actions ?? [] as ra, ri (ri)}
+                                        <button
+                                          class="btn-ghost"
+                                          disabled={panelBusy}
+                                          onclick={() => panelAction(ra, row.id)}
+                                        >{ra.label}</button>
+                                      {/each}
+                                    </span>
+                                  {/if}
+                                </li>
+                              {/each}
+                            </ul>
+                          {/if}
+                        {/if}
+                        {#if panelNote}<p class="m-0 text-xs text-ink-soft">{panelNote}</p>{/if}
+                      </div>
+                    {/if}
+
+                    {#if (selectedPluginRow.plugin?.settings?.length ?? 0) > 0}
+                      <form
+                        class="flex flex-col gap-2"
+                        onsubmit={(e) => {
+                          e.preventDefault();
+                          savePluginSettingsNow();
+                        }}
+                      >
+                        {#each selectedPluginRow.plugin!.settings as s (s.key)}
+                          {#if s.type === 'toggle'}
+                            <label class="flex items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={pluginSettingsDraft[s.key] === true}
+                                onchange={(e) => (pluginSettingsDraft[s.key] = e.currentTarget.checked)}
+                              />
+                              <span>{s.label}</span>
+                            </label>
+                          {:else}
+                            <label class="flex flex-col gap-1 text-sm">
+                              <span>{s.label}</span>
+                              <span class="flex gap-1">
+                                <input
+                                  class="input flex-1"
+                                  type={s.type === 'secret' && !revealedSecrets[s.key] ? 'password' : 'text'}
+                                  bind:value={pluginSettingsDraft[s.key]}
+                                  autocomplete="off"
+                                />
+                                {#if s.type === 'secret'}
+                                  <button
+                                    type="button"
+                                    class="btn-ghost"
+                                    title={revealedSecrets[s.key] ? 'Hide' : 'Show'}
+                                    onclick={() => (revealedSecrets[s.key] = !revealedSecrets[s.key])}
+                                  >{revealedSecrets[s.key] ? 'hide' : 'show'}</button>
+                                {/if}
+                              </span>
+                            </label>
+                          {/if}
+                        {/each}
+                        <div class="flex items-center gap-2">
+                          <button class="btn btn-primary" type="submit" disabled={settingsBusy}>
+                            {settingsBusy ? 'Saving…' : 'Save settings'}
+                          </button>
+                          {#if settingsNote}<span class="text-xs text-ink-soft">{settingsNote}</span>{/if}
+                        </div>
+                      </form>
+                    {:else if !selectedPluginRow.plugin?.panel}
+                      <p class="m-0 italic text-ink-soft">This plugin declares no settings.</p>
+                    {/if}
+                  </div>
                 {/if}
               </div>
             {:else}
@@ -1915,18 +2407,16 @@
                   {/each}
                 </ul>
                 {#if shelfPluginRows.length > 0}
-                  <!-- the Vitrine divider: a thin line with the name in its middle -->
-                  <div class="flex items-center gap-3 my-1 shrink-0" role="separator" aria-label="Vitrine">
-                    <span class="h-px flex-1 bg-line"></span>
-                    <span class="text-xs font-bold uppercase tracking-widest text-ink-soft">Vitrine</span>
-                    <span class="h-px flex-1 bg-line"></span>
-                  </div>
-                  <ul class="list-none p-0 m-0 flex flex-col gap-2">
-                    {#each shelfPluginRows as row (row.name)}
-                      {@render pluginRow(row)}
-                    {/each}
-                  </ul>
+                  {@render sectionLine('plugins-vitrine', 'Vitrine')}
+                  {#if openSections['plugins-vitrine']}
+                    <ul class="list-none p-0 m-0 flex flex-col gap-2">
+                      {#each shelfPluginRows as row (row.name)}
+                        {@render pluginRow(row)}
+                      {/each}
+                    </ul>
+                  {/if}
                 {/if}
+                {@render githubShelf('plugin')}
               </div>
             {/if}
             {#if vitrineError && role === 'admin'}<p class="alert alert-err m-0" role="alert">{vitrineError}</p>{/if}
@@ -2096,18 +2586,16 @@
                   {/each}
                 </ul>
                 {#if shelfRows.length > 0}
-                  <!-- the Vitrine divider: a thin line with the name in its middle -->
-                  <div class="flex items-center gap-3 my-1 shrink-0" role="separator" aria-label="Vitrine">
-                    <span class="h-px flex-1 bg-line"></span>
-                    <span class="text-xs font-bold uppercase tracking-widest text-ink-soft">Vitrine</span>
-                    <span class="h-px flex-1 bg-line"></span>
-                  </div>
-                  <ul class="list-none p-0 m-0 flex flex-col gap-2">
-                    {#each shelfRows as row (row.name)}
-                      {@render themeRow(row)}
-                    {/each}
-                  </ul>
+                  {@render sectionLine('templates-vitrine', 'Vitrine')}
+                  {#if openSections['templates-vitrine']}
+                    <ul class="list-none p-0 m-0 flex flex-col gap-2">
+                      {#each shelfRows as row (row.name)}
+                        {@render themeRow(row)}
+                      {/each}
+                    </ul>
+                  {/if}
                 {/if}
+                {@render githubShelf('template')}
               </div>
             {/if}
             {#if vitrineError && role === 'admin'}<p class="alert alert-err m-0" role="alert">{vitrineError}</p>{/if}
@@ -2191,6 +2679,69 @@
           {#if updatesNote}<p class="alert alert-ok">{updatesNote}</p>{/if}
         </section>
       {/if}
+    </div>
+  </div>
+{/if}
+
+{#if confirmModal}
+  <!-- the house confirm: no system popups — every "are you sure" wears the house pattern -->
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50 p-4" role="dialog" aria-modal="true" aria-label={confirmModal.title} tabindex="-1" onclick={() => (confirmModal = null)}>
+    <div class="modal-card" onclick={(e) => e.stopPropagation()}>
+      <header class="modal-head">
+        <h3>{confirmModal.title}</h3>
+        <button type="button" class="close-x" onclick={() => (confirmModal = null)}>×</button>
+      </header>
+      <p class="m-0 text-sm">{confirmModal.message}</p>
+      <footer class="modal-foot">
+        <button type="button" class="btn btn-secondary" onclick={() => (confirmModal = null)}>Cancel</button>
+        <button type="button" class="btn btn-primary" onclick={confirmNow}>Confirm</button>
+      </footer>
+    </div>
+  </div>
+{/if}
+
+{#if githubModal}
+  <!-- the dark closes the modal (house law, 2026-11-09) -->
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50 p-4" role="dialog" aria-modal="true" aria-label="GitHub connection" tabindex="-1" onclick={() => (githubModal = false)}>
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions, a11y_no_noninteractive_element_interactions -->
+    <div class="modal-card" onclick={(e) => e.stopPropagation()}>
+      <header class="modal-head">
+        <h3>GitHub</h3>
+        <button type="button" class="close-x" onclick={() => (githubModal = false)}>×</button>
+      </header>
+      <label class="field">
+        <span>Personal Access Token</span>
+        <input
+          class="input"
+          type="password"
+          bind:value={githubToken}
+          placeholder="ghp_… or github_pat_…"
+          autocomplete="off"
+        />
+      </label>
+      <p class="m-0 text-xs text-ink-soft">
+        A token with repo read scope. Public repos work without one — the token only widens the reach to this account's private repos.
+      </p>
+      {#if githubTested?.ok}
+        <p class="alert alert-ok m-0">The token answers — it belongs to <b>{githubTested.login}</b>.</p>
+      {/if}
+      {#if githubError}<p class="alert alert-err m-0" role="alert">{githubError}</p>{/if}
+      <footer class="modal-foot">
+        {#if github?.connected}
+          <button type="button" class="btn btn-secondary" onclick={disconnectGithubNow} disabled={githubBusy}>
+            {githubBusy ? '…' : 'Disconnect'}
+          </button>
+        {:else}
+          <button type="button" class="btn btn-secondary" onclick={testGithubNow} disabled={githubBusy || githubToken.trim() === ''}>
+            {githubBusy ? 'Asking…' : 'Test connection'}
+          </button>
+          <button type="button" class="btn btn-primary" onclick={connectGithubNow} disabled={githubBusy || !githubTested?.ok}>
+            {githubBusy ? 'Opening…' : 'Connect'}
+          </button>
+        {/if}
+      </footer>
     </div>
   </div>
 {/if}

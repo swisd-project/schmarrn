@@ -58,6 +58,9 @@ const EDIT_CSS = `
   content:''; position:absolute; inset:-2px; pointer-events:none;
   outline:2px dashed rgba(0,207,255,.55); outline-offset:2px;
 }
+/* surgery: the raw sheet owns the draft — the block buttons look and act dead */
+.sm-raw-surgery > * { cursor:not-allowed !important; }
+.sm-raw-surgery > *:hover::after { content:none; }
 [data-sm-edit-root]>[data-sm-selected] { outline:3px solid var(--color-neon-blue); outline-offset:3px; }
 /* the ONE management door, user-corrected 2026-11-04: "the closed rect should be
    as tall as the opened rect" — so the menu stays IN FLOW at all times and only
@@ -177,6 +180,14 @@ async function boot(root: HTMLElement): Promise<void> {
   const type = root.dataset.type ?? 'pages';
   const slug = root.dataset.slug ?? '';
   const context = { type, slug };
+
+  // ——— surgery law (2026-11-12, user order): while the dashboard's raw sheet
+  // is unlocked, ITS tab flag says so — the visual editor's content edit
+  // buttons show the disabled cursor and stay deaf. The flag rides
+  // sessionStorage (same tab) across the ride from the desk; the desk clears
+  // it on Lock/save and on its next boot. ———
+  const surgery = sessionStorage.getItem('sm-raw-surgery') === `${type}/${slug}`;
+  if (surgery) root.classList.add('sm-raw-surgery');
 
   let csrf = '';
   let role = '';
@@ -471,6 +482,7 @@ async function boot(root: HTMLElement): Promise<void> {
     });
 
     root.addEventListener('click', (e) => {
+      if (root.classList.contains('sm-raw-surgery')) return; // surgery: the raw sheet owns this page
       const holder = (e.target as HTMLElement).closest<HTMLElement>('[data-sm-block]');
       if (holder === null) return;
       e.stopPropagation();

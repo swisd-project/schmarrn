@@ -43,6 +43,7 @@ require_once __DIR__ . '/site.php';
 require_once __DIR__ . '/plugins.php';
 require_once __DIR__ . '/wares.php';
 require_once __DIR__ . '/core.php'; // the core's self-update (GitHub versions)
+require_once __DIR__ . '/github.php'; // the GitHub door (private repos as ware sources)
 require_once __DIR__ . '/serve.php'; // public JSON API reuses the serving engine's byte-peeks
 
 /**
@@ -660,7 +661,101 @@ try {
                 'updatable' => \Core\updatable($ann), // the ONE verdict — the announce in hand, no second GitHub trip
                 'error' => (string)$ann['error'],
                 'localVersion' => \Core\peekPacket(\Core\LOCAL_PACKET),
+                // the attribution card's words: the release's own name + day,
+                // and GitHub's contributor list (the non-GitHub names ride
+                // the dashboard — the core carries only what GitHub knows).
+                'releaseName' => $ann['name'] ?? null,
+                'published' => $ann['published'] ?? null,
+                'contributors' => \Core\contributors(),
             ], JSON_UNESCAPED_SLASHES);
+            break;
+
+        // ——— the GitHub door: the account, and the repos it may share ———
+        case $method === 'GET' && $path === 'github':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — an account is the admin\'s hand.');
+            }
+            echo json_encode([
+                'connected' => \Github\token() !== null,
+                'login' => \Github\account(), // null when there is none, or the token is dead
+            ], JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'POST' && $path === 'github/connect':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — an account is the admin\'s hand.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $token = (string)($body['token'] ?? '');
+            if (trim($token) === '') {
+                Router\refuse(400, 'An empty token opens no door.');
+            }
+            \Github\remember(trim($token), ''); // the login is read back below
+            $login = \Github\account();
+            if ($login === null) {
+                \Github\forget(); // the token is dead — it does not stay
+                Router\refuse(400, 'GitHub refused that token — check its scopes and its life.');
+            }
+            \Github\remember(trim($token), $login);
+            echo json_encode(['connected' => true, 'login' => $login], JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'POST' && $path === 'github/test':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — an account is the admin\'s hand.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            echo json_encode(\Github\test((string)($body['token'] ?? '')), JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'POST' && $path === 'github/disconnect':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — an account is the admin\'s hand.');
+            }
+            Auth\assertCsrf();
+            \Github\forget();
+            echo json_encode(['connected' => false, 'login' => null], JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'GET' && $path === 'github/inspect':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — an account is the admin\'s hand.');
+            }
+            $repo = (string)($_GET['repo'] ?? '');
+            echo json_encode(\Github\inspect($repo), JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'POST' && $path === 'github/install':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — an account is the admin\'s hand.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            echo json_encode(\Github\install(
+                (string)($body['repo'] ?? ''),
+                (string)($body['kind'] ?? ''),
+                (string)($body['path'] ?? '')
+            ), JSON_UNESCAPED_SLASHES);
             break;
 
         case $method === 'POST' && $path === 'core/packet':

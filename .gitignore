@@ -14,6 +14,8 @@ bridge/config/plugins.local.php
 bridge/config/plugins.settings.local.php
 bridge/config/wares.local.php
 bridge/config/wares.lock.php
+bridge/config/github.local.php
+bridge/config/github.lock.php
 
 # Wares poured from the Vitrine — repo-external by law (base keeps none);
 # hello stays the tracked copy-me demo.

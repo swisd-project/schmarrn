@@ -136,6 +136,9 @@ body {
 }
 .btn-ghost:hover { color: var(--color-jam); }
 .btn-ghost.danger:hover { color: var(--color-neon-pink); }
+/* the disabled cursor outranks the ghost's pointer — the utility loads before
+   the house, so the pair class carries the law (2026-11-12, user order) */
+.btn-ghost.cursor-not-allowed { cursor: not-allowed; }
 
 /* ————————————————————————————————————————————————
    05 · FORMS — the dent is the type-here key. Focus = the light finds it.

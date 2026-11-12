@@ -233,6 +233,8 @@ function announce(): array
 {
     $tag = null;
     $asset = null;
+    $releaseName = null;
+    $published = null;
     // the releases list, PAGED (audit U7): the semver max of a 100+ release
     // history may live past page one. Walk FULL pages only — a short page is
     // the definitive end of the line; ten pages is the safety rail.
@@ -257,6 +259,15 @@ function announce(): array
             if ($tag === null || version_compare(ltrim($name, 'v'), ltrim($tag, 'v')) === 1) {
                 $tag = $name;
                 $asset = assetIn($release); // the winner's own asset, or null
+                // the release's own words for the attribution card: its name
+                // ("v1.3.0 – Beauty") and the day it shipped.
+                $releaseName = is_string($release['name'] ?? null) && trim((string)$release['name']) !== ''
+                    ? trim((string)$release['name'])
+                    : $name;
+                $published = is_string($release['published_at'] ?? null)
+                    && preg_match('/^(\d{4}-\d{2}-\d{2})/', (string)$release['published_at'], $m) === 1
+                    ? $m[1]
+                    : null;
             }
         }
         if (count($list) < 100) {
@@ -284,13 +295,54 @@ function announce(): array
     }
 
     if ($tag === null) {
-        return ['latest' => null, 'packet' => null, 'error' => 'GitHub does not answer — the core\'s newest version is unknown from here.'];
+        return ['latest' => null, 'packet' => null, 'error' => 'GitHub does not answer — the core\'s newest version is unknown from here.', 'name' => null, 'published' => null];
     }
     return [
         'latest' => $tag,
         'packet' => $asset !== null ? $asset : PACKET_URL . $tag, // asset zip (with the dashboard) first, source zipball as the floor
         'error' => '',
+        'name' => $releaseName,
+        'published' => $published,
     ];
+}
+
+/**
+ * The contributors GitHub knows (2026-11-12, user order: the attribution card).
+ * Cached an hour in the file cache — GitHub's unauth budget is 60/h and the
+ * card must not spend it on every page view. A dark GitHub answers an empty
+ * list, never a broken card.
+ */
+function contributors(): array
+{
+    $file = __DIR__ . '/cache/contributors.json';
+    $ttl = 3600;
+    if (is_file($file)) {
+        $cached = json_decode((string)file_get_contents($file), true);
+        if (is_array($cached) && isset($cached['fetched']) && (time() - (int)$cached['fetched']) < $ttl && is_array($cached['list'] ?? null)) {
+            return $cached['list'];
+        }
+    }
+    $url = str_replace('/releases/latest', '/contributors', RELEASES_URL);
+    $raw = httpGet($url);
+    if ($raw === null) {
+        return [];
+    }
+    $list = json_decode((string)$raw, true);
+    if (!is_array($list)) {
+        return [];
+    }
+    $out = [];
+    foreach ($list as $c) {
+        if (!is_array($c) || !is_string($c['login'] ?? null)) {
+            continue;
+        }
+        $out[] = [
+            'login' => (string)$c['login'],
+            'url' => is_string($c['html_url'] ?? null) ? (string)$c['html_url'] : 'https://github.com/' . (string)$c['login'],
+        ];
+    }
+    @file_put_contents($file, json_encode(['fetched' => time(), 'list' => $out], JSON_UNESCAPED_SLASHES));
+    return $out;
 }
 
 /**
