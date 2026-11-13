@@ -849,15 +849,24 @@ function resolve(string $name, string $route, string $method, array $body): arra
 
 /** The fence-preview stash (slice 5b): the editor hands {name, route, source,
  *  type, slug}; the core runs the plugin's preview route and stashes the HTML
- *  answer under a one-time handle (5-minute TTL, file cache). The editor only
- *  ever receives {t: handle} — the plugin's HTML never touches editor JS. */
+ *  answer under a random 32-hex handle (5-minute TTL, file cache). The
+ *  handle is NOT one-time: the public serve door answers any hand that
+ *  carries it until the stash expires — bounded by the TTL and the 256 kB
+ *  roof. The editor only ever receives {t: handle} — the plugin's HTML never
+ *  touches editor JS. */
 function previewStash(array $body): array
 {
     $name = is_string($body['name'] ?? null) ? (string)$body['name'] : '';
     $route = is_string($body['route'] ?? null) ? (string)$body['route'] : '';
     $source = is_string($body['source'] ?? null) ? (string)$body['source'] : '';
+    $type = is_string($body['type'] ?? null) ? (string)$body['type'] : '';
+    $slug = is_string($body['slug'] ?? null) ? (string)$body['slug'] : '';
     if (preg_match('/^[a-z0-9-]+$/', $name) !== 1 || preg_match(IDENTIFIER, $route) !== 1
-        || $source === '' || strlen($source) > 65536) {
+        || $source === '' || strlen($source) > 65536
+        // type/slug ride to the plugin RAW — the house identifier law lids
+        // them HERE, so a careless ware can never be handed a traversal.
+        || ($type !== '' && preg_match(IDENTIFIER, $type) !== 1)
+        || ($slug !== '' && preg_match(IDENTIFIER, $slug) !== 1)) {
         throw new \Domain\Error(400, 'That preview order is unbaked dough.');
     }
     // the preview route must be one the plugin DECLARED as a preview
@@ -877,8 +886,8 @@ function previewStash(array $body): array
     }
     $result = resolve($name, $route, 'POST', [
         'source' => $source,
-        'type' => is_string($body['type'] ?? null) ? (string)$body['type'] : '',
-        'slug' => is_string($body['slug'] ?? null) ? (string)$body['slug'] : '',
+        'type' => $type,
+        'slug' => $slug,
     ]);
     if (!isset($result['_html']) || !is_string($result['_html'])) {
         throw new \Domain\Error(502, 'That preview burned — the plugin served no page.');
@@ -915,11 +924,20 @@ function previewServe(string $handle): never
     exit;
 }
 
-/** The preview cage — the same law the _html branch speaks, one place. */
+/** The preview cage — the same law the _html branch speaks, one place.
+ *  The cage must be FRAMEABLE: auth.php's blanket X-Frame-Options: DENY
+ *  (top-level, every /bridge response) would blank the preview iframe —
+ *  the door lifts the ban for its own answer and speaks the sandbox law
+ *  itself. The CSP names the ABSOLUTE origin (an opaque origin's 'self'
+ *  matches nothing) with the same forwarded-proto honesty the cookie law
+ *  speaks (bridge/auth.php) — a TLS-offloading proxy must not cage the
+ *  ware's own assets out. */
 function previewHeaders(): void
 {
-    $scheme = (($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off') ? 'https' : 'http';
-    $origin = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    header_remove('X-Frame-Options');
+    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || strtolower($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+    $origin = ($secure ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
     header('Content-Type: text/html; charset=utf-8');
     header("Content-Security-Policy: default-src 'none'; script-src $origin; style-src 'unsafe-inline'; img-src $origin data:; sandbox allow-scripts");
     header('X-Content-Type-Options: nosniff');

@@ -962,6 +962,9 @@ async function boot(root: HTMLElement): Promise<void> {
           sel.append(el('option', { value: opt }, [opt]));
         }
         sel.value = typeof f.value === 'string' ? f.value : '';
+        // A stored value the options no longer speak would sit unselected and
+        // submit '' — the first option answers instead (an honest default).
+        if (sel.selectedIndex === -1 && sel.options.length > 0) sel.selectedIndex = 0;
         node = sel;
       } else if (kind === 'checkbox') {
         node = el('input', { type: 'checkbox' });
