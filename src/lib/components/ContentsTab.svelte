@@ -28,6 +28,7 @@
 
   import { deletePage, getDraftRaw, pageCount, publishDraft, putDraftRaw, renamePage, searchPages, type PageIndex, type PageRef } from '$lib/api';
   import { renderMdms } from '$lib/render';
+  import { SURGERY_KEY, surgeryPath } from '$lib/surgery';
 
   let {
     index = $bindable<PageIndex | null>(null),
@@ -121,9 +122,9 @@
   // boot; it survives the ride to /_page on purpose — the surgery is still open.
   $effect(() => {
     if (unlocked && sel !== null) {
-      sessionStorage.setItem('sm-raw-surgery', `${sel.type}/${sel.slug}`);
+      sessionStorage.setItem(SURGERY_KEY, surgeryPath(sel.type, sel.slug));
     } else {
-      sessionStorage.removeItem('sm-raw-surgery');
+      sessionStorage.removeItem(SURGERY_KEY);
     }
   });
   const dirty = $derived(sel !== null && raw !== baseline);

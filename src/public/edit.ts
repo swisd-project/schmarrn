@@ -18,7 +18,10 @@
 
 import { splitFrontmatter, splitBlocks, joinPage, attr, directiveInner, type Block } from '../lib/blocks';
 import { renderMdms } from '../lib/render';
+import { MODULE_ATTRS } from '../lib/modules';
 import { backHref } from '../lib/back';
+import { SURGERY_KEY, SURGERY_CLASS, surgeryPath } from '../lib/surgery';
+import type { EditorBlockDef } from '../lib/types';
 
 // ——— tiny DOM helpers (no framework on the public page) ———
 
@@ -59,8 +62,8 @@ const EDIT_CSS = `
   outline:2px dashed rgba(0,207,255,.55); outline-offset:2px;
 }
 /* surgery: the raw sheet owns the draft — the block buttons look and act dead */
-.sm-raw-surgery > * { cursor:not-allowed !important; }
-.sm-raw-surgery > *:hover::after { content:none; }
+.${SURGERY_CLASS} > * { cursor:not-allowed !important; }
+.${SURGERY_CLASS} > *:hover::after { content:none; }
 [data-sm-edit-root]>[data-sm-selected] { outline:3px solid var(--color-neon-blue); outline-offset:3px; }
 /* the ONE management door, user-corrected 2026-11-04: "the closed rect should be
    as tall as the opened rect" — so the menu stays IN FLOW at all times and only
@@ -186,8 +189,8 @@ async function boot(root: HTMLElement): Promise<void> {
   // buttons show the disabled cursor and stay deaf. The flag rides
   // sessionStorage (same tab) across the ride from the desk; the desk clears
   // it on Lock/save and on its next boot. ———
-  const surgery = sessionStorage.getItem('sm-raw-surgery') === `${type}/${slug}`;
-  if (surgery) root.classList.add('sm-raw-surgery');
+  const surgery = sessionStorage.getItem(SURGERY_KEY) === surgeryPath(type, slug);
+  if (surgery) root.classList.add(SURGERY_CLASS);
 
   let csrf = '';
   let role = '';
@@ -196,7 +199,7 @@ async function boot(root: HTMLElement): Promise<void> {
   let blocks: Block[] = [];
   // The plugins' canvas insertables (p6 editorBlocks) — lazily fetched with
   // the page. Load failure leaves an empty shelf, never a dead editor.
-  let pluginBlocks: readonly { name: string; label: string; template: string; modal: string }[] = [];
+  let pluginBlocks: readonly EditorBlockDef[] = [];
   let selected: number | null = null;
   let busy = false;
   let hadDraft = false;
@@ -238,7 +241,7 @@ async function boot(root: HTMLElement): Promise<void> {
       .then((r) => (r.ok ? r.json() : []))
       .then((defs) => {
         pluginBlocks = Array.isArray(defs)
-          ? defs.filter((d: unknown): d is { name: string; label: string; template: string; modal: string } =>
+          ? defs.filter((d: unknown): d is EditorBlockDef =>
               !!d && typeof d === 'object'
               && typeof (d as { name?: unknown }).name === 'string'
               && typeof (d as { label?: unknown }).label === 'string'
@@ -482,7 +485,7 @@ async function boot(root: HTMLElement): Promise<void> {
     });
 
     root.addEventListener('click', (e) => {
-      if (root.classList.contains('sm-raw-surgery')) return; // surgery: the raw sheet owns this page
+      if (root.classList.contains(SURGERY_CLASS)) return; // surgery: the raw sheet owns this page
       const holder = (e.target as HTMLElement).closest<HTMLElement>('[data-sm-block]');
       if (holder === null) return;
       e.stopPropagation();
@@ -991,6 +994,21 @@ async function boot(root: HTMLElement): Promise<void> {
         // The fence law: open and close, both present. The parser gets the last word.
         if (!/^:::[a-z][a-z-]*(\{[\s\S]*\})?\s*\n[\s\S]*\n:::$/.test(next)) {
           err.textContent = 'Keep the :::name{props} open and the ::: close on its own line.';
+          err.style.display = '';
+          return;
+        }
+        // THE WALL SPEAKS (2026-11-13, shared-contract ride): the core's
+        // attribute allowlist (MODULE_ATTRS) is the truth — an attribute the
+        // wall refuses never reaches the served page. Say so BEFORE the write
+        // instead of losing the author's words silently. Only the OPENING
+        // fence's props are judged (nested modules carry their own walls).
+        const wall = MODULE_ATTRS[/^:::([a-z][a-z-]*)/.exec(next)?.[1] ?? name] ?? [];
+        const props = /^\{([^}]*)\}/.exec(next.split('\n')[0] ?? '')?.[1] ?? '';
+        const strangers = [...props.matchAll(/([\w-]+)\s*=/g)]
+          .map((m) => m[1])
+          .filter((k) => !wall.includes(k));
+        if (strangers.length > 0) {
+          err.textContent = `The wall refuses ${strangers.map((k) => `"${k}"`).join(', ')} — this module carries: ${wall.join(', ') || '(no attributes)'}.`;
           err.style.display = '';
           return;
         }

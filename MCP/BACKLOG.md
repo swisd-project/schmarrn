@@ -134,8 +134,9 @@ CQRS for the md-only store — start with ONE vertical slice:
 
 Front-end (same law, same shape):
 [ ] Split `+page.svelte` (3318 lines) — one component per overlay tab (contents, settings, plugins, templates, updates, users) plus a shared state module.
-[ ] Split `src/lib/api.ts` (710 lines) — one module per bounded context (pages, site, plugins, wares, accounts, integrations); types live with their module.
-[ ] One editor/dashboard alphabet — `src/public/edit.ts` (1033 lines) shares no types with the dashboard; the module/blocks contract moves into `src/lib/` so both sides speak one vocabulary.
+[ ] Editor/dashboard shared contract (ride 1, queued 2026-11-13) — `src/public/edit.ts` (1,033 lines) shares no types with dashboard. Strips: (a) inventory edit.ts private decls duplicated by `src/lib/{modules,blocks,schema,render}.ts`; (b) lift CONTRACT shapes into `src/lib/` — types/constants/parsers only, never editor runtime fangs; (c) edit.ts imports them; (d) gate per strip: svelte-check 0/0 + build + byte-identity green + arch-lint + batteries (byte moves ON PURPOSE — argued, then recaptured); (e) no identifier declared twice. modules.ts module wall = security chrome, semantics verbatim. Build path FIRST: bundle is `bridge/assets/edit.esm.js` — source and bundle never drift.
+[ ] api.ts "bridge" split (ride 2, queued 2026-11-13) — `src/lib/api.ts` 710 lines, 72 exports → one module per bounded context in `src/lib/api/`: pages, site, accounts, integrations (github+mail), wares (plugins+templates+registry), core, + `client.ts` (csrf/json/apiError floor). Types live with their module (dissolves types.ts overlap). Strip order barrel-first: `api.ts` = `export * from './api/x'` — 16 components' imports ride unchanged; import-site surgery = separate optional strip. Gate per strip: svelte-check 0/0 + build + full suite + arch-lint (no import cycles).
+[~] Ride law (2026-11-13): rides ride ONE strip to the gate at a time; no while-I'm-at-it (Zero law). Deferred: bienenstich entry — do not touch.
 
 Housekeeping that rides along:
 [ ] Plugin code isolation (user word) — `Plugins\load()` requires ware code into the global function namespace, so a plugin may call any core function; the manifest lid is the current gate and a tighter sandbox needs the user's trust-model word.

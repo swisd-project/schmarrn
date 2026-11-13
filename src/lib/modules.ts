@@ -20,8 +20,11 @@ export const MODULE_NAMES = ['image', 'video', 'embed', 'slide', 'note', 'detail
 /**
  * The injection wall: per-module attribute allowlist. Any directive attribute
  * outside this table never reaches hast — no on*, no style, no data-*, nothing.
+ * THE SHARED CONTRACT (2026-11-13, shared-contract ride): the editor imports
+ * this wall too — its write-side validates submitted attrs against it, so an
+ * author is TOLD the wall refuses a key instead of losing it silently.
  */
-const MODULE_ATTRS: Record<string, readonly string[]> = {
+export const MODULE_ATTRS: Record<string, readonly string[]> = {
   image: ['file', 'caption'],
   video: ['url', 'file'],
   embed: ['url'],

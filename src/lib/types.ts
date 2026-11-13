@@ -17,6 +17,19 @@ export interface PageRef {
 }
 export type PageIndex = Readonly<Record<string, readonly PageRef[]>>;
 
+/** THE EDITOR-BLOCKS CONTRACT (the shared-contract ride, 2026-11-13): the
+ *  shape every ENABLED plugin's manifest insertable rides from
+ *  GET /bridge/editor-blocks into the live-page editor's insert menu — one
+ *  type, both sides read it, the editor's runtime filter keeps its job.
+ *  `modal` is optional (the manifest may omit it — the editor falls back to
+ *  the plain text modal). */
+export interface EditorBlockDef {
+  readonly name: string;
+  readonly label: string;
+  readonly template: string;
+  readonly modal?: string;
+}
+
 export interface AccountRef {
   readonly user: string;
   readonly role: 'admin' | 'editor';
