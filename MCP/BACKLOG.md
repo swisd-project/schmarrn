@@ -115,6 +115,7 @@ Deferred / graveyard
 ## p8 architecture — refactor sublist (2026-11-13, audit-driven)
 
 [x] p6 slice 5a — admin tabs for plugins (2026-11-13): manifest lid (B22–B25 in the boundary battery) + `GET /bridge/admin-tabs` (F4/F5 in the refusal battery) + the shared PluginPanel face + the drawer's nav-only items; rig-proven: admin sees admin+user tabs, an editor sees only the user-auth tab (the admin-only tab never renders).
+[ ] honest note (2026-11-13): the dashboard overlay fetches `GET /bridge/admin-tabs` on EVERY open (no cache) — a cheap GET by design; revisit only if a site ever grows ~20 tab-carrying plugins.
 
 Enforcement first — the law as mechanism, not intention:
 [x] Arch-lint gate — SHIPPED: `scripts/arch-lint.mjs` + `npm run lint:arch`, four rules (domain purity, queries never write, commands unreachable from GET, every mutating route names a registered command); part of `npm test` (STEP 3 record below).
