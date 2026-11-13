@@ -255,13 +255,46 @@ function validate(string $name, array $manifest): array|string
             && is_string($block['template'] ?? null) && strlen($block['template']) <= 4000
             && trim($block['template']) !== ''
         ) {
+            // modal: the legacy bare string (a core-builtin modal name) OR
+            // {route} — the plugin's own field-descriptor modal route
+            // (slice 5b). preview: {route} — the plugin's fence-preview route.
+            // fence: the ```language the block owns (its own prefix — the
+            // placeholder law). Everything foreign is dropped, never stored.
+            $modal = '';
+            if (is_string($block['modal'] ?? null)
+                && preg_match('/^[a-z][a-z-]{0,31}$/', (string)$block['modal']) === 1) {
+                $modal = (string)$block['modal'];
+            } elseif (is_array($block['modal'] ?? null)) {
+                $mRoute = is_string($block['modal']['route'] ?? null) ? (string)$block['modal']['route'] : '';
+                if (preg_match(IDENTIFIER, $mRoute) === 1
+                    && in_array($mRoute, array_map(fn($r) => $r['path'], $routes), true)) {
+                    $modal = ['route' => $mRoute];
+                }
+            }
+            $preview = null;
+            if (is_array($block['preview'] ?? null)) {
+                $pRoute = is_string($block['preview']['route'] ?? null) ? (string)$block['preview']['route'] : '';
+                if (preg_match(IDENTIFIER, $pRoute) === 1
+                    && in_array($pRoute, array_map(fn($r) => $r['path'], $routes), true)) {
+                    $preview = ['route' => $pRoute];
+                }
+            }
+            // fence: the ```language the block owns. The law: the plugin owns
+            // its own NAME as a fence — `mermaid` for the mermaid plugin —
+            // and its namespaced children (`stop-motion-*`). No fence equals
+            // or prefixes a foreign brand: no hijacking `php` or `js`.
+            $fence = is_string($block['fence'] ?? null)
+                && ((string)$block['fence'] === $name
+                    || str_starts_with((string)$block['fence'], $name . '-'))
+                && preg_match('/^[a-z][a-z0-9-]{0,63}$/', (string)$block['fence']) === 1
+                ? (string)$block['fence'] : '';
             $editorBlocks[] = [
                 'name' => (string)$block['name'],
                 'label' => trim((string)$block['label']),
                 'template' => (string)$block['template'],
-                'modal' => is_string($block['modal'] ?? null)
-                    && preg_match('/^[a-z][a-z-]{0,31}$/', (string)$block['modal']) === 1
-                    ? (string)$block['modal'] : '',
+                'modal' => $modal,
+                'preview' => $preview,
+                'fence' => $fence,
             ];
         }
     }
@@ -760,8 +793,10 @@ function contentFilters(array $ctx, string $html): string
     return $html;
 }
 
-/** Dispatch a plugin API route. Auth + CSRF are enforced HERE, per the manifest. Never returns. */
-function dispatch(string $name, string $route, string $method): never
+/** Resolve a plugin route to its handler result — the lid (auth, CSRF), the
+ *  load, the call. The core's own doors (dispatch, the preview stash) ride
+ *  this one law; no door re-implements the gate. Throws Domain\Error. */
+function resolve(string $name, string $route, string $method, array $body): array
 {
     $plugin = null;
     foreach (all() as $candidate) {
@@ -799,18 +834,126 @@ function dispatch(string $name, string $route, string $method): never
     if (!function_exists($fn)) {
         throw new \Domain\Error(500, "Plugin route handler missing: {$fn}");
     }
-    $body = json_decode(file_get_contents('php://input') ?: '{}', true);
-    $body = is_array($body) ? $body : [];
     try {
         $result = $fn($method, $body);
     } catch (\Throwable $e) {
         @error_log("[schmarrn-plugins] '{$name}/{$route}' failed: {$e->getMessage()}");
         throw new \Domain\Error(500, 'That plugin burned on the route.');
     }
+    return is_array($result) ? $result : ['body' => $result];
+}
+
+/** The fence-preview stash (slice 5b): the editor hands {name, route, source,
+ *  type, slug}; the core runs the plugin's preview route and stashes the HTML
+ *  answer under a one-time handle (5-minute TTL, file cache). The editor only
+ *  ever receives {t: handle} — the plugin's HTML never touches editor JS. */
+function previewStash(array $body): array
+{
+    $name = is_string($body['name'] ?? null) ? (string)$body['name'] : '';
+    $route = is_string($body['route'] ?? null) ? (string)$body['route'] : '';
+    $source = is_string($body['source'] ?? null) ? (string)$body['source'] : '';
+    if (preg_match('/^[a-z0-9-]+$/', $name) !== 1 || preg_match(IDENTIFIER, $route) !== 1
+        || $source === '' || strlen($source) > 65536) {
+        throw new \Domain\Error(400, 'That preview order is unbaked dough.');
+    }
+    // the preview route must be one the plugin DECLARED as a preview
+    $declared = false;
+    foreach (all() as $candidate) {
+        if (($candidate['name'] ?? null) === $name && ($candidate['enabled'] ?? false) === true) {
+            foreach ($candidate['editorBlocks'] as $block) {
+                if (is_array($block) && ($block['preview']['route'] ?? null) === $route) {
+                    $declared = true;
+                    break 2;
+                }
+            }
+        }
+    }
+    if (!$declared) {
+        throw new \Domain\Error(404, 'That plugin offers no preview there.');
+    }
+    $result = resolve($name, $route, 'POST', [
+        'source' => $source,
+        'type' => is_string($body['type'] ?? null) ? (string)$body['type'] : '',
+        'slug' => is_string($body['slug'] ?? null) ? (string)$body['slug'] : '',
+    ]);
+    if (!isset($result['_html']) || !is_string($result['_html'])) {
+        throw new \Domain\Error(502, 'That preview burned — the plugin served no page.');
+    }
+    $html = $result['_html'];
+    if (strlen($html) > 256 * 1024) {
+        @error_log("[schmarrn-plugins] preview '{$name}/{$route}' over the roof");
+        throw new \Domain\Error(502, 'That preview is too heavy for the canvas.');
+    }
+    previewPrune();
+    $handle = bin2hex(random_bytes(16));
+    @mkdir(__DIR__ . '/cache', 0775, true);
+    @file_put_contents(__DIR__ . "/cache/preview-{$handle}.json", json_encode([
+        'exp' => time() + 300,
+        'html' => $html,
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+    return ['t' => $handle];
+}
+
+/** Serve one stashed preview — public, the cage rides the response. */
+function previewServe(string $handle): never
+{
+    if (preg_match('/^[a-f0-9]{32}$/', $handle) !== 1) {
+        throw new \Domain\Error(404, 'That preview is gone.');
+    }
+    $raw = @file_get_contents(__DIR__ . "/cache/preview-{$handle}.json");
+    $stash = $raw === false ? null : json_decode($raw, true);
+    if (!is_array($stash) || !is_string($stash['html'] ?? null) || (int)($stash['exp'] ?? 0) < time()) {
+        @unlink(__DIR__ . "/cache/preview-{$handle}.json");
+        throw new \Domain\Error(404, 'That preview is gone — ask the canvas again.');
+    }
+    previewHeaders();
+    echo $stash['html'];
+    exit;
+}
+
+/** The preview cage — the same law the _html branch speaks, one place. */
+function previewHeaders(): void
+{
+    $scheme = (($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off') ? 'https' : 'http';
+    $origin = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    header('Content-Type: text/html; charset=utf-8');
+    header("Content-Security-Policy: default-src 'none'; script-src $origin; style-src 'unsafe-inline'; img-src $origin data:; sandbox allow-scripts");
+    header('X-Content-Type-Options: nosniff');
+}
+
+/** Expired previews leave the cache — swept on every fresh stash. */
+function previewPrune(): void
+{
+    foreach (glob(__DIR__ . '/cache/preview-*.json') ?: [] as $file) {
+        $stash = json_decode((string)@file_get_contents($file), true);
+        if (is_array($stash) && (int)($stash['exp'] ?? 0) < time()) {
+            @unlink($file);
+        }
+    }
+}
+
+/** Dispatch a plugin API route. Auth + CSRF are enforced HERE, per the manifest. Never returns. */
+function dispatch(string $name, string $route, string $method): never
+{
+    $raw = file_get_contents('php://input') ?: '{}';
+    $body = json_decode($raw, true);
+    $result = resolve($name, $route, $method, is_array($body) ? $body : []);
     // A handler may return dough (a string, null, whatever): it answers JSON,
     // never a fatal. _status is read only off arrays.
     if (!is_array($result)) {
         $result = ['body' => $result];
+    }
+    // _html (slice 5b): the handler answers a page instead of JSON — the
+    // fence-preview transport. The cage rides the response: an opaque-origin
+    // sandbox (scripts yes, same-origin no, top-navigation no) plus a CSP
+    // naming the ABSOLUTE origin (a sandboxed document's 'self' matches
+    // nothing — the server speaks the host out loud). connect-src stays
+    // absent: a preview is display-only, it phones no one.
+    if (isset($result['_html']) && is_string($result['_html'])) {
+        http_response_code(isset($result['_status']) ? (int)$result['_status'] : 200);
+        previewHeaders();
+        echo $result['_html'];
+        exit;
     }
     http_response_code(isset($result['_status']) ? (int)$result['_status'] : 200);
     unset($result['_status']);

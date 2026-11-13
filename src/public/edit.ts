@@ -114,6 +114,7 @@ const EDIT_CSS = `
   color:var(--color-ink); font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size:14px;
 }
 .sm-modal h3 { margin:0; font-weight:800; font-size:18px; }
+.sm-plugin-preview { width:100%; height:320px; border:0; display:block; border-radius:4px; background:#fff; }
 .sm-modal-head { display:flex; justify-content:space-between; align-items:center; }
 .sm-field { display:flex; flex-direction:column; gap:.25rem; }
 .sm-field>span { font-size:13px; font-weight:700; }
@@ -272,12 +273,20 @@ async function boot(root: HTMLElement): Promise<void> {
     for (const block of blocks) {
       const holder = el('div', { 'data-sm-block': '1' });
       holder.innerHTML = renderMdms(block.source, context).fullHtml;
-      // The plugin fences speak their own preview: a ```stop-motion block
-      // wears its animated stage in the canvas — the md keeps the config,
-      // the editor keeps an honest live monitor of the published behaviour.
-      const fenceCode = holder.querySelector('code[class*="language-stop-motion"]');
-      if (fenceCode !== null && fenceCode.textContent !== null && fenceCode.textContent.trim() !== '') {
-        mountStopPreview(holder, fenceCode.textContent.trim());
+      // The plugin fences speak their own preview (slice 5b): a fence a
+      // plugin owns with a preview route is rendered BY THE PLUGIN inside a
+      // sandboxed iframe (the handle transport — the plugin's HTML never
+      // touches editor JS). The legacy stop-motion stage stays for the
+      // un-migrated ware (no fence declared yet).
+      const fenceCode = holder.querySelector('code[class*="language-"]');
+      const fenceName = fenceCode !== null ? (/language-([a-z][a-z0-9-]*)/.exec(fenceCode.className)?.[1] ?? '') : '';
+      if (fenceCode !== null && fenceName !== '' && fenceCode.textContent !== null && fenceCode.textContent.trim() !== '') {
+        const owner = pluginBlocks.find((d) => d.fence === fenceName);
+        if (owner?.preview) {
+          void mountPluginPreview(holder, owner, fenceCode.textContent.trim());
+        } else if (owner === undefined && fenceName === 'stop-motion') {
+          mountStopPreview(holder, fenceCode.textContent.trim());
+        }
       }
       root.append(holder);
     }
@@ -528,6 +537,22 @@ async function boot(root: HTMLElement): Promise<void> {
         openStopMotionModal(index, false);
         return;
       }
+      // The generic fence law (slice 5b): a block whose fence a plugin owns
+      // opens that plugin's modal (first declaration wins — the server's
+      // alphabetical order). No modal declared → the float menu stays honest.
+      if (block?.kind === 'text') {
+        const fence = /^```([a-z][a-z0-9-]*)/.exec(block.source)?.[1] ?? '';
+        const owner = fence === '' ? undefined : pluginBlocks.find((d) => d.fence === fence);
+        if (owner !== undefined && owner.modal && typeof owner.modal === 'object') {
+          selected = index;
+          [...root.children].forEach((child, i) => {
+            if (i === index) child.setAttribute('data-sm-selected', '1');
+            else child.removeAttribute('data-sm-selected');
+          });
+          void openPluginModal(owner, index, block.source);
+          return;
+        }
+      }
       select(index, click);
     });
   }
@@ -585,7 +610,14 @@ async function boot(root: HTMLElement): Promise<void> {
       const addPlugins = el('div', { class: `sm-float-row${isEmpty ? '' : ' sm-float-add'}` }, [
         el('span', { style: 'font-size:11px;opacity:.7;align-self:center' }, ['Plugins:']),
       ...pluginBlocks.map((def) =>
-      el('button', { title: def.name, onclick: () => (def.modal === 'stop-motion' ? openStopMotionModal(insertAt, true) : openTextModal(insertAt, true, def.template, def.label)) }, [def.label])
+      el('button', {
+        title: def.name,
+        onclick: () => {
+          if (def.modal === 'stop-motion') openStopMotionModal(insertAt, true);
+          else if (def.modal && typeof def.modal === 'object') void openPluginModal(def, insertAt, null);
+          else openTextModal(insertAt, true, def.template, def.label);
+        }
+      }, [def.label])
     )
       ]);
       menu.append(addPlugins);
@@ -685,6 +717,33 @@ async function boot(root: HTMLElement): Promise<void> {
       + (100 / files.length).toFixed(4) + '%{opacity:1}' + (100 / files.length).toFixed(4) + '%{opacity:0}100%{opacity:0}}'
     ]));
     holder.replaceChildren(stage);
+  }
+
+  /** The plugin's own preview (slice 5b): the fence source rides the stash
+   *  door, the handle rides back, the iframe wears the cage. Broken or
+   *  refused → one log line, the untouched code block stays (the notice
+   *  law — never a dead canvas). */
+  async function mountPluginPreview(holder: HTMLElement, def: EditorBlockDef, source: string): Promise<void> {
+    try {
+      const r = await fetch('/bridge/preview-stash', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({ name: def.name, route: def.preview?.route ?? '', source, type, slug })
+      });
+      if (!r.ok) throw new Error(`stash refused (${r.status})`);
+      const { t } = (await r.json()) as { t?: unknown };
+      if (typeof t !== 'string' || /^[a-f0-9]{32}$/.test(t) === false) throw new Error('dough handle');
+      const frame = document.createElement('iframe');
+      // THE SANDBOX LAW: scripts yes, same-origin never, top-navigation never.
+      // Display-only — every postMessage from the frame is ignored by law.
+      frame.setAttribute('sandbox', 'allow-scripts');
+      frame.src = `/bridge/preview?t=${t}`;
+      frame.className = 'sm-plugin-preview';
+      frame.setAttribute('title', def.label);
+      holder.replaceChildren(frame);
+    } catch (e) {
+      console.warn(`[sm] the plugin preview degraded (${def.name}):`, e);
+    }
   }
 
   // ——— the stop-motion block modal (p6 editorBlocks, mode 'stop-motion') ———  // Frames live in the page's dedicated stop-motion/ folder. The modal lists
@@ -836,6 +895,90 @@ async function boot(root: HTMLElement): Promise<void> {
       ])
     ]);
     openModal(isNew ? (initial !== '' && label !== '' ? `Add ${label}` : 'Add text block') : 'Edit text block', form);
+  }
+
+  /** The plugin's own field-descriptor modal (slice 5b): the plugin hands
+   *  {title, fields[]} over its route and the core renders what it is told,
+   *  understanding none of it — every string rides DOM/textContent, never
+   *  innerHTML (the session carries the CSRF token; plugin words are dough).
+   *  Save posts the values (+ the block source when editing an existing
+   *  block); the plugin answers {template} or {error}. A route that fails,
+   *  times out or answers dough degrades to the plain text modal + one log
+   *  line — never a dead editor, never a lost draft. */
+  async function openPluginModal(def: EditorBlockDef, index: number, source: string | null): Promise<void> {
+    const route = def.modal && typeof def.modal === 'object' ? def.modal.route : '';
+    let desc: { title?: unknown; fields?: unknown } = {};
+    try {
+      const r = await fetch(`/bridge/plugin/${def.name}/${route}`);
+      if (!r.ok) throw new Error(`descriptor refused (${r.status})`);
+      desc = (await r.json()) as typeof desc;
+      if (!Array.isArray(desc.fields)) throw new Error('dough descriptor');
+    } catch (e) {
+      console.warn(`[sm] the plugin modal degraded (${def.name}):`, e);
+      openTextModal(index, source === null, source ?? def.template, def.label);
+      return;
+    }
+    const err = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:0' });
+    const form = el('form', {
+      onsubmit: (e: Event) => {
+        e.preventDefault();
+        const values: Record<string, string | boolean> = {};
+        for (const input of inputs) values[input.key] = input.checkbox ? (input.node as HTMLInputElement).checked : input.node.value;
+        const save = (form.querySelector<HTMLButtonElement>('button[type=submit]') ?? null);
+        if (save) save.disabled = true;
+        fetch(`/bridge/plugin/${def.name}/${route}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+          body: JSON.stringify(source === null ? { fields: values } : { fields: values, source })
+        })
+          .then(async (r) => {
+            const body = (await r.json().catch(() => ({}))) as { template?: unknown; error?: unknown };
+            if (!r.ok || typeof body.error === 'string') throw new Error(typeof body.error === 'string' ? body.error : `refused (${r.status})`);
+            if (typeof body.template !== 'string' || body.template === '' || body.template.length > 4000) throw new Error('the plugin answered dough');
+            writeBlock(index, { kind: 'text', source: body.template }, source === null);
+          })
+          .catch((e2: unknown) => {
+            // the modal stays open, the draft stays — the error speaks
+            err.textContent = e2 instanceof Error ? e2.message : String(e2);
+            err.style.display = '';
+            if (save) save.disabled = false;
+          });
+      }
+    }, []);
+    const inputs: { key: string; type: string; node: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement; checkbox: boolean }[] = [];
+    for (const raw of desc.fields.slice(0, 16)) {
+      const f = (raw ?? {}) as { key?: unknown; label?: unknown; type?: unknown; value?: unknown; options?: unknown; placeholder?: unknown };
+      if (typeof f.key !== 'string' || /^[a-z0-9_]{1,63}$/.test(f.key) === false) continue;
+      const kind = typeof f.type === 'string' ? f.type : 'text';
+      const label = typeof f.label === 'string' ? f.label : f.key;
+      let node: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+      if (kind === 'textarea') {
+        node = el('textarea', { class: 'sm-input' });
+        node.value = typeof f.value === 'string' ? f.value : '';
+      } else if (kind === 'select' && Array.isArray(f.options)) {
+        const sel = el('select', { class: 'sm-input' });
+        for (const opt of f.options) {
+          if (typeof opt !== 'string') continue;
+          sel.append(el('option', { value: opt }, [opt]));
+        }
+        sel.value = typeof f.value === 'string' ? f.value : '';
+        node = sel;
+      } else if (kind === 'checkbox') {
+        node = el('input', { type: 'checkbox' });
+        (node as HTMLInputElement).checked = f.value === true;
+      } else {
+        // text, number, media, anything unknown — an honest single line
+        node = el('input', { class: 'sm-input', type: kind === 'number' ? 'number' : 'text' });
+        node.value = typeof f.value === 'string' ? f.value : typeof f.value === 'number' ? String(f.value) : '';
+        if (typeof f.placeholder === 'string') node.placeholder = f.placeholder;
+      }
+      inputs.push({ key: f.key, type: kind, node, checkbox: kind === 'checkbox' });
+      form.append(field(label, node));
+    }
+    form.append(err, el('div', { style: 'display:flex;justify-content:flex-end;gap:.5rem' }, [
+      el('button', { class: 'sm-btn sm-btn-primary', type: 'submit' }, [source === null ? 'Insert' : 'Save'])
+    ]));
+    openModal(typeof desc.title === 'string' && desc.title !== '' ? desc.title : def.label, form);
   }
 
   async function openModuleModal(index: number, forcedName?: string, isNew = false): Promise<void> {

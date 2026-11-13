@@ -880,6 +880,21 @@ try {
             Plugins\dispatch((string)$pluginName, (string)$pluginRoute, $method);
             break;
 
+        // ——— the fence-preview doors (slice 5b): the editor stashes the ———
+        // ——— plugin's rendered page and embeds it by handle; the serve ———
+        // ——— door is public (the sandboxed iframe carries no session) ———
+        case $method === 'POST' && $path === 'preview-stash':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            Auth\assertCsrf();
+            echo json_encode(Plugins\previewStash((array)json_decode(file_get_contents('php://input') ?: '{}', true)), JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'GET' && $path === 'preview':
+            Plugins\previewServe((string)($_GET['t'] ?? ''));
+            break;
+
         // ——— editor blocks (p6): the canvas insertables of every ENABLED plugin ———
         case $method === 'GET' && $path === 'editor-blocks':
             if (!Auth\check()) {

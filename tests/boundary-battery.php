@@ -167,5 +167,39 @@ $m = \Plugins\validate('probe', [
 ]);
 Harness::check('B25 more than four tabs cap at four', count($m['adminTabs']) === 4, (string)count($m['adminTabs']));
 
+$m = \Plugins\validate('probe', [
+    'name' => 'probe', 'title' => 'Probe', 'version' => '0.1.0',
+    'capabilities' => [
+        'routes' => [['path' => 'desk', 'auth' => 'user']],
+        'editorBlocks' => [[
+            'name' => 'probe_block', 'label' => 'Block', 'template' => 'x',
+            'fence' => 'probe', 'preview' => ['route' => 'desk'], 'modal' => ['route' => 'desk'],
+            'foreign' => 'shape',
+        ]],
+    ],
+]);
+$block = $m['editorBlocks'][0] ?? [];
+Harness::check('B26 the grown def carries fence/preview/modal and drops the foreign key',
+    ($block['fence'] ?? '') === 'probe'
+    && ($block['preview']['route'] ?? '') === 'desk'
+    && ($block['modal']['route'] ?? '') === 'desk'
+    && !array_key_exists('foreign', $block), json_encode($block));
+
+$m = \Plugins\validate('probe', [
+    'name' => 'probe', 'title' => 'Probe', 'version' => '0.1.0',
+    'capabilities' => [
+        'routes' => [['path' => 'desk', 'auth' => 'user']],
+        'editorBlocks' => [[
+            'name' => 'probe_block', 'label' => 'Block', 'template' => 'x',
+            'fence' => 'php', 'preview' => ['route' => 'ghost-route'], 'modal' => ['route' => 'ghost-route'],
+        ]],
+    ],
+]);
+$block = $m['editorBlocks'][0] ?? [];
+Harness::check('B27 a foreign fence (a borrowed brand) is dropped',
+    ($block['fence'] ?? 'x') === '', (string)($block['fence'] ?? 'x'));
+Harness::check('B28 a preview/modal route the plugin never declared is dropped',
+    ($block['preview'] ?? null) === null && ($block['modal'] ?? '') === '', json_encode($block));
+
 // ——— the verdict ———
 Harness::verdict('boundary battery');

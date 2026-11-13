@@ -18,13 +18,16 @@ import { csrfToken, json } from './client';
  *  shape every ENABLED plugin's manifest insertable rides from
  *  GET /bridge/editor-blocks into the live-page editor's insert menu — one
  *  type, both sides read it, the editor's runtime filter keeps its job.
- *  `modal` is optional (the manifest may omit it — the editor falls back to
- *  the plain text modal). */
+ *  `modal` is optional: the legacy bare string (a core-builtin modal name)
+ *  or the plugin's own field-descriptor modal route (slice 5b). `fence`
+ *  names the ```language the block owns; `preview` its fence-preview route. */
 export interface EditorBlockDef {
   readonly name: string;
   readonly label: string;
   readonly template: string;
-  readonly modal?: string;
+  readonly modal?: string | { readonly route: string };
+  readonly preview?: { readonly route: string };
+  readonly fence?: string;
 }
 
 // ——— plugins (admin) ———

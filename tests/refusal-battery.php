@@ -270,6 +270,15 @@ $r = req('GET', '/bridge/admin-tabs', null, $cookie, $csrf);
 $tabs = json_decode($r[1] ?? '[]', true);
 Harness::check('F5 the authed admin-tabs shelf answers an honest array', $r[0] === 200 && is_array($tabs) && $tabs === [], json_encode($tabs));
 
+refusal('F6 the preview stash is locked to strangers', 401, 'The kitchen door is locked — log in first.',
+    req('POST', '/bridge/preview-stash', '{}'));
+
+refusal('F7 a stash for a route no plugin declared as a preview is 404', 404, 'That plugin offers no preview there.',
+    req('POST', '/bridge/preview-stash', (string)json_encode(['name' => 'hello', 'route' => 'status', 'source' => 'x', 'type' => 'pages', 'slug' => 'hello']), $cookie, $csrf));
+
+refusal('F8 an unknown preview handle is 404', 404, 'That preview is gone — ask the canvas again.',
+    req('GET', '/bridge/preview?t=' . str_repeat('0', 32)));
+
 // ——— the teardown ———
 proc_terminate($proc, SIGKILL);
 foreach ($pipes as $pipe) {
