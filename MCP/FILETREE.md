@@ -38,7 +38,8 @@
 │   ├── boundary-battery.php        # the plugin × core wall, rebuilt (21 cases)
 │   ├── lid-battery.php             # the code lid (14 cases, incl. the call-before-declaration repro)
 │   ├── meta-battery.php            # the frontmatter contract's first battery (7 cases, pins Meta\peek's tags reader: bare YAML flow / JSON-quoted / mixed / escaped quotes / absent key) — born of the editor's bare-flow tags vs json_decode (see BACKLOG p8 findings)
-│   ├── battery-bienenstich.php     # the API ware's wall (30 cases) — rig built fresh from the tree every run
+│   ├── battery-bienenstich.php     # thin wrapper for the bienenstich wall — installed copy with battery first, else the sibling Vitrine pair; SKIP when absent (the 32 cases live in the Vitrine ware)
+│   ├── ware-battery.php            # the ware-battery hook (2026-11-13): `php tests/ware-battery.php <ware-dir>` — hands rig + harness + a live admin session to a ware's own battery.php; cases live in the ware's repo
 │   ├── refusal-battery.php         # every domain refusal pinned to its exact status+body (24 cases) — the STEP 2 proof
 │   ├── core-update-battery.php     # the staging law + the FULL local ride (31 cases): isCore's word, a real packet through stageCore (rings carried, smuggles refused), then the knife on a rig — floor moved, rings survived, site still serves
 │   └── rig.php                     # the rig builder: a throwaway Schmarrn from the current tree (admin account, content, the bienenstich ware enabled)

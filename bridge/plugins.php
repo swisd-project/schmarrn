@@ -445,7 +445,11 @@ function codeCheck(string $dir): ?string
             new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS)
         );
         foreach ($it as $file) {
-            if ($file->isFile() && strtolower($file->getExtension()) === 'php') {
+            // battery.php is the WARE-BATTERY HOOK's contract name (2026-11-13):
+            // the ware's own test cases, run by the core's test rig — never
+            // inside the core. Not runtime code, none of the lid's business.
+            if ($file->isFile() && strtolower($file->getExtension()) === 'php'
+                && strtolower($file->getBasename('.php')) !== 'battery') {
                 $files[] = $file->getPathname();
             }
         }

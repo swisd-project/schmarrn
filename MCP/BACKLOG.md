@@ -124,6 +124,7 @@ Enforcement first — the law as mechanism, not intention:
 [x] Arch-lint gate — SHIPPED: `scripts/arch-lint.mjs` + `npm run lint:arch`, four rules (domain purity, queries never write, commands unreachable from GET, every mutating route names a registered command); part of `npm test` (STEP 3 record below).
 [x] Batteries into the repo — SHIPPED with STEP 1 (commit 7cf168e, 2026-11-13): all batteries live in `tests/` under `scripts/run-tests.sh` (wares, boundary, lid, bienenstich, refusal, meta, core-update). /tmp originals dead with the machine, as predicted.
 [x] Command table — SHIPPED: `bridge/application/commands/table.php` registry; arch-lint rule 4 fails any mutating route that names no command (and any GET that names one).
+[x] the ware-battery hook (2026-11-13): tests/ware-battery.php hands rig + harness + live session to any ware's own battery.php; the rig takes opts['wares']; the lid skips battery.php; the bienenstich wall emigrated to the Vitrine ware (32 cases, minted through the real master→issue lifecycle — the long-RED battery fixed: the rig seeded the dead api_key setting); the repo suite keeps a thin wrapper.
 
 Hexagonal rings — dependency direction, house style (functions, no composer, no DI container):
 [ ] `bridge/domain/` — pure policy only: slug law, last-admin invariant, chain gate, handle validity, style resolution. It throws a typed exception; the transport maps it to a status.

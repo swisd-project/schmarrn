@@ -89,16 +89,22 @@ function rigBuild(string $root, array $opts = []): string
     rigWritePage($rig, 'hello', "Hello World", false, "The published page.\n");
     rigWritePage($rig, 'secret', 'Secret Draft', true, "Honeyed secret content.\n");
 
-    // the ware under test — the core's own biennstich copy, enabled
+    // the wares under test — copy + enable each (the ware-battery hook,
+    // 2026-11-13: any ware's battery can ride the rig; name => source dir)
+    $wares = (array)($opts['wares'] ?? []);
     if (($opts['bienenstich'] ?? true) !== false) {
-        rigCopyTree($root . '/bridge/plugins/bienenstich', $rig . '/bridge/plugins/bienenstich');
-        file_put_contents($rig . '/bridge/config/plugins.local.php', "<?php\n\nreturn " . var_export([
-            'bienenstich' => true,
-        ], true) . ";\n");
-        // the key: the ware's own setting, so the door answers with a key
-        file_put_contents($rig . '/bridge/config/plugins.settings.local.php', "<?php\n\nreturn " . var_export([
-            'bienenstich' => ['api_key' => 'rig-key-abc123'],
-        ], true) . ";\n");
+        $wares += ['bienenstich' => $root . '/bridge/plugins/bienenstich'];
+    }
+    $enabled = [];
+    foreach ($wares as $wareName => $src) {
+        if (!is_string($wareName) || !is_dir((string)$src)) {
+            continue;
+        }
+        rigCopyTree((string)$src, $rig . '/bridge/plugins/' . $wareName);
+        $enabled[$wareName] = true;
+    }
+    if ($enabled !== []) {
+        file_put_contents($rig . '/bridge/config/plugins.local.php', "<?php\n\nreturn " . var_export($enabled, true) . ";\n");
     }
 
     return $rig;
