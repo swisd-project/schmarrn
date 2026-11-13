@@ -199,7 +199,7 @@
          bento, 1x1. The release's own name + day, the people behind
          it, the way to support it, the door back to GitHub. -->
     <section class="mg flex flex-col gap-2 lg:col-span-1">
-      <h4 class="mg-h">Schmarrn {core?.releaseName ?? core?.current ?? ''}</h4>
+      <h4 class="mg-h">Schmarrn v{core?.current ?? ''}</h4>
       {#if core?.published}<p class="m-0 text-xs text-ink-soft">published {core.published}</p>{/if}
       <hr class="border-line" />
       <p class="m-0 text-sm">

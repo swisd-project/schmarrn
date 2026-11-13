@@ -323,7 +323,8 @@ echo "host=", $installed['host'] ?? '?', "\n";
 PHP);
 Harness::check('G1 the shelf reports probe as installed', str_contains($out, 'probe=installed'), $out);
 Harness::check('G2 the shelf reports needs-dep as installed', str_contains($out, 'needs-dep=installed'), $out);
-Harness::check('G3 the shelf names the host floor', str_contains($out, 'host=1.3.0.1'), $out);
+$floor = trim((string)@file_get_contents($root . '/bridge/CORE-VERSION'));
+Harness::check('G3 the shelf names the host floor', $floor !== '' && str_contains($out, "host={$floor}"), $out);
 
 // ——— H. the manifest gate: name === dir ———
 // A fresh ware whose manifest names ANOTHER ware — the rule 2 gate.
