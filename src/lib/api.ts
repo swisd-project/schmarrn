@@ -12,7 +12,8 @@
  * 6. Copyright (c) 2026 Homahuki GmbH
  */
 
-export * from './api/client';
+// THE BARREL — the context modules only; the floor (client.ts) stays private
+// (pre-split truth: csrf/apiError/json were never public surface).
 export * from './api/pages';
 export * from './api/site';
 export * from './api/accounts';
