@@ -39,7 +39,6 @@
     core = null,
     coreBusy = false,
     coreError = '',
-    coreNote = '',
     rideCore,
     parkPacket,
     refreshAfterCore,
@@ -50,16 +49,16 @@
     core?: CoreInfo | null;
     coreBusy?: boolean;
     coreError?: string;
-    coreNote?: string;
     rideCore: (source: 'hub' | 'local') => Promise<{ from: string; to: string; dashboard: boolean } | null>;
     parkPacket: (file: File) => Promise<void>;
     refreshAfterCore: () => Promise<void>;
     installOne: (ware: WareRef) => Promise<string>;
   } = $props();
 
+  import { toast } from '$lib/toast.svelte';
+
   let busy = $state(false);
   let error = $state('');
-  let note = $state('');
   let parking = $state(false);
 
   /** The park input: the file rides to the parent's core session; the input
@@ -87,9 +86,8 @@
     if (busy) return;
     busy = true;
     error = '';
-    note = '';
     try {
-      note = await installOne(ware);
+      toast(await installOne(ware));
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -106,7 +104,6 @@
     if (busy) return;
     busy = true;
     error = '';
-    note = '';
     const done: string[] = [];
     let coreRide: Awaited<ReturnType<typeof rideCore>> = null; // captured before the ride flips the verdict
     try {
@@ -123,12 +120,13 @@
         const fresh = wares.find((w) => w.kind === 'plugin' && w.name === name && w.state === 'update');
         if (fresh) done.push(await installOne(fresh));
       }
-      note = (done.length > 0 ? done.join(' · ') : 'Nothing needed the knife.') + '.';
-      if (coreRide !== null && !coreRide.dashboard) note += ' The dashboard did NOT move with the core packet — rebuild it (npm run build) or ride a release that carries its asset zip.';
-      else if (coreRide !== null) note += ' Reload the page — the dashboard you are wearing predates the core move.';
+      let caveat = '';
+      if (coreRide !== null && !coreRide.dashboard) caveat = ' The dashboard did NOT move with the core packet — rebuild it (npm run build) or ride a release that carries its asset zip.';
+      else if (coreRide !== null) caveat = ' Reload the page — the dashboard you are wearing predates the core move.';
+      toast((done.length > 0 ? done.join(' · ') : 'Nothing needed the knife.') + '.' + caveat, coreRide !== null && !coreRide.dashboard ? 'warn' : 'ok');
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
-      if (done.length > 0) note = `Done before the break: ${done.join(' · ')}.`;
+      if (done.length > 0) toast(`Done before the break: ${done.join(' · ')}.`);
     } finally {
       busy = false;
     }
@@ -206,7 +204,5 @@
     No hub answering? Download the release zip on any machine, park it here, and ride the knife from the shelf — an equal version counts as a repair.
   </p>
   {#if coreError}<p class="alert alert-err" role="alert">{coreError}</p>{/if}
-  {#if coreNote}<p class="alert alert-ok">{coreNote}</p>{/if}
   {#if error}<p class="alert alert-err" role="alert">{error}</p>{/if}
-  {#if note}<p class="alert alert-ok">{note}</p>{/if}
 </section>

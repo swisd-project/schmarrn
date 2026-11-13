@@ -24,6 +24,8 @@
   import TemplatesTab from '$lib/components/TemplatesTab.svelte';
   import PluginsTab from '$lib/components/PluginsTab.svelte';
   import ContentsTab from '$lib/components/ContentsTab.svelte';
+  import Toasts from '$lib/components/Toasts.svelte';
+  import { toast } from '$lib/toast.svelte';
 
   let authenticated = $state<boolean | null>(null);
   let user = $state('');
@@ -300,7 +302,6 @@
   let plugins = $state<readonly PluginRef[]>([]);
   let pluginsBusy = $state(false);
   let pluginsError = $state('');
-  let pluginsNote = $state('');
 
   async function loadPlugins() {
     if (pluginsBusy) return;
@@ -346,7 +347,7 @@
     vitrineError = '';
     vitrineNote = '';
     try {
-      vitrineNote = await installOne(ware);
+      toast(await installOne(ware));
     } catch (e) {
       vitrineError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -414,7 +415,6 @@
   let githubLook = $state<GithubLook | null>(null);
   let githubBusy = $state(false);
   let githubError = $state('');
-  let githubNote = $state('');
   let mediaModal = $state(false); // the media attic (STRIP 6; opened from the desk's foot row)
   let githubModal = $state(false);
 
@@ -422,7 +422,7 @@
    *  and the note (the note renders in the menu overlay, not the modal). */
   function githubChanged(fresh: { connected: boolean; login: string | null }, note: string): void {
     github = fresh;
-    githubNote = note;
+    toast(note);
   }
 
   // ——— the house confirm: STRIP 4 of the split — the modal lives in
@@ -440,16 +440,14 @@
   // ——— the mail oven (Integrations card, second square): STRIP 3 of the
   // ——— split — the form, the test and the connect flow live in
   // ——— src/lib/components/MailModal.svelte; the parent keeps the STATUS and
-  // ——— the note (carried as-is: mailNote is set but rendered nowhere today
-  // ——— — behavior unchanged). ———
+  // ——— the note rides the toast hearth now (2026-11-13, the dragon). ———
   let mail = $state<{ configured: boolean; host: string; port: number; secure: string; fromEmail: string; fromName: string } | null>(null);
   let mailModal = $state(false);
-  let mailNote = $state('');
 
   /** The modal's report: the connection changed. */
   function mailChanged(fresh: NonNullable<typeof mail>, note: string): void {
     mail = fresh;
-    mailNote = note;
+    toast(note);
   }
 
   async function loadMail() {
@@ -492,7 +490,6 @@
     if (githubBusy || githubRepo.trim() === '') return;
     githubBusy = true;
     githubError = '';
-    githubNote = '';
     try {
       githubLook = await githubInspect(githubRepo.trim());
     } catch (e) {
@@ -507,10 +504,9 @@
     if (githubBusy || githubRepo.trim() === '') return;
     githubBusy = true;
     githubError = '';
-    githubNote = '';
     try {
       const res = await githubInstall(githubRepo.trim(), kind, path);
-      githubNote = `${res.name} staged from ${res.repo} — disabled. The code does not run until you enable it.`;
+      toast(`${res.name} staged from ${res.repo} — disabled. The code does not run until you enable it.`);
       githubLook = null;
       githubRepo = '';
       if (kind === 'plugin') await loadPlugins();
@@ -524,7 +520,6 @@
 
   let coreBusy = $state(false);
   let coreError = $state('');
-  let coreNote = $state('');
 
   /** Semver-greater-than over dotted numbers — the verdict compares VERSIONS;
    *  a string inequality made the pill scream "Update available" forever
@@ -599,10 +594,9 @@
     if (coreBusy) return;
     coreBusy = true;
     coreError = '';
-    coreNote = '';
     try {
       const parked = await uploadCorePacket(file);
-      coreNote = `Parked: a local packet announcing v${parked.version} — the knife can ride from the shelf now.`;
+      toast(`Parked: a local packet announcing v${parked.version} — the knife can ride from the shelf now.`);
       await loadCore();
     } catch (e) {
       coreError = e instanceof Error ? e.message : String(e);
@@ -615,12 +609,10 @@
     if (coreBusy) return null;
     coreBusy = true;
     coreError = '';
-    coreNote = '';
     try {
       const done = await runCoreUpdate(source);
       await loadCore();
-      coreNote = `${done.note} Reload the page — the dashboard you are wearing is from ${done.from}.`;
-      if (!done.dashboard) coreNote += ' The dashboard did NOT move with this packet — rebuild it (npm run build) or ride a release that carries its asset zip.';
+      toast(`${done.note} Reload the page — the dashboard you are wearing is from ${done.from}.${done.dashboard ? '' : ' The dashboard did NOT move with this packet — rebuild it (npm run build) or ride a release that carries its asset zip.'}`, 'warn');
       return { from: done.from, to: done.to, dashboard: done.dashboard };
     } catch (e) {
       coreError = e instanceof Error ? e.message : String(e);
@@ -844,6 +836,9 @@
   {/if}
 </main>
 
+<!-- the toast shelf: the rides' reports float here, bottom-right -->
+<Toasts />
+
 <!-- the plugin panel's modal: the plugin asks for one field (its own
      wording, its own type) — the core only carries it -->
 
@@ -888,7 +883,6 @@
           openLive={select} uploadError={uploadError} />
       {:else if tab === 'settings' && role === 'admin'}
         <SettingsTab bind:siteSettings={siteSettings} core={core} github={github} mail={mail}
-          githubError={githubError} githubNote={githubNote}
           ongithub={() => (githubModal = true)} onmail={() => (mailModal = true)} />
       {:else if tab === 'users' && role === 'admin'}
         <UsersTab user={user} />
@@ -898,7 +892,7 @@
           vitrineDark={vitrineDark} vitrineBusy={vitrineBusy} vitrineError={vitrineError}
           houseShot={houseShot} confirm={askConfirm} install={installWareByName}
           bind:githubRepo={githubRepo} bind:githubBusy={githubBusy} bind:githubError={githubError}
-          bind:githubNote={githubNote} bind:githubLook={githubLook}
+          bind:githubLook={githubLook}
           onGithubLook={lookGithubNow} onGithubStage={(p) => stageGithubNow('plugin', p)} />
       {:else if tab === 'templates' && role === 'admin'}
         <TemplatesTab templates={templates} wares={vitrine} bind:selectedTheme={selectedTheme}
@@ -907,12 +901,11 @@
           vitrineDark={vitrineDark} vitrineBusy={vitrineBusy} vitrineError={vitrineError} vitrineNote={vitrineNote}
           houseShot={houseShot} confirm={askConfirm} install={installWareByName} refreshShelves={() => loadWares(true)}
           bind:githubRepo={githubRepo} bind:githubBusy={githubBusy} bind:githubError={githubError}
-          bind:githubNote={githubNote} bind:githubLook={githubLook}
+          bind:githubLook={githubLook}
           onGithubLook={lookGithubNow} onGithubStage={(p) => stageGithubNow('template', p)} />
       {:else if tab === 'updates' && role === 'admin'}
         <UpdatesTab wares={vitrine} dark={vitrineDark} core={core} coreBusy={coreBusy}
-          coreError={coreError} coreNote={coreNote} rideCore={updateCoreNow}
-          parkPacket={parkCorePacket} refreshAfterCore={refreshAfterCore}
+          rideCore={updateCoreNow} parkPacket={parkCorePacket} refreshAfterCore={refreshAfterCore}
           installOne={installOne} />
       {/if}
     </div>

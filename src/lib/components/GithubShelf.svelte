@@ -24,7 +24,6 @@
     repo = $bindable(''),
     busy = $bindable(false),
     error = $bindable(''),
-    note = $bindable(''),
     look = $bindable<GithubLook | null>(null),
     open = false,
     ontoggle,
@@ -35,7 +34,6 @@
     repo?: string;
     busy?: boolean;
     error?: string;
-    note?: string;
     look?: GithubLook | null;
     open?: boolean;
     ontoggle?: () => void;
@@ -96,7 +94,6 @@
       {/if}
     {/if}
     {#if error}<p class="alert alert-err m-0" role="alert">{error}</p>{/if}
-    {#if note}<p class="alert alert-ok m-0">{note}</p>{/if}
     <p class="m-0 text-xs text-ink-soft">
       A staged ware lands DISABLED — its code does not run until you enable it with your own hand.
     </p>

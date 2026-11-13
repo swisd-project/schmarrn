@@ -63,7 +63,6 @@
     githubRepo = $bindable(''),
     githubBusy = $bindable(false),
     githubError = $bindable(''),
-    githubNote = $bindable(''),
     githubLook = $bindable<GithubLook | null>(null),
     onGithubLook,
     onGithubStage,
@@ -87,15 +86,15 @@
     githubRepo?: string;
     githubBusy?: boolean;
     githubError?: string;
-    githubNote?: string;
     githubLook?: GithubLook | null;
     onGithubLook: () => void;
     onGithubStage: (path: string) => void;
   } = $props();
 
+  import { toast } from '$lib/toast.svelte';
+
   let templatesBusy = $state(false);
   let templatesError = $state('');
-  let templatesNote = $state('');
 
   const themeRows = $derived.by((): ThemeRow[] => {
     const rows: ThemeRow[] = templates.map((t) => {
@@ -153,13 +152,12 @@
     if (templatesBusy) return;
     templatesBusy = true;
     templatesError = '';
-    templatesNote = '';
     try {
       await activateTemplate(template.name);
       templates = await listTemplates();
       // The settings form caches its copy — the theme switch reaches it here.
       if (siteSettings !== null) siteSettings = { ...siteSettings, theme: template.name };
-      templatesNote = `${template.title} is the live theme now.`;
+      toast(`${template.title} is the live theme now.`);
     } catch (e) {
       templatesError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -175,12 +173,11 @@
     if (templatesBusy) return;
     templatesBusy = true;
     templatesError = '';
-    templatesNote = '';
     try {
       await deleteTemplate(template.name);
       templates = await listTemplates();
       await refreshShelves(); // the shelf re-reads: a deleted update face becomes installable again
-      templatesNote = `${template.title} left the shelf — deleted.`;
+      toast(`${template.title} left the shelf — deleted.`);
     } catch (e) {
       templatesError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -267,8 +264,7 @@
           {/if}
         </div>
         {#if templatesError}<p class="alert alert-err m-0" role="alert">{templatesError}</p>{/if}
-        {#if templatesNote}<p class="alert alert-ok m-0">{templatesNote}</p>{/if}
-      </div>
+        </div>
     {:else}
       <p class="italic text-ink-soft">No themes on the shelf yet.</p>
     {/if}
@@ -373,7 +369,6 @@
           bind:repo={githubRepo}
           bind:busy={githubBusy}
           bind:error={githubError}
-          bind:note={githubNote}
           bind:look={githubLook}
           open={folds['templates-github'] === true}
           ontoggle={() => toggle('templates-github')}

@@ -40,7 +40,6 @@
     github = null,
     mail = null,
     githubError = '',
-    githubNote = '',
     ongithub,
     onmail,
   }: {
@@ -49,18 +48,17 @@
     github?: { connected: boolean; login: string | null } | null;
     mail?: MailStatus | null;
     githubError?: string;
-    githubNote?: string;
     ongithub?: () => void;
     onmail?: () => void;
   } = $props();
 
+  import { toast } from '$lib/toast.svelte';
+
   let siteBusy = $state(false);
   let siteError = $state('');
-  let siteNote = $state('');
   let handleValues = $state<Record<string, string>>({});
   let styleBusy = $state(false);
   let styleError = $state('');
-  let styleNote = $state('');
 
   // the handle values seed themselves from every fresh load of the settings
   // (write-only effect: the values it writes are never read here — no loop)
@@ -76,7 +74,6 @@
     if (siteSettings === null) return;
     siteBusy = true;
     siteError = '';
-    siteNote = '';
     try {
       // the home's crown lives in the page settings modal now (2026-11-09,
       // user order) — the settings form no longer owns it, and a stale
@@ -89,7 +86,7 @@
         logo: siteSettings.logo,
         font: siteSettings.font
       });
-      siteNote = 'Saved. The public face updates on the next serve.';
+      toast('Saved. The public face updates on the next serve.');
     } catch (e) {
       siteError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -111,7 +108,6 @@
     if (siteSettings === null) return;
     styleBusy = true;
     styleError = '';
-    styleNote = '';
     try {
       const handles: Record<string, string> = {};
       for (const h of siteSettings.handles) {
@@ -121,7 +117,7 @@
       // the card's save speaks for the whole card (2026-11-12, user order):
       // the handles AND the font — the font field lives here now.
       await saveSiteSettings({ handles, font: siteSettings.font });
-      styleNote = 'Saved. The public face updates on the next serve.';
+      toast('Saved. The public face updates on the next serve.');
     } catch (e) {
       styleError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -145,12 +141,11 @@
     if (!file || siteSettings === null) return;
     siteBusy = true;
     siteError = '';
-    siteNote = '';
     try {
       const stored = await uploadSiteAsset(file);
       await saveSiteSettings({ logo: stored.url });
       siteSettings = { ...siteSettings, logo: stored.url };
-      siteNote = `Logo uploaded as ${stored.name} — on the public face at once.`;
+      toast(`Logo uploaded as ${stored.name} — on the public face at once.`);
     } catch (e) {
       siteError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -163,11 +158,10 @@
     if (siteSettings === null || siteBusy) return;
     siteBusy = true;
     siteError = '';
-    siteNote = '';
     try {
       await saveSiteSettings({ logo: '' });
       siteSettings = { ...siteSettings, logo: '' };
-      siteNote = 'The logo let go.';
+      toast('The logo let go.');
     } catch (e) {
       siteError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -184,11 +178,10 @@
     if (!file || siteSettings === null) return;
     siteBusy = true;
     siteError = '';
-    siteNote = '';
     try {
       const stored = await uploadSiteAsset(file);
       siteSettings = { ...siteSettings, font: stored.url };
-      siteNote = `Font uploaded as ${stored.name} — save to put it on the public face.`;
+      toast(`Font uploaded as ${stored.name} — save to put it on the public face.`);
     } catch (e) {
       siteError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -260,7 +253,6 @@
       </div>
       <button type="submit" class="btn btn-primary self-start" disabled={siteBusy}>{siteBusy ? 'Saving…' : 'Save site'}</button>
       {#if siteError}<p class="alert alert-err m-0" role="alert">{siteError}</p>{/if}
-      {#if siteNote}<p class="alert alert-ok m-0">{siteNote}</p>{/if}
     </form>
 
     <section class="mg flex flex-col gap-3 lg:col-span-2">
@@ -319,7 +311,6 @@
       </div>
       <button type="button" class="btn btn-primary self-start" onclick={saveHandlesNow} disabled={styleBusy}>{styleBusy ? 'Saving…' : 'Save style'}</button>
       {#if styleError}<p class="alert alert-err m-0" role="alert">{styleError}</p>{/if}
-      {#if styleNote}<p class="alert alert-ok m-0">{styleNote}</p>{/if}
     {/if}
     </section>
 
@@ -373,7 +364,6 @@
         <p class="m-0 text-xs text-ink-soft">plumbed in via <b>{mail.host}</b></p>
       {/if}
       {#if githubError}<p class="alert alert-err m-0" role="alert">{githubError}</p>{/if}
-      {#if githubNote}<p class="alert alert-ok m-0">{githubNote}</p>{/if}
     </section>
   </div>
 {:else}

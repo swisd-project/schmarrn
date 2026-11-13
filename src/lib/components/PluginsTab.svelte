@@ -57,7 +57,6 @@
     githubRepo = $bindable(''),
     githubBusy = $bindable(false),
     githubError = $bindable(''),
-    githubNote = $bindable(''),
     githubLook = $bindable<GithubLook | null>(null),
     onGithubLook,
     onGithubStage,
@@ -76,11 +75,12 @@
     githubRepo?: string;
     githubBusy?: boolean;
     githubError?: string;
-    githubNote?: string;
     githubLook?: GithubLook | null;
     onGithubLook: () => void;
     onGithubStage: (path: string) => void;
   } = $props();
+
+  import { toast } from '$lib/toast.svelte';
 
   let selectedPlugin = $state('');
   let pluginDetailTab = $state<'documentation' | 'dependencies' | 'settings'>('documentation');
@@ -103,7 +103,6 @@
 
   let pluginsBusy = $state(false);
   let pluginsError = $state('');
-  let pluginsNote = $state('');
 
   const pluginRows = $derived.by((): PluginRow[] => {
     const rows: PluginRow[] = plugins.map((p) => {
@@ -237,11 +236,10 @@
     if (pluginsBusy) return;
     pluginsBusy = true;
     pluginsError = '';
-    pluginsNote = '';
     try {
       await deletePlugin(plugin.name);
       plugins = await listPlugins();
-      pluginsNote = `${plugin.title} left the shelf — deleted.`;
+      toast(`${plugin.title} left the shelf — deleted.`);
     } catch (e) {
       pluginsError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -253,7 +251,6 @@
     if (pluginsBusy) return;
     pluginsBusy = true;
     pluginsError = '';
-    pluginsNote = '';
     try {
       const fresh = await listPlugins();
       const enabled: Record<string, boolean> = {};
@@ -269,7 +266,7 @@
       }
       await setPlugins(enabled);
       plugins = await listPlugins();
-      pluginsNote = `${plugin.title} ${plugins.find((p) => p.name === plugin.name)?.enabled ? 'enabled' : 'disabled'}.`;
+      toast(`${plugin.title} ${plugins.find((p) => p.name === plugin.name)?.enabled ? 'enabled' : 'disabled'}.`);
     } catch (e) {
       pluginsError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -629,7 +626,6 @@
           bind:repo={githubRepo}
           bind:busy={githubBusy}
           bind:error={githubError}
-          bind:note={githubNote}
           bind:look={githubLook}
           open={folds['plugins-github'] === true}
           ontoggle={() => toggle('plugins-github')}

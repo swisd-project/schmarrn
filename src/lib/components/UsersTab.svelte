@@ -18,13 +18,14 @@
 
   let { user }: { user: string } = $props();
 
+  import { toast } from '$lib/toast.svelte';
+
   let accounts = $state<readonly AccountRef[]>([]);
   let addUser = $state('');
   let addRole = $state<'admin' | 'editor'>('editor');
   let addPassword = $state('');
   let addEmail = $state('');
   let error = $state('');
-  let note = $state('');
 
   // the tab sweeps itself on mount (the {#if} mounts it fresh every visit)
   $effect(() => {
@@ -64,10 +65,9 @@
 
   async function inviteNow(name: string) {
     error = '';
-    note = '';
     try {
       await inviteAccount(name);
-      note = `Credentials mailed to ${name}.`;
+      toast(`Credentials mailed to ${name}.`);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -92,7 +92,6 @@
     {/each}
   </ul>
   {#if error}<p class="alert alert-err" role="alert">{error}</p>{/if}
-  {#if note}<p class="alert alert-ok">{note}</p>{/if}
 </section>
 <form class="mg flex flex-col gap-3 max-w-md" onsubmit={addNow}>
   <h4 class="mg-h">Add account</h4>

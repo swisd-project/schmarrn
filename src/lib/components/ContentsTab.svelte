@@ -29,6 +29,7 @@
   import { deletePage, getDraftRaw, pageCount, publishDraft, putDraftRaw, renamePage, searchPages, type PageIndex, type PageRef } from '$lib/api';
   import { renderMdms } from '$lib/render';
   import { SURGERY_KEY, surgeryPath } from '$lib/surgery';
+  import { toast } from '$lib/toast.svelte';
 
   let {
     index = $bindable<PageIndex | null>(null),
@@ -57,7 +58,6 @@
   let searchHits = $state<{ q: string; types: PageIndex } | null>(null); // keyed by the query it answered
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   let deskError = $state('');
-  let deskNote = $state('');
 
   const activeQ = $derived(searchQ.trim());
   const allTags = $derived.by(() => {
@@ -142,7 +142,6 @@
   async function openRawGo(type: string, slug: string) {
     deskBusy = true;
     deskError = '';
-    deskNote = '';
     unlocked = false; // every page arrives locked — surgery needs its own yes
     try {
       const d = await getDraftRaw(type, slug);
@@ -161,7 +160,6 @@
     if (!dirty || deskBusy || sel === null) return;
     deskBusy = true;
     deskError = '';
-    deskNote = '';
     try {
       // 1. the guarded write lands on the editorial copy first — the hash
       //    guard holds against a concurrent editor, the lock rides on
@@ -172,9 +170,9 @@
       //    page, the cache warms with the rendered body (the ✑ path's shape)
       if (bakable) {
         await publishDraft(sel.type, sel.slug, renderMdms(raw, { type: sel.type, slug: sel.slug }).fullHtml);
-        deskNote = 'Saved & baked — live on the public face.';
+        toast('Saved & baked — live on the public face.');
       } else {
-        deskNote = "Saved — a draft-born page has no public face yet; ✑ or the editor carries its first bake.";
+        toast('Saved — a draft-born page has no public face yet; ✑ or the editor carries its first bake.');
       }
       index = await pageCount(); // the tree's draft/edits badges re-read
       if (searchQ.trim() !== '') onSearchInput(); // the needle re-runs — hits re-read
@@ -339,7 +337,6 @@
     </div>
     <div class="sm-desk-foot">
       {#if deskError}<p class="alert alert-err m-0" role="alert">{deskError}</p>{/if}
-      {#if deskNote}<p class="alert alert-ok m-0">{deskNote}</p>{/if}
       <!-- the save button bakes a published page; a draft-born page saves its copy -->
       <button
         class="btn btn-primary w-full justify-center"
