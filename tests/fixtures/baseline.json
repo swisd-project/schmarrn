@@ -23,8 +23,8 @@
         },
         "api-pages": {
             "status": 200,
-            "sha256": "4133839b763a7abe87a6da217f0853f313a24e869b4d60f4a3f7c39e3977650d",
-            "bytes": 253
+            "sha256": "a8cd0fccc0c32460eeb7f02f2789c1d9c47371d2a2621b1fa8a4c095c6f02a58",
+            "bytes": 219
         },
         "api-raw": {
             "status": 200,

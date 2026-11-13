@@ -113,13 +113,21 @@ function listAll(?bool $includeDrafts = null): array
             if ($draft && !$includeDrafts) {
                 continue;
             }
-            $pages[] = [
+            $row = [
                 'slug' => $slug,
                 'updatedAt' => filemtime($file),
                 'draft' => $draft,
-                'hasDraft' => is_file($typeDir . '/' . $slug . '/.draft.md'),
                 'tags' => tagsOf($raw),
             ];
+            // THE PEEP-HOLE (2026-11-13, user order): the mere EXISTENCE of an
+            // editorial copy is the kitchen's business — hasDraft rides the
+            // AUTHED view only. Strangers get the public face's facts (tags
+            // are public frontmatter); whether a draft tin sits behind a page
+            // is the desk's knowledge, not the street's.
+            if ($includeDrafts) {
+                $row['hasDraft'] = is_file($typeDir . '/' . $slug . '/.draft.md');
+            }
+            $pages[] = $row;
         }
         usort($pages, fn($a, $b) => $a['slug'] <=> $b['slug']);
         $result[$type] = $pages;

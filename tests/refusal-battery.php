@@ -229,6 +229,23 @@ refusal('D4 a login with a wrong password is 401', 401, 'Wrong recipe — that u
         'user' => 'admin', 'password' => 'not-the-password',
     ])));
 
+// P1 — THE PEEP-HOLE (2026-11-13, user order): the PUBLIC tree answers to
+// strangers with the public face's facts only — the mere EXISTENCE of an
+// editorial copy (hasDraft) is the kitchen's knowledge, not the street's.
+// The authed view rides the flag; the anon view must not even carry the key.
+$noCookie = req('GET', '/bridge/pages');
+$anonLeak = false;
+$idx = json_decode($noCookie[1], true);
+foreach ((array)$idx as $pages) {
+    foreach ((array)$pages as $row) {
+        if (is_array($row) && array_key_exists('hasDraft', $row)) {
+            $anonLeak = true;
+        }
+    }
+}
+Harness::check('P1 the public tree carries NO hasDraft (existence of a draft is not street knowledge)', !$anonLeak,
+    $noCookie[0] !== 200 ? "status {$noCookie[0]}" : json_encode($idx));
+
 // ——— E. the wares domain ———
 refusal('E1 an unbaked ware name is 400', 400, 'That ware name is unbaked dough.',
     req('POST', '/bridge/wares/install', (string)json_encode(['name' => 'Not A Slug']), $cookie, $csrf));

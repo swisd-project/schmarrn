@@ -113,7 +113,7 @@
 │   ├── routes/
 │   │   ├── +layout.svelte        # imports ../lib/app.css (relative — $lib evasion, see GUIDE)
 │   │   ├── +layout.ts            # prerender = true
-│   │   ├── +page.svelte          # 932 lines (was 3,318 — p8 STEP 6 dashboard split, 2026-11-13): login/setup + auth shell + menu chrome + the `{#if menuOpen}` overlay with six one-line tab members + modal instances at root; tab bodies live in src/lib/components/
+│   │   ├── +page.svelte          # 932 lines (was 3,318 — p8 STEP 6 dashboard split, 2026-11-13): login/setup + auth shell + menu chrome + the `{#if menuOpen}` overlay with six one-line tab members + modal instances at root; tab bodies live in src/lib/components/; select() walks authed hands onto the editor URL `/_/<slug>` (or `/_/<type>/<slug>`), lost session rides the plain path (serve.php adminMode 302 = guest rail) — /_ walk law, 2026-11-13
 │   └── content/                  # install-local user data — GITIGNORED, never committed
 │       ├── pages/                # content types (dirs = types, subdirs = slugs)
 │       │   └── <slug>/index.md   # + .draft.md sidecar + page-local media files
