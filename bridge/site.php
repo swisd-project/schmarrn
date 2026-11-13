@@ -23,10 +23,34 @@ const DEFAULTS = [
     'theme' => 'bakery',
     'home' => '',
     'style' => '', // the GLOBAL style: '' = theme default, else a theme-declared style
+    'font' => '', // the public face's font: '' | Google family name | https:// stylesheet URL | uploaded font asset path
     'styles' => [], // the theme handles: ['<theme>' => ['--var' => 'value', …]]
 ];
 
-const KEYS = ['name', 'claim', 'logo', 'theme', 'home', 'style'];
+const KEYS = ['name', 'claim', 'logo', 'theme', 'home', 'style', 'font'];
+
+const FONT_EXTENSIONS = ['woff2', 'woff', 'ttf', 'otf'];
+
+/** The font lid (2026-11-12, user order): the value lands in the public
+ *  face's <head> as a link or @font-face — only four shapes survive the door:
+ *  '' (off), an https:// stylesheet URL (Google css2 or any font host), a
+ *  Google family name (optionally with :wght@… axes), or the path of an
+ *  uploaded font asset. Everything else is dropped, never stored. */
+function sanitizeFont(string $value): string
+{
+    $v = trim($value);
+    if ($v === '' || strlen($v) > 300) {
+        return '';
+    }
+    if (str_starts_with($v, 'https://')) {
+        return filter_var($v, FILTER_VALIDATE_URL) !== false ? $v : '';
+    }
+    if (str_starts_with($v, '/')) {
+        return preg_match('#^/bridge/site-assets/[A-Za-z0-9._-]+\.(?:' . implode('|', FONT_EXTENSIONS) . ')$#', $v) === 1 ? $v : '';
+    }
+    // a Google family name, optionally with axis syntax: "Comic Neue" or "Comic Neue:wght@400;700"
+    return preg_match("/^[A-Za-z0-9 ,+'-]{1,60}(?::(?:ital,)?wght@[0-9;,]{1,40})?$/", $v) === 1 ? $v : '';
+}
 
 /** The handle map's shape lid: theme names, CSS variable names, safe values.
  *  The value lands in a <style> block on the public face — nothing that could
@@ -123,12 +147,15 @@ function save(array $settings): void
         if ($key === 'style' && $value !== '' && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $value) !== 1) {
             $value = '';
         }
+        if ($key === 'font') {
+            $value = sanitizeFont($value);
+        }
         $clean[$key] = $value;
     }
     $clean['styles'] = sanitizeStyles($settings['styles'] ?? []);
     $export = "<?php\n\ndeclare(strict_types=1);\n\nreturn " . var_export($clean, true) . ";\n";
     if (file_put_contents(configFile(), $export) === false) {
-        \Router\refuse(500, 'Site settings slid off the plate — write failed.');
+        throw new \Domain\Error(500, 'Site settings slid off the plate — write failed.');
     }
     // The next request may land inside opcache's revalidation window (default 2s;
     // some hosts ship validate_timestamps=0) and read the PREVIOUS settings —
@@ -152,11 +179,12 @@ function assetStore(string $originalName, string $tmpPath): array
 {
     \Store\assertUploadSize($tmpPath);
     $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-    if (!in_array($ext, \Store\MEDIA_EXTENSIONS, true)) {
-        \Router\refuse(400, "Unsupported asset type: .{$ext}");
+    $isFont = in_array($ext, FONT_EXTENSIONS, true);
+    if (!in_array($ext, \Store\MEDIA_EXTENSIONS, true) && !$isFont) {
+        throw new \Domain\Error(400, "Unsupported asset type: .{$ext}");
     }
     if (!is_dir(assetsDir()) && !@mkdir(assetsDir(), 0775, true)) {
-        \Router\refuse(500, 'Cannot build the pantry — the asset directory would not rise.');
+        throw new \Domain\Error(500, 'Cannot build the pantry — the asset directory would not rise.');
     }
     $prefix = bin2hex(random_bytes(4));
     $base = strtolower(pathinfo($originalName, PATHINFO_FILENAME));
@@ -165,7 +193,7 @@ function assetStore(string $originalName, string $tmpPath): array
     $name = "{$prefix}-{$base}.{$ext}";
     $target = assetsDir() . '/' . $name;
     if (!@rename($tmpPath, $target) && !@copy($tmpPath, $target)) {
-        \Router\refuse(500, 'Asset storage burned — check the host writable paths.');
+        throw new \Domain\Error(500, 'Asset storage burned — check the host writable paths.');
     }
     @chmod($target, 0664);
     return ['name' => $name, 'url' => '/bridge/site-assets/' . rawurlencode($name)];

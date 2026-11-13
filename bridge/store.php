@@ -15,7 +15,8 @@ declare(strict_types=1);
 namespace Store;
 
 // Library files stand alone: each requires its dependencies explicitly.
-require_once __DIR__ . '/router.php';
+require_once __DIR__ . '/domain/error.php';
+require_once __DIR__ . '/domain/meta.php';
 
 const TYPE_PATTERN = '[a-z0-9]+(?:-[a-z0-9]+)*';
 const SLUG_PATTERN = '[a-z0-9]+(?:-[a-z0-9]+)*';
@@ -35,7 +36,7 @@ function pageDir(string $type, string $slug): string
 function assertIdentifier(string $value, string $what): void
 {
     if (preg_match('/^' . SLUG_PATTERN . '$/', $value) !== 1) {
-        \Router\refuse(400, "Invalid {$what}: {$value}");
+        throw new \Domain\Error(400, "Invalid {$what}: {$value}");
     }
 }
 
@@ -68,35 +69,24 @@ function &listMemo(): array
     return $memo;
 }
 
-/** The frontmatter's tag list, byte-peeked — the app's own flow-array shape
- *  (tags: ["a", "b"], JSON-quoted by the settings form), JSON-decoded in one
- *  move; anything else answers []. No Markdown parsing — the same peek
- *  discipline the draft flag rides. */
+/** The frontmatter's tag list — ONE owner (Meta\peek), the app's own
+ *  flow-array shape JSON-decoded in one move; anything else answers [].
+ *  No Markdown parsing — the same peek discipline the draft flag rides. */
 function tagsOf(string $raw): array
 {
-    if (preg_match('/^tags:\s*\[(.*)\]\s*$/m', $raw, $m) !== 1) {
-        return [];
-    }
-    $tags = json_decode('[' . trim($m[1]) . ']', true);
-    if (!is_array($tags)) {
-        return [];
-    }
-    $out = [];
-    foreach ($tags as $tag) {
-        if (is_string($tag) && trim($tag) !== '') {
-            $out[] = $tag;
-        }
-    }
-    return $out;
+    return \Meta\peek($raw)['tags'];
 }
 
 /** All pages: {type: [{slug, updatedAt, draft}...]} — existence is truth.
  *  PHP only regex-sniffs the draft flag (no Markdown parsing, byte-peek discipline).
  *  hasDraft tells the dashboard an unpublished editorial copy (.draft.md) is sitting there.
- *  Memoized per request per auth view; forget() clears it on every mutation. */
-function listAll(): array
+ *  Memoized per request per auth view; forget() clears it on every mutation.
+ *  $includeDrafts: the VIEW the caller asks for. Null = the session decides
+ *  (the transport's convenience) — a query passes it explicitly, so the
+ *  read side never depends on who happened to be logged in. */
+function listAll(?bool $includeDrafts = null): array
 {
-    $includeDrafts = \Auth\check();
+    $includeDrafts ??= \Auth\check();
     $view = (int)$includeDrafts;
     $memo = &listMemo();
     if (array_key_exists($view, $memo)) {
@@ -119,7 +109,7 @@ function listAll(): array
             // title peeks then cost nothing (the optimization pass)
             $reads = &readMemo();
             $reads[$type . '/' . $slug] = $raw;
-            $draft = preg_match('/^draft:\s*true\b/m', $raw) === 1;
+            $draft = \Meta\peek($raw)['draft'] === true;
             if ($draft && !$includeDrafts) {
                 continue;
             }
@@ -142,7 +132,7 @@ function listAll(): array
 function isDraft(string $type, string $slug): bool
 {
     $raw = read($type, $slug);
-    return $raw !== null && preg_match('/^draft:\s*true\b/m', $raw) === 1;
+    return $raw !== null && \Meta\peek($raw)['draft'] === true;
 }
 
 /** The Contents desk's text search: every editorial copy (the sidecar draft
@@ -223,19 +213,19 @@ function writeDraft(string $type, string $slug, string $raw, ?string $baseHash =
     assertNonEmpty($raw);
     assertPageSize($raw);
     assertDistinctFilenameSlug($type, $slug, $raw);
+    gateFrontmatter($raw, $slug);
     $dir = pageDir($type, $slug);
     if (!is_dir($dir)) {
-        \Router\refuse(404, "Page not found: {$type}/{$slug}");
+        throw new \Domain\Error(404, "Page not found: {$type}/{$slug}");
     }
     if ($baseHash !== null && !hash_equals(draftHash($type, $slug), $baseHash)) {
-        header('Content-Type: application/json; charset=utf-8');
-        header('X-Current-Hash: ' . draftHash($type, $slug));
-        \Router\refuse(409, 'Someone else kneaded this draft while you were reading — reload before you bake.');
+        throw new \Domain\Error(409, 'Someone else kneaded this draft while you were reading — reload before you bake.',
+            ['X-Current-Hash' => draftHash($type, $slug)]);
     }
     $tmp = $dir . '/.draft.' . bin2hex(random_bytes(6)) . '.tmp';
     if (file_put_contents($tmp, $raw) === false || !\rename($tmp, draftFile($type, $slug))) {
         @unlink($tmp);
-        \Router\refuse(500, 'The draft fell into the batter — write failed.');
+        throw new \Domain\Error(500, 'The draft fell into the batter — write failed.');
     }
     forget(); // the sidecar changes listAll's hasDraft — the memo answers stale otherwise
     return hash('sha256', $raw);
@@ -252,14 +242,14 @@ function hasDraft(string $type, string $slug): bool
 function publish(string $type, string $slug): void
 {
     if (!hasDraft($type, $slug)) {
-        \Router\refuse(400, 'Nothing to bake — the draft tin is empty.');
+        throw new \Domain\Error(400, 'Nothing to bake — the draft tin is empty.');
     }
     assertPageExists($type, $slug);
     $draft = draftFile($type, $slug);
     $tmp = $draft . '.pub';
     if (!copy($draft, $tmp) || !\rename($tmp, pageDir($type, $slug) . '/index.md')) {
         @unlink($tmp);
-        \Router\refuse(500, 'The publish collapsed in the oven.');
+        throw new \Domain\Error(500, 'The publish collapsed in the oven.');
     }
     @unlink($draft);
     forget(); // index.md just changed under the memo's nose
@@ -270,7 +260,7 @@ function unpublish(string $type, string $slug): void
 {
     $raw = read($type, $slug);
     if ($raw === null) {
-        \Router\refuse(404, "Page not found: {$type}/{$slug}");
+        throw new \Domain\Error(404, "Page not found: {$type}/{$slug}");
     }
     writeDraft($type, $slug, $raw);            // editorial copy preserved verbatim
     write($type, $slug, flipDraftFlag($raw, true)); // published file hidden
@@ -297,7 +287,7 @@ function setPublishedFlag(string $type, string $slug, bool $on): void
 {
     $raw = read($type, $slug);
     if ($raw === null) {
-        \Router\refuse(404, "Page not found: {$type}/{$slug}");
+        throw new \Domain\Error(404, "Page not found: {$type}/{$slug}");
     }
     write($type, $slug, flipDraftFlag($raw, !$on));
 }
@@ -305,7 +295,7 @@ function setPublishedFlag(string $type, string $slug, bool $on): void
 function assertPageExists(string $type, string $slug): void
 {
     if (read($type, $slug) === null) {
-        \Router\refuse(404, "Page not found: {$type}/{$slug}");
+        throw new \Domain\Error(404, "Page not found: {$type}/{$slug}");
     }
 }
 
@@ -321,7 +311,7 @@ function remove(string $type, string $slug): void
     // carrying media died with "Cannot delete page dir" (2026-11-12, live
     // finding: pages/test/stop-motion blocked the whole delete).
     if (!rmdirDeep($dir)) {
-        \Router\refuse(500, "Cannot delete page dir: {$type}/{$slug}");
+        throw new \Domain\Error(500, "Cannot delete page dir: {$type}/{$slug}");
     }
     forget(); // the page is gone — no memo may remember it
 }
@@ -358,10 +348,10 @@ function move(string $type, string $slug, string $newSlug): void
     $from = pageDir($type, $slug);
     $to = pageDir($type, $newSlug);
     if (is_dir($to)) {
-        \Router\refuse(409, "Another page already uses the name \"{$newSlug}\" — pick a different slug.");
+        throw new \Domain\Error(409, "Another page already uses the name \"{$newSlug}\" — pick a different slug.");
     }
     if (!@\rename($from, $to)) {
-        \Router\refuse(500, 'Rename burned on the stove — the page is untouched.');
+        throw new \Domain\Error(500, 'Rename burned on the stove — the page is untouched.');
     }
     forget(); // both keys moved — the memo remembers neither
 }
@@ -380,7 +370,7 @@ function assertUploadSize(string $tmpPath): void
 {
     $size = @filesize($tmpPath);
     if ($size !== false && $size > MAX_UPLOAD_BYTES) {
-        \Router\refuse(413, 'That file outweighs the tray — 25 MiB is the whole menu.');
+        throw new \Domain\Error(413, 'That file outweighs the tray — 25 MiB is the whole menu.');
     }
 }
 
@@ -393,7 +383,7 @@ const MAX_PAGE_BYTES = 2_097_152;
 function assertPageSize(string $raw): void
 {
     if (strlen($raw) > MAX_PAGE_BYTES) {
-        \Router\refuse(413, 'That draft is a five-tier wedding cake — 2 MiB is what the tin holds.');
+        throw new \Domain\Error(413, 'That draft is a five-tier wedding cake — 2 MiB is what the tin holds.');
     }
 }
 
@@ -410,6 +400,10 @@ function mediaMime(string $file): string
         'webm' => 'video/webm',
         'pdf' => 'application/pdf',
         'mp3' => 'audio/mpeg',
+        'woff2' => 'font/woff2',
+        'woff' => 'font/woff',
+        'ttf' => 'font/ttf',
+        'otf' => 'font/otf',
         'wav' => 'audio/wav',
         default => 'application/octet-stream',
     };
@@ -422,7 +416,7 @@ function mediaDir(string $type, string $slug, string $folder = ''): string
     $dir = pageDir($type, $slug);
     if ($folder !== '') {
         if (preg_match('/^[a-z0-9][a-z0-9-]*$/', $folder) !== 1) {
-            \Router\refuse(400, 'That folder name is unbaked dough.'); }
+            throw new \Domain\Error(400, 'That folder name is unbaked dough.'); }
         $dir .= '/' . $folder;
     }
     return $dir;
@@ -457,7 +451,7 @@ function mediaDelete(string $type, string $slug, string $name, string $folder = 
 {
     $path = mediaPath($type, $slug, $name, $folder);
     if ($path === null || !@unlink($path)) {
-        \Router\refuse(404, 'That media crumb is not in the tin.');
+        throw new \Domain\Error(404, 'That media crumb is not in the tin.');
     }
 }
 
@@ -471,7 +465,7 @@ function mediaStore(string $type, string $slug, string $originalName, string $tm
     $base = trim($base, '-._');
     $ext = strtolower(pathinfo($base, PATHINFO_EXTENSION));
     if ($ext === '' || !in_array($ext, MEDIA_EXTENSIONS, true)) {
-        \Router\refuse(400, "Unsupported media type: .{$ext}");
+        throw new \Domain\Error(400, "Unsupported media type: .{$ext}");
     }
     $stem = pathinfo($base, PATHINFO_FILENAME);
     if ($stem === '') {
@@ -479,13 +473,13 @@ function mediaStore(string $type, string $slug, string $originalName, string $tm
     }
     $dir = mediaDir($type, $slug, $folder);
     if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
-        \Router\refuse(500, 'The media folder would not rise — check the host writable paths.');
+        throw new \Domain\Error(500, 'The media folder would not rise — check the host writable paths.');
     }
     // Same-second uploads collide otherwise — a dash of entropy keeps immutability honest.
     $name = date('Ymd-His') . '-' . bin2hex(random_bytes(3)) . '-' . $stem . '.' . $ext;
     $target = $dir . '/' . $name;
     if (!move_uploaded_file($tmpPath, $target) && !@\rename($tmpPath, $target)) {
-        \Router\refuse(500, 'The media tray collapsed — upload failed.');
+        throw new \Domain\Error(500, 'The media tray collapsed — upload failed.');
     }
     return ['name' => $name, 'size' => filesize($target), 'mtime' => filemtime($target)];
 }
@@ -509,22 +503,26 @@ function mediaPath(string $type, string $slug, string $name, string $folder = ''
     return $path;
 }
 
-/** Atomic write: validation → temp file → rename. Never leaves a half-Shmarrn behind. */
+/** Atomic write: validation → temp file → rename. Never leaves a half-Shmarrn behind.
+ *  THE FRONTMATTER GATE (STEP 5): the frontmatter must carry its contract —
+ *  a title, a slug that agrees with the URL. Meta\defects() names every
+ *  defect; a clean page passes untouched. */
 function write(string $type, string $slug, string $raw): void
 {
     assertNonEmpty($raw);
     assertPageSize($raw);
     assertDistinctFilenameSlug($type, $slug, $raw);
+    gateFrontmatter($raw, $slug);
 
     $dir = pageDir($type, $slug);
     if (!is_dir($dir) && !mkdir($dir, 0775, true)) {
-        \Router\refuse(500, "Cannot create page directory: {$dir}");
+        throw new \Domain\Error(500, "Cannot create page directory: {$dir}");
     }
 
     $tmp = $dir . '/.index.' . bin2hex(random_bytes(6)) . '.tmp';
     if (file_put_contents($tmp, $raw) === false || !\rename($tmp, $dir . '/index.md')) {
         @unlink($tmp);
-        \Router\refuse(500, 'The write came out raw — try again.');
+        throw new \Domain\Error(500, 'The write came out raw — try again.');
     }
     forget(); // fresh bytes on disk — the memo must not answer from memory
 }
@@ -532,7 +530,21 @@ function write(string $type, string $slug, string $raw): void
 function assertNonEmpty(string $raw): void
 {
     if (trim($raw) === '') {
-        \Router\refuse(400, 'An empty schmarrn is just a sad pan — write something first.');
+        throw new \Domain\Error(400, 'An empty schmarrn is just a sad pan — write something first.');
+    }
+}
+
+/** The frontmatter gate: a page whose frontmatter breaks the contract the
+ *  GOSPEL states (the slug must agree with the URL) is refused BY NAME (400)
+ *  — the old gate read an HTML comment and never the key. Wider defects (a
+ *  missing title, a missing flag) stay LEGAL on write — the core falls back
+ *  to the slug, and the blanko seed carries a title with no slug by design;
+ *  those belong to the repair service, on demand. */
+function gateFrontmatter(string $raw, string $urlSlug): void
+{
+    $defects = \Meta\gate($raw, $urlSlug);
+    if ($defects !== []) {
+        throw new \Domain\Error(400, 'The frontmatter breaks its contract: ' . implode('; ', $defects) . '.');
     }
 }
 
@@ -540,6 +552,6 @@ function assertNonEmpty(string $raw): void
 function assertDistinctFilenameSlug(string $type, string $slug, string $raw): void
 {
     if (preg_match('#^\s*<!--\s*slug:\s*([a-z0-9-]+)\s*-->\s*$#m', $raw, $m) === 1 && $m[1] !== $slug) {
-        \Router\refuse(400, "Slug mismatch: URL says '{$slug}', file declares '{$m[1]}'");
+        throw new \Domain\Error(400, "Slug mismatch: URL says '{$slug}', file declares '{$m[1]}'");
     }
 }

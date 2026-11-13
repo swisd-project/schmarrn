@@ -53,7 +53,7 @@ declare(strict_types=1);
 namespace Wares;
 
 // Library files stand alone: each requires its dependencies explicitly.
-require_once __DIR__ . '/router.php';
+require_once __DIR__ . '/domain/error.php';
 require_once __DIR__ . '/plugins.php';
 require_once __DIR__ . '/site.php'; // removeTemplate reads the live theme
 
@@ -297,10 +297,30 @@ function seedBlanko(string $themeName): ?string
     return 'index';
 }
 
+/** The floor gate. The registry declares ">=1.0.0" — and PHP's
+ *  version_compare() CANNOT parse an operator prefix (it reads ">=" as a
+ *  non-numeric token, so EVERY floor was answered "satisfied" — the gate was
+ *  decorative, proven by the wares battery). The constraint is parsed here:
+ *  >=, >, <=, <, = / ==, or a bare version (a floor). A constraint this core
+ *  cannot read is NOT satisfied — a floor gate that guesses is a gate that
+ *  lets everything through. */
 function hostSatisfies(string $requiresSchmarrn): bool
 {
-    return $requiresSchmarrn === ''
-        || version_compare(hostVersion(), $requiresSchmarrn) >= 0;
+    if ($requiresSchmarrn === '') {
+        return true;
+    }
+    if (preg_match('/^(>=|<=|>|<|==|=)?[ \t]*(\d+(?:\.\d+){0,3})$/', trim($requiresSchmarrn), $m) !== 1) {
+        return false; // dough, not a constraint — fail closed
+    }
+    $ver = $m[2];
+    return match ($m[1] ?? '') {
+        '>=' => version_compare(hostVersion(), $ver) >= 0,
+        '>'  => version_compare(hostVersion(), $ver) === 1,
+        '<=' => version_compare(hostVersion(), $ver) <= 0,
+        '<'  => version_compare(hostVersion(), $ver) === -1,
+        '=', '==' => version_compare(hostVersion(), $ver) === 0,
+        default => version_compare(hostVersion(), $ver) >= 0, // a bare version is a floor
+    };
 }
 
 // ——— the per-folder ride: only the ware's own files ever travel ———
@@ -416,11 +436,11 @@ function stageFolder(array $ware, string $scratch): ?string
 function install(string $name): array
 {
     if (preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $name) !== 1) {
-        \Router\refuse(400, 'That ware name is unbaked dough.');
+        throw new \Domain\Error(400, 'That ware name is unbaked dough.');
     }
     $reg = registry();
     if (isset($reg['error'])) {
-        \Router\refuse(502, (string)$reg['error']);
+        throw new \Domain\Error(502, (string)$reg['error']);
     }
     $ware = null;
     foreach ($reg['wares'] as $candidate) {
@@ -430,10 +450,10 @@ function install(string $name): array
         }
     }
     if ($ware === null) {
-        \Router\refuse(404, "'{$name}' is not on the Vitrine's shelf.");
+        throw new \Domain\Error(404, "'{$name}' is not on the Vitrine's shelf.");
     }
     if (!hostSatisfies($ware['requiresSchmarrn'])) {
-        \Router\refuse(400, "'{$ware['title']}' wants Schmarrn {$ware['requiresSchmarrn']}+ — this host is " . hostVersion() . '.');
+        throw new \Domain\Error(400, "'{$ware['title']}' wants Schmarrn {$ware['requiresSchmarrn']}+ — this host is " . hostVersion() . '.');
     }
 
     // ——— the announce gate, BEFORE anything rides: only a strictly newer
@@ -463,7 +483,7 @@ function install(string $name): array
     if ($installedVersion !== null
         && version_compare((string)$ware['version'], (string)$installedVersion) !== 1) {
         $installedVersion = (string)$installedVersion;
-        \Router\refuse(409, (string)$ware['version'] === $installedVersion
+        throw new \Domain\Error(409, (string)$ware['version'] === $installedVersion
             ? "'{$name}' {$installedVersion} is already installed."
             : "'{$name}' {$ware['version']} is OLDER than the installed {$installedVersion} — the Vitrine never derates.");
     }
@@ -482,7 +502,7 @@ function install(string $name): array
             @fclose($knife);
         }
         partWith($scratch);
-        \Router\refuse(409, 'One knife at a time — a wares install is already on the table.');
+        throw new \Domain\Error(409, 'One knife at a time — a wares install is already on the table.');
     }
     // the knife rest: the blade unlocks and closes, the FILE stays (audit U3,
     // fixed 2026-11-07 — the same laundering law the core lock learned): an
@@ -506,28 +526,28 @@ function install(string $name): array
         // ——— fallback: one zip of the whole branch, cached to a file ———
         if (!class_exists('ZipArchive') && !extension_loaded('phar')) {
             partWith($scratch);
-            \Router\refuse(500, 'No unpacker in this kitchen — the host needs ext/zip or ext/phar, or the folder listing to answer.');
+            throw new \Domain\Error(500, 'No unpacker in this kitchen — the host needs ext/zip or ext/phar, or the folder listing to answer.');
         }
         $packetPath = $scratch . '/packet.zip';
         $bytes = httpGet((string)config()['packetUrl']);
         if ($bytes === null) {
             partWith($scratch);
-            \Router\refuse(502, 'The Vitrine packet would not leave the depot — the install is off.');
+            throw new \Domain\Error(502, 'The Vitrine packet would not leave the depot — the install is off.');
         }
         if (@file_put_contents($packetPath, $bytes) === false || strlen($bytes) === 0) {
             partWith($scratch);
-            \Router\refuse(500, 'The packet could not be held — the cache dir may be unwritable.');
+            throw new \Domain\Error(500, 'The packet could not be held — the cache dir may be unwritable.');
         }
 
         // ——— extract: the ware's own path ONLY, names pre-checked as relative ———
         $rooms = extractWare($ware, $packetPath, $scratch);
         if ($rooms === null) {
             partWith($scratch);
-            \Router\refuse(502, "'{$name}' is not inside the packet — the registry and the shelf drifted apart.");
+            throw new \Domain\Error(502, "'{$name}' is not inside the packet — the registry and the shelf drifted apart.");
         }
         if ($rooms === false) {
             partWith($scratch);
-            \Router\refuse(500, 'The packet would not open — is the zip machinery intact?');
+            throw new \Domain\Error(500, 'The packet would not open — is the zip machinery intact?');
         }
         // The staging keeps the packet's own directory shape (branch dir prefix):
         // locate staging/<top>/<path>/, whatever the top is called.
@@ -541,7 +561,7 @@ function install(string $name): array
         }
         if ($wareDir === null) {
             partWith($scratch);
-            \Router\refuse(502, "The packet unpacked, but '{$name}' was not among it — call it a bad pack job.");
+            throw new \Domain\Error(502, "The packet unpacked, but '{$name}' was not among it — call it a bad pack job.");
         }
     }
 
@@ -553,7 +573,7 @@ function install(string $name): array
             || ($manifest['name'] ?? null) !== $name
             || is_string($verdict)) {
             partWith($scratch);
-            \Router\refuse(400, "'{$name}' arrived with a plugin.json this core refuses"
+            throw new \Domain\Error(400, "'{$name}' arrived with a plugin.json this core refuses"
                 . (is_string($verdict) ? ": {$verdict} — nothing installed." : ' — nothing installed.'));
         }
         $incoming = is_string($manifest['version'] ?? null) ? $manifest['version'] : '0.0.0';
@@ -565,13 +585,13 @@ function install(string $name): array
         $codeFault = \Plugins\codeCheck($wareDir);
         if ($codeFault !== null) {
             partWith($scratch);
-            \Router\refuse(400, "'{$name}' arrived with code this core refuses: {$codeFault} Nothing installed.");
+            throw new \Domain\Error(400, "'{$name}' arrived with code this core refuses: {$codeFault} Nothing installed.");
         }
     } else {
         $manifest = json_decode((string)@file_get_contents($wareDir . '/theme.json'), true);
         if (!is_array($manifest)) {
             partWith($scratch);
-            \Router\refuse(400, "'{$name}' arrived without an intact theme.json — nothing installed.");
+            throw new \Domain\Error(400, "'{$name}' arrived without an intact theme.json — nothing installed.");
         }
         $incoming = is_string($manifest['version'] ?? null) ? $manifest['version'] : '0.0.0';
     }
@@ -583,7 +603,7 @@ function install(string $name): array
         $drift = (string)($ware['version'] ?? '') !== $incoming
             ? " — and note the drift: the Vitrine's shelf announces {$ware['version']} while the ware's own manifest says {$incoming}. The manifest is the truth; fix the shelf."
             : '';
-        \Router\refuse(409, $installedVersion === $incoming
+        throw new \Domain\Error(409, $installedVersion === $incoming
             ? "'{$name}' {$incoming} is already installed.{$drift}"
             : "'{$name}' {$incoming} is OLDER than the installed {$installedVersion} — the Vitrine never derates.{$drift}");
     }
@@ -596,12 +616,12 @@ function install(string $name): array
     $requiresParsed = \Chain\parse($manifest['requires'] ?? []);
     if ($requiresParsed === null) {
         partWith($scratch);
-        \Router\refuse(400, "'{$name}' declares requirements this core cannot read — entries are \"name\" or \"name >=1.2\". Nothing installed.");
+        throw new \Domain\Error(400, "'{$name}' declares requirements this core cannot read — entries are \"name\" or \"name >=1.2\". Nothing installed.");
     }
     foreach ($requiresParsed as $req) {
         if ($req['name'] === $name) {
             partWith($scratch);
-            \Router\refuse(400, "'{$name}' does not require itself — chains start elsewhere.");
+            throw new \Domain\Error(400, "'{$name}' does not require itself — chains start elsewhere.");
         }
     }
     $versions = installedVersions();
@@ -611,7 +631,7 @@ function install(string $name): array
     $unmet = \Chain\unmet($requiresParsed, \Chain\pool($versions, array_keys($versions)));
     if ($unmet !== []) {
         partWith($scratch);
-        \Router\refuse(409, "'{$name}' stands on " . implode(', ', $unmet)
+        throw new \Domain\Error(409, "'{$name}' stands on " . implode(', ', $unmet)
             . ' — install ' . (count($unmet) === 1 ? 'it' : 'them')
             . ' from the shelf first, then ride again.');
     }
@@ -627,7 +647,7 @@ function install(string $name): array
     $backup = $scratch . '/backup-' . bin2hex(random_bytes(3));
     if (is_dir($target) && !@rename($target, $backup)) {
         partWith($scratch);
-        \Router\refuse(500, 'The old shelf would not move — the swap is off, nothing installed.');
+        throw new \Domain\Error(500, 'The old shelf would not move — the swap is off, nothing installed.');
     }
     if (!@rename($wareDir, $target)) {
         if (is_dir($backup)) { // the rollback is the whole point of the backup
@@ -635,7 +655,7 @@ function install(string $name): array
             $restored = true;
         }
         partWith($scratch);
-        \Router\refuse(500, "The new shelf would not hang — the swap is off"
+        throw new \Domain\Error(500, "The new shelf would not hang — the swap is off"
             . ($restored ? ', the old one stands, nothing lost.' : '.'));
     }
     if (is_dir($backup)) {
@@ -726,11 +746,11 @@ function lockForget(string $name): void
 function removePlugin(string $name): array
 {
     if (preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $name) !== 1) {
-        \Router\refuse(400, 'That plugin name is unbaked dough.');
+        throw new \Domain\Error(400, 'That plugin name is unbaked dough.');
     }
     $dir = __DIR__ . '/plugins/' . $name;
     if (!is_file($dir . '/plugin.json')) {
-        \Router\refuse(404, "'{$name}' is not an installed plugin.");
+        throw new \Domain\Error(404, "'{$name}' is not an installed plugin.");
     }
     // ——— the chain law: a ware an EFFECTIVE ware stands on is not deleted ———
     foreach (\Plugins\all() as $p) {
@@ -739,14 +759,14 @@ function removePlugin(string $name): array
         }
         foreach ($p['requiresParsed'] as $req) {
             if ($req['name'] === $name) {
-                \Router\refuse(409, "'{$p['title']}' stands on '{$name}' — disable it before the deletion.");
+                throw new \Domain\Error(409, "'{$p['title']}' stands on '{$name}' — disable it before the deletion.");
             }
         }
     }
     $tomb = scratchDir();
     if (!@rename($dir, $tomb . '/' . $name)) {
         partWith($tomb);
-        \Router\refuse(500, "The shelf would not let '{$name}' go — the deletion is off, nothing removed.");
+        throw new \Domain\Error(500, "The shelf would not let '{$name}' go — the deletion is off, nothing removed.");
     }
     partWith($tomb); // best effort — leftover dust is cache's, never the shelf's
     lockForget($name);
@@ -765,15 +785,15 @@ function removePlugin(string $name): array
 function removeTemplate(string $name): array
 {
     if (preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $name) !== 1) {
-        \Router\refuse(400, 'That template name is unbaked dough.');
+        throw new \Domain\Error(400, 'That template name is unbaked dough.');
     }
     // THE HOUSE FALLBACK (2026-11-09, user order): the core's default theme
     // is undeletable — it is the floor every broken theme lands on.
     if ($name === \Site\DEFAULTS['theme']) {
-        \Router\refuse(409, "'{$name}' is the house default — the fallback when a theme fails. It cannot be deleted.");
+        throw new \Domain\Error(409, "'{$name}' is the house default — the fallback when a theme fails. It cannot be deleted.");
     }
     if (\Site\load()['theme'] === $name) {
-        \Router\refuse(409, "'{$name}' is the live theme — activate another template before deleting it.");
+        throw new \Domain\Error(409, "'{$name}' is the live theme — activate another template before deleting it.");
     }
     // ——— the chain law: a ware an EFFECTIVE ware stands on is not deleted ———
     foreach (\Plugins\all() as $p) {
@@ -782,7 +802,7 @@ function removeTemplate(string $name): array
         }
         foreach ($p['requiresParsed'] as $req) {
             if ($req['name'] === $name) {
-                \Router\refuse(409, "'{$p['title']}' stands on '{$name}' — disable it before the deletion.");
+                throw new \Domain\Error(409, "'{$p['title']}' stands on '{$name}' — disable it before the deletion.");
             }
         }
     }
@@ -798,7 +818,7 @@ function removeTemplate(string $name): array
         }
         foreach ($reqs as $req) {
             if ($req['name'] === $name) {
-                \Router\refuse(409, "The template '{$dependent}' stands on '{$name}' — delete it first.");
+                throw new \Domain\Error(409, "The template '{$dependent}' stands on '{$name}' — delete it first.");
             }
         }
     }
@@ -812,16 +832,16 @@ function removeTemplate(string $name): array
         }
     }
     if ($remaining === 0) {
-        \Router\refuse(409, "The last template stands — a site is never themeless. Install another before '{$name}' leaves.");
+        throw new \Domain\Error(409, "The last template stands — a site is never themeless. Install another before '{$name}' leaves.");
     }
     $dir = __DIR__ . '/templates/' . $name;
     if (!is_file($dir . '/theme.json')) {
-        \Router\refuse(404, "'{$name}' is not an installed template.");
+        throw new \Domain\Error(404, "'{$name}' is not an installed template.");
     }
     $tomb = scratchDir();
     if (!@rename($dir, $tomb . '/' . $name)) {
         partWith($tomb);
-        \Router\refuse(500, "The shelf would not let '{$name}' go — the deletion is off, nothing removed.");
+        throw new \Domain\Error(500, "The shelf would not let '{$name}' go — the deletion is off, nothing removed.");
     }
     partWith($tomb); // best effort — leftover dust is cache's, never the shelf's
     lockForget($name);

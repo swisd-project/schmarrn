@@ -26,6 +26,7 @@ if (!in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)) {
 }
 
 require_once __DIR__ . '/router.php';
+require_once __DIR__ . '/domain/error.php'; // the domain throws; the transport maps
 
 /** The optional media sub-folder — a dedicated editor's home, always validated. */
 function mediaFolderParam(): string
@@ -33,9 +34,10 @@ function mediaFolderParam(): string
     $folder = is_string($_GET['folder'] ?? null) ? $_GET['folder'] : '';
     return preg_match('/^[a-z0-9][a-z0-9-]*$/', $folder) === 1 ? $folder : '';
 }
-require_once __DIR__ . '/auth.php';      // pulls accounts.php + router.php itself now
+require_once __DIR__ . '/auth.php';      // pulls accounts.php itself now
 require_once __DIR__ . '/accounts.php';
 require_once __DIR__ . '/mail.php';
+require_once __DIR__ . '/vault.php'; // the house vault — secrets sealed, never plain (2026-11-12)
 require_once __DIR__ . '/lock.php';
 require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/cache.php';
@@ -45,6 +47,9 @@ require_once __DIR__ . '/wares.php';
 require_once __DIR__ . '/core.php'; // the core's self-update (GitHub versions)
 require_once __DIR__ . '/github.php'; // the GitHub door (private repos as ware sources)
 require_once __DIR__ . '/serve.php'; // public JSON API reuses the serving engine's byte-peeks
+require_once __DIR__ . '/application/commands/page.php'; // the page commands (STEP 4)
+require_once __DIR__ . '/application/queries/page.php';  // the page queries (STEP 4)
+require_once __DIR__ . '/application/commands/meta-repair.php'; // the frontmatter repair service (STEP 5)
 
 /**
  * The editor leash: published HTML is CLIENT-rendered and stored as-is, so
@@ -707,6 +712,58 @@ try {
             echo json_encode(['connected' => true, 'login' => $login], JSON_UNESCAPED_SLASHES);
             break;
 
+        // ——— the SMTP integration (2026-11-12, user order): status never
+        // carries the password; test dials the line with CANDIDATE credentials
+        // and keeps nothing; connect saves the git-ignored file; disconnect
+        // removes it. All four are admin + CSRF — the oven is the admin's. ———
+        case $method === 'GET' && $path === 'mail/status':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            echo json_encode(\Mail\status(), JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'POST' && $path === 'mail/test':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — the oven is the admin\'s hand.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            echo json_encode(\Mail\test(\Mail\normalize(is_array($body) ? $body : [])), JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'POST' && $path === 'mail/connect':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — the oven is the admin\'s hand.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $cfg = \Mail\normalize(is_array($body) ? $body : []);
+            if ($cfg['host'] === '') {
+                Router\refuse(400, 'An empty host connects no oven.');
+            }
+            \Mail\save($cfg);
+            echo json_encode(\Mail\status(), JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'POST' && $path === 'mail/disconnect':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — the oven is the admin\'s hand.');
+            }
+            Auth\assertCsrf();
+            \Mail\disconnect();
+            echo json_encode(\Mail\status(), JSON_UNESCAPED_SLASHES);
+            break;
+
         case $method === 'POST' && $path === 'github/test':
             if (!Auth\check()) {
                 Router\refuse(401, 'The kitchen door is locked — log in first.');
@@ -944,21 +1001,7 @@ try {
             // The home page wears its crown (2026-11-07): the desk refuses to delete it.
             // Titles ride with the index (2026-11-10, closes the BACKLOG item): titleOf
             // is a memo hit — listAll primed it with the bytes already in hand.
-            $tree = Store\listAll();
-            foreach ($tree as $type => $pages) {
-                foreach ($pages as $i => $p) {
-                    $tree[$type][$i]['title'] = Serve\titleOf((string)$type, (string)$p['slug'], (string)$p['slug']);
-                }
-            }
-            $home = \Serve\homeSlug(\Site\load());
-            if ($home !== '' && isset($tree['pages'])) {
-                foreach ($tree['pages'] as $i => $p) {
-                    if (($p['slug'] ?? null) === $home) {
-                        $tree['pages'][$i]['home'] = true;
-                    }
-                }
-            }
-            echo json_encode($tree, JSON_UNESCAPED_SLASHES);
+            echo json_encode(PageQuery\index(Auth\check()), JSON_UNESCAPED_SLASHES);
             break;
 
         case $method === 'GET' && $path === 'search':
@@ -968,10 +1011,7 @@ try {
                 Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
             $q = is_string($_GET['q'] ?? null) ? trim((string)$_GET['q']) : '';
-            if ($q === '') {
-                Router\refuse(400, 'The search needs a needle — q cannot be empty.');
-            }
-            echo json_encode(Store\search($q), JSON_UNESCAPED_SLASHES);
+            echo json_encode(PageQuery\search($q), JSON_UNESCAPED_SLASHES);
             break;
 
         // ——— edit locks: heartbeat in warm, silence and polite exit free ———
@@ -982,14 +1022,9 @@ try {
             }
             Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
-            // The home page stands (2026-11-07, user law): the index page cannot
-            // be deleted — the lid lives HERE, server-side, not in a hidden button.
-            if ($type === 'pages' && $slug === \Serve\homeSlug(\Site\load())) {
-                Router\refuse(409, 'The home page stands — the index page cannot be deleted.');
-            }
-            Lock\assertFreeOrMine($type, $slug, Auth\user());
-            Store\remove($type, $slug);
-            Cache\drop($type, $slug);
+            // The home page stands (2026-11-07, user law): the lid lives in
+            // the COMMAND — the route only hands over the pieces.
+            PageCommand\remove((string)$type, (string)$slug, \Serve\homeSlug(\Site\load()));
             echo json_encode(['ok' => true]);
             break;
         case $method === 'POST' && preg_match('#^page/[a-z0-9-]+/[a-z0-9-]+/rename$#', $path) === 1:
@@ -998,12 +1033,9 @@ try {
             }
             Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
-            Lock\assertFreeOrMine($type, $slug, Auth\user());
             $body = json_decode(file_get_contents('php://input') ?: '{}', true);
             $to = is_string($body['slug'] ?? null) ? $body['slug'] : '';
-            Store\move($type, $slug, $to);
-            Cache\drop($type, $slug);
-            Cache\drop($type, $to);
+            PageCommand\rename((string)$type, (string)$slug, (string)$to);
             echo json_encode(['ok' => true, 'slug' => $to]);
             break;
 
@@ -1120,17 +1152,15 @@ try {
             }
             Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
-            Lock\assertFreeOrMine($type, $slug, Auth\user());
             // X-Base-Hash: the fingerprint the client based its edit on. Mismatch → 409,
             // never a silent clobber (flaky-internet guardrail).
             $baseHash = $_SERVER['HTTP_X_BASE_HASH'] ?? null;
-            $hash = Store\writeDraft(
-                $type,
-                $slug,
+            $hash = PageCommand\saveDraft(
+                (string)$type,
+                (string)$slug,
                 file_get_contents('php://input') ?: '',
                 is_string($baseHash) && $baseHash !== '' ? $baseHash : null
             );
-            Lock\acquire($type, $slug, Auth\user());
             echo json_encode(['ok' => true, 'hash' => $hash]);
             break;
 
@@ -1141,26 +1171,16 @@ try {
             }
             Auth\assertCsrf();
             [, $type, $slug, $verb] = explode('/', $path);
-            Lock\assertFreeOrMine($type, $slug, Auth\user());
             if (is_string($verb) && $verb === 'publish') {
                 // The browser renders (GOSPEL: no Markdown parsing in PHP) — the
-                // rendered body rides along in the JSON body and goes straight
-                // into the HTML cache. No HTML? The fallback shell covers it.
+                // rendered body rides along in the JSON body. The command owns
+                // the leash, the projections, and the lock.
                 $body = json_decode(file_get_contents('php://input') ?: '{}', true);
                 $html = is_string($body['html'] ?? null) ? $body['html'] : '';
-                Store\publish($type, $slug);
-                Cache\drop($type, $slug); // raw + HTML caches (drop() sweeps both)
-                // The leash: editors' publishes get executable HTML stripped
-                // server-side — the client's render is trusted only as far as
-                // a legit render could have produced it. Admins keep raw HTML.
-                if ($html !== '') {
-                    Cache\storeHtml($type, $slug, Auth\isAdmin() ? $html : stripExecutableHtml($html));
-                }
-                Lock\acquire($type, $slug, Auth\user());
+                PageCommand\publish((string)$type, (string)$slug, $html, Auth\isAdmin());
                 echo json_encode(['ok' => true, 'published' => true]);
             } else {
-                Store\unpublish($type, $slug);
-                Cache\drop($type, $slug);
+                PageCommand\unpublish((string)$type, (string)$slug);
                 echo json_encode(['ok' => true, 'published' => false]);
             }
             break;
@@ -1168,14 +1188,7 @@ try {
         // Route: GET /bridge/page/{type}/{slug} — raw markdown, body passthrough (not JSON).
         case $method === 'GET' && preg_match('#^page/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             [, $type, $slug] = explode('/', $path);
-            $raw = Store\read($type, $slug);
-            if ($raw === null) {
-                Router\refuse(404, "Page not found: {$type}/{$slug}");
-            }
-            // Public strangers never taste drafts — but editors do, via the same URL.
-            if (Store\isDraft($type, $slug) && !Auth\check()) {
-                Router\refuse(404, "Page not found: {$type}/{$slug}");
-            }
+            $raw = PageQuery\one((string)$type, (string)$slug, Auth\check());
             if (Cache\isFresh($type, $slug)) {
                 header('X-Cache: HIT');
                 Cache\emit($type, $slug);
@@ -1193,35 +1206,7 @@ try {
         // when the cache is stale/missing), sibling pages for menus, page-local files.
         case $method === 'GET' && preg_match('#^public/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1:
             [, $type, $slug] = explode('/', $path);
-            if (Store\read($type, $slug) === null || Store\isDraft($type, $slug)) {
-                Router\refuse(404, "Page not found: {$type}/{$slug}");
-            }
-            // Staleness first, body second (the optimization pass): a stale
-            // render costs the mtime peek only, never a wasted body read.
-            $bodyHtml = !Cache\htmlStale($type, $slug) ? Cache\html($type, $slug) : null;
-            $children = [];
-            foreach (Store\listAll()[$type] ?? [] as $sibling) {
-                if (($sibling['slug'] ?? '') !== $slug && !($sibling['draft'] ?? false)) {
-                    $childSlug = (string)$sibling['slug'];
-                    $children[] = ['slug' => $childSlug, 'title' => Serve\titleOf($type, $childSlug, $childSlug)];
-                }
-            }
-            $files = [];
-            foreach (Store\mediaList($type, $slug) as $file) {
-                $files[] = [
-                    'name' => $file['name'],
-                    'size' => $file['size'],
-                    'url' => "/bridge/media/{$type}/{$slug}/" . rawurlencode((string)$file['name']),
-                ];
-            }
-            echo json_encode([
-                'type' => $type,
-                'slug' => $slug,
-                'title' => Serve\titleOf($type, $slug, $slug),
-                'bodyHtml' => $bodyHtml,
-                'children' => $children,
-                'files' => $files,
-            ], JSON_UNESCAPED_SLASHES);
+            echo json_encode(PageQuery\publicOne((string)$type, (string)$slug), JSON_UNESCAPED_SLASHES);
             break;
 
         // Route: POST /bridge/page/{type}/{slug} — create (unfold) a fresh page; 409 if it exists.
@@ -1231,12 +1216,7 @@ try {
             }
             Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
-            if (Store\read($type, $slug) !== null) {
-                Router\refuse(409, "Page already exists: {$type}/{$slug}");
-            }
-            Lock\assertFreeOrMine($type, $slug, Auth\user());
-            Store\write($type, $slug, file_get_contents('php://input') ?: '');
-            Cache\drop($type, $slug);
+            PageCommand\create((string)$type, (string)$slug, file_get_contents('php://input') ?: '');
             http_response_code(201);
             echo json_encode(['ok' => true]);
             break;
@@ -1246,16 +1226,42 @@ try {
             }
             Auth\assertCsrf();
             [, $type, $slug] = explode('/', $path);
-            Lock\assertFreeOrMine($type, $slug, Auth\user());
-            Store\write($type, $slug, file_get_contents('php://input') ?: '');
-            Cache\drop($type, $slug);
-            Lock\acquire($type, $slug, Auth\user()); // writer owns the lock — kitchen etiquette
+            PageCommand\save((string)$type, (string)$slug, file_get_contents('php://input') ?: '');
             echo json_encode(['ok' => true]);
+            break;
+
+        // ——— the frontmatter repair service (STEP 5, user order): callable on
+        // ——— demand, never silent. One page (?type=&slug=) or the whole tree.
+        // ——— The report IS the deliverable: what was wrong, what was changed. ———
+        case $method === 'POST' && ($path === 'meta/repair' || preg_match('#^meta/repair/[a-z0-9-]+/[a-z0-9-]+$#', $path) === 1):
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
+            }
+            Auth\assertCsrf();
+            $scope = 'tree';
+            $type = '';
+            $slug = '';
+            if ($path !== 'meta/repair') {
+                [, , $type, $slug] = explode('/', $path);
+                $scope = 'page';
+            }
+            echo json_encode(MetaRepair\run((string)$type, (string)$slug, $scope), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
             break;
 
         default:
             Router\refuse(404, 'No recipe for that route.');
     }
+} catch (\Domain\Error $e) {
+    // The domain's own refusal — the transport maps it to the same JSON
+    // the domain used to write itself. Byte-identical by construction:
+    // the same emitter (Router\refuse) answers it, with the same status.
+    foreach ($e->headers as $name => $value) {
+        header("{$name}: {$value}");
+    }
+    Router\refuse($e->status, $e->getMessage());
 } catch (Throwable $e) {
     @error_log('[schmarrn-500] ' . get_class($e) . ': ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
     Router\refuse(500, 'Something curdled in the kitchen. The log knows more.');

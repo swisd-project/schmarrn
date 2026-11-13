@@ -21,7 +21,7 @@ namespace Auth;
 // live sessions (real kink, found 2026-11-04: the public front page never
 // injected the editor though /bridge/session said "authenticated").
 require_once __DIR__ . '/accounts.php';
-require_once __DIR__ . '/router.php';
+require_once __DIR__ . '/domain/error.php';
 
 const MAX_ATTEMPTS = 6;
 const ATTEMPT_WINDOW = 600; // s
@@ -93,7 +93,7 @@ function gateLogin(string $ip): int
     // ct is cheap; wt is the brake. Both on the house.
     if (($ledger['count'] ?? 0) >= MAX_ATTEMPTS) {
         header('Retry-After: ' . (string)((int)$ledger['windowStart'] + ATTEMPT_WINDOW - time()));
-        \Router\refuse(429, 'Too many failed logins. Rest, schmarrn, rest.');
+        throw new \Domain\Error(429, 'Too many failed logins. Rest, schmarrn, rest.');
     }
     return (int)($ledger['count'] ?? 0);
 }
@@ -128,7 +128,7 @@ function login(): void
     $user = is_string($body['user'] ?? null) ? $body['user'] : '';
     $password = is_string($body['password'] ?? null) ? $body['password'] : null;
     if ($user === '' || !is_string($password)) {
-        \Router\refuse(400, 'The oven needs both — user and password.');
+        throw new \Domain\Error(400, 'The oven needs both — user and password.');
     }
 
     // Exceptions must never leak whether the account store is missing — same 401 either way.
@@ -147,7 +147,7 @@ function login(): void
 
     if ($account === null || !password_verify($password, $account['passwordHash'])) {
         countFailure($ip);
-        \Router\refuse(401, 'Wrong recipe — that user/password pair does not bake.');
+        throw new \Domain\Error(401, 'Wrong recipe — that user/password pair does not bake.');
     }
 
     clearFailures($ip);
@@ -213,7 +213,7 @@ function assertCsrf(): void
 {
     $sent = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
     if (!hash_equals((string)($_SESSION['csrf'] ?? ''), (string)$sent)) {
-        \Router\refuse(403, 'That CSRF token is from a different bakery.');
+        throw new \Domain\Error(403, 'That CSRF token is from a different bakery.');
     }
 }
 

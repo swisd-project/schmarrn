@@ -1,7 +1,7 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
   // a burger opens the full-screen overlay (Contents / Settings / Plugins & Templates / Users).
-  import { session, login, logout, pageCount, searchPages, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, setHomePage, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, deletePlugin, savePluginSettings, fetchPluginPanel, pluginPanelAction, listTemplates, activateTemplate, deleteTemplate, coreStatus, uploadCorePacket, runCoreUpdate, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, githubStatus, githubConnect, githubDisconnect, githubTest, githubInspect, githubInstall, type PageRef, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef, type ThemeHandle, type GithubLook, type PluginPanel } from '$lib/api';
+  import { session, login, logout, pageCount, searchPages, createPage, deletePage, renamePage, listAccounts, addAccount, removeAccount, inviteAccount, setupStatus, runSetup, getSiteSettings, saveSiteSettings, setHomePage, listAllMedia, uploadSiteAsset, listPlugins, setPlugins, deletePlugin, savePluginSettings, fetchPluginPanel, pluginPanelAction, listTemplates, activateTemplate, deleteTemplate, coreStatus, uploadCorePacket, runCoreUpdate, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, githubStatus, githubConnect, githubDisconnect, githubTest, githubInspect, githubInstall, mailStatus, mailTest, mailConnect, mailDisconnect, resetRequest, resetConfirm, type PageRef, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef, type ThemeHandle, type GithubLook, type PluginPanel, type MailStatus } from '$lib/api';
   import { adminCloseTarget } from '$lib/back';
   import { base } from '$app/paths';
   import { schemaFor, withDraftFlag } from '$lib/schema';
@@ -114,7 +114,7 @@
   }
 
   // ——— brand settings (admin) ———
-  let siteSettings = $state<{ name: string; claim: string; logo: string; theme: string; home: string; style: string; handles: readonly ThemeHandle[] } | null>(null);
+  let siteSettings = $state<{ name: string; claim: string; logo: string; theme: string; home: string; style: string; font: string; handles: readonly ThemeHandle[] } | null>(null);
   let siteBusy = $state(false);
   let siteError = $state('');
   let siteNote = $state('');
@@ -153,7 +153,8 @@
       await saveSiteSettings({
         name: siteSettings.name,
         claim: siteSettings.claim,
-        logo: siteSettings.logo
+        logo: siteSettings.logo,
+        font: siteSettings.font
       });
       siteNote = 'Saved. The public face updates on the next serve.';
     } catch (e) {
@@ -169,6 +170,37 @@
    *  handle nobody touched keeps its standing. The brand form never sends
    *  handles and the handle form never sends the brand: each writer owns its
    *  keys (the crown's law, same shape). */
+  /** What a color CHANGES, not what it's called (2026-11-12, user order):
+   *  "Crust — panels & header" speaks as "panels & header"; a label without
+   *  the dash keeps its whole words. */
+  function shortHandleLabel(label: string): string {
+    const dash = label.indexOf('—') !== -1 ? '—' : label.indexOf('–') !== -1 ? '–' : ' — ';
+    const at = label.indexOf(dash);
+    const short = at !== -1 ? label.slice(at + dash.length).trim() : label.trim();
+    return short || label;
+  }
+
+  /** The font upload: same pantry as the logo — the stored URL lands in the
+   *  font field; SAVE puts it on the public face. */
+  async function onFontPick(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || siteSettings === null) return;
+    siteBusy = true;
+    siteError = '';
+    siteNote = '';
+    try {
+      const stored = await uploadSiteAsset(file);
+      siteSettings = { ...siteSettings, font: stored.url };
+      siteNote = `Font uploaded as ${stored.name} — save to put it on the public face.`;
+    } catch (e) {
+      siteError = e instanceof Error ? e.message : String(e);
+    } finally {
+      siteBusy = false;
+    }
+  }
+
   async function saveHandlesNow() {
     if (siteSettings === null) return;
     styleBusy = true;
@@ -180,7 +212,9 @@
         const value = handleValues[h.var] ?? h.default;
         handles[h.var] = value === h.default ? '' : value;
       }
-      await saveSiteSettings({ handles });
+      // the card's save speaks for the whole card (2026-11-12, user order):
+      // the handles AND the font — the font field lives here now.
+      await saveSiteSettings({ handles, font: siteSettings.font });
       styleNote = 'Saved. The public face updates on the next serve.';
     } catch (e) {
       styleError = e instanceof Error ? e.message : String(e);
@@ -196,6 +230,9 @@
   }
 
   /** Logo upload: straight into site assets, the URL lands in the form (save still explicit). */
+  /** The logo upload: the picture IS the field — pick, upload, and it lands
+   *  on the public face immediately (saved at once; the site form's Save
+   *  button no longer carries the logo). */
   async function onLogoPick(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
@@ -206,8 +243,26 @@
     siteNote = '';
     try {
       const stored = await uploadSiteAsset(file);
+      await saveSiteSettings({ logo: stored.url });
       siteSettings = { ...siteSettings, logo: stored.url };
-      siteNote = `Logo uploaded as ${stored.name} — save to put it on the public face.`;
+      siteNote = `Logo uploaded as ${stored.name} — on the public face at once.`;
+    } catch (e) {
+      siteError = e instanceof Error ? e.message : String(e);
+    } finally {
+      siteBusy = false;
+    }
+  }
+
+  /** The logo lets go — cleared and saved in one stroke. */
+  async function clearLogoNow() {
+    if (siteSettings === null || siteBusy) return;
+    siteBusy = true;
+    siteError = '';
+    siteNote = '';
+    try {
+      await saveSiteSettings({ logo: '' });
+      siteSettings = { ...siteSettings, logo: '' };
+      siteNote = 'The logo let go.';
     } catch (e) {
       siteError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -492,7 +547,10 @@
       void loadWares(); // the Vitrine shelf carries every installed-vs-registry verdict
     }
     if (next === 'settings' && core === null) void loadCore(); // the attribution card wears the release's news
-    if (next === 'settings') void loadGithub(); // the integrations card asks the door who stands there
+    if (next === 'settings') {
+      void loadGithub(); // the integrations card asks the doors who stand there
+      void loadMail();
+    }
   }
 
   // The dashboard's drawer is GONE (2026-11-07, user law): the overlay carries
@@ -784,6 +842,165 @@
     const run = confirmModal?.run;
     confirmModal = null;
     run?.();
+  }
+
+  // ——— the SMTP oven (Integrations card, second square) ———
+  let mail = $state<{ configured: boolean; host: string; port: number; secure: string; fromEmail: string; fromName: string } | null>(null);
+  let mailModal = $state(false);
+  let mailBusy = $state(false);
+  let mailError = $state('');
+  let mailNote = $state('');
+  let mailTested = $state<{ ok: boolean; error: string } | null>(null);
+  let mailHost = $state('');
+  let mailPort = $state(587);
+  let mailSecure = $state('tls');
+  let mailUser = $state('');
+  let mailPass = $state('');
+  let mailFromEmail = $state('');
+  let mailFromName = $state('Schmarrn');
+
+  async function loadMail() {
+    try {
+      mail = await mailStatus();
+    } catch {
+      mail = null; // the card stays quiet when the oven door is out of reach
+    }
+  }
+
+  function openMailModal() {
+    mailModal = true;
+    mailError = '';
+    mailNote = '';
+    mailTested = null;
+    const m = mail;
+    if (m?.configured) {
+      mailHost = m.host;
+      mailPort = m.port;
+      mailSecure = m.secure;
+      mailFromEmail = m.fromEmail;
+      mailFromName = m.fromName;
+      mailUser = '';
+      mailPass = '';
+    }
+  }
+
+  async function testMailNow() {
+    if (mailBusy) return;
+    mailBusy = true;
+    mailError = '';
+    mailNote = '';
+    mailTested = null;
+    try {
+      mailTested = await mailTest({
+        host: mailHost.trim(),
+        port: Number(mailPort) || 587,
+        user: mailUser.trim(),
+        pass: mailPass,
+        secure: mailSecure,
+        fromEmail: mailFromEmail.trim(),
+        fromName: mailFromName.trim() || 'Schmarrn'
+      });
+      if (!mailTested.ok) mailError = mailTested.error;
+    } catch (e) {
+      mailError = e instanceof Error ? e.message : String(e);
+    } finally {
+      mailBusy = false;
+    }
+  }
+
+  async function connectMailNow() {
+    if (mailBusy) return;
+    mailBusy = true;
+    mailError = '';
+    mailNote = '';
+    try {
+      mail = await mailConnect({
+        host: mailHost.trim(),
+        port: Number(mailPort) || 587,
+        user: mailUser.trim(),
+        pass: mailPass,
+        secure: mailSecure,
+        fromEmail: mailFromEmail.trim(),
+        fromName: mailFromName.trim() || 'Schmarrn'
+      });
+      mailPass = ''; // the password does not linger in the browser
+      mailTested = null;
+      mailModal = false;
+      mailNote = 'The oven is plumbed in — invites and password resets can ride.';
+    } catch (e) {
+      mailError = e instanceof Error ? e.message : String(e);
+    } finally {
+      mailBusy = false;
+    }
+  }
+
+  async function disconnectMailNow() {
+    if (mailBusy) return;
+    mailBusy = true;
+    mailError = '';
+    mailNote = '';
+    try {
+      mail = await mailDisconnect();
+      mailTested = null;
+      mailModal = false;
+      mailNote = 'The oven let go — mail features are off until it is plumbed in again.';
+    } catch (e) {
+      mailError = e instanceof Error ? e.message : String(e);
+    } finally {
+      mailBusy = false;
+    }
+  }
+
+  // ——— the forgot-password door (login screen; the backend's reset endpoints
+  // had no face — 2026-11-12, user order) ———
+  let forgotModal = $state(false);
+  let forgotStep = $state(1); // 1 = ask for the token, 2 = token + new password
+  let forgotBusy = $state(false);
+  let forgotError = $state('');
+  let forgotUser = $state('');
+  let forgotToken = $state('');
+  let forgotPass = $state('');
+  let forgotDone = $state(false);
+  let forgotNoteFromServer = $state('');
+
+  function openForgot() {
+    forgotModal = true;
+    forgotStep = 1;
+    forgotError = '';
+    forgotUser = '';
+    forgotToken = '';
+    forgotPass = '';
+    forgotDone = false;
+  }
+
+  async function requestResetNow() {
+    if (forgotBusy || forgotUser.trim() === '') return;
+    forgotBusy = true;
+    forgotError = '';
+    try {
+      const res = await resetRequest(forgotUser.trim());
+      // enumeration-proof: the answer is always the same shape — the step moves on faith
+      forgotStep = 2;
+      forgotNoteFromServer = res.message;
+    } catch (e) {
+      forgotError = e instanceof Error ? e.message : String(e);
+    } finally {
+      forgotBusy = false;
+    }
+  }
+
+  async function confirmResetNow() {
+    if (forgotBusy) return;
+    forgotBusy = true;
+    forgotError = '';
+    try {
+      await resetConfirm(forgotUser.trim(), forgotToken.trim(), forgotPass);
+      forgotDone = true;
+    } catch (e) {
+      forgotError = e instanceof Error ? e.message : String(e);
+    } finally {
+      forgotBusy = false;
+    }
   }
 
   // ——— the foldable sections (2026-11-12, user order) ———
@@ -1616,6 +1833,7 @@
         <label class="field"><span>Who's kneading?</span><input class="input" type="text" bind:value={user} autocomplete="username" required /></label>
         <label class="field"><span>Kitchen password</span><input class="input" type="password" bind:value={password} autocomplete="current-password" required /></label>
         <button type="submit" class="btn btn-primary" disabled={busy}>{busy ? 'Plating…' : 'Schnitten!'}</button>
+        <button type="button" class="btn-ghost self-center" onclick={openForgot}>Forgot password?</button>
         {#if error}<p class="alert alert-err m-0" role="alert">{error}</p>{/if}
       </form>
     </div>
@@ -1970,14 +2188,28 @@
               <h4 class="mg-h">Site settings</h4>
               <label class="field"><span>Site name</span><input class="input" bind:value={siteSettings.name} required /></label>
               <label class="field"><span>Claim</span><input class="input" bind:value={siteSettings.claim} /></label>
-              <label class="field">
+              <div class="field">
                 <span>Logo</span>
-                <input class="input" bind:value={siteSettings.logo} placeholder="URL, /path, or upload below" />
-                <label class="btn btn-secondary self-start cursor-pointer">
-                  <input class="hidden" type="file" accept="image/*" onchange={onLogoPick} disabled={siteBusy} />
-                  {siteBusy ? 'Uploading…' : 'Upload logo…'}
-                </label>
-              </label>
+                <!-- the logo face (2026-11-12, user order): no filepath, no
+                     text field — the picture IS the field. Clicking it offers
+                     the upload; the × lets it go. Both land saved at once. -->
+                <div class="flex items-center gap-2">
+                  <label
+                    class="relative block w-16 h-16 border border-line rounded overflow-hidden bg-batter/40 hover:bg-batter/70 cursor-pointer grid place-items-center shrink-0"
+                    title="Upload a logo"
+                  >
+                    <input class="hidden" type="file" accept="image/*" onchange={onLogoPick} disabled={siteBusy} />
+                    {#if siteSettings.logo}
+                      <img src={siteSettings.logo} alt="Logo" class="max-w-full max-h-full object-contain p-1" />
+                    {:else}
+                      <span class="text-xs text-ink-soft">{siteBusy ? '…' : 'upload'}</span>
+                    {/if}
+                  </label>
+                  {#if siteSettings.logo}
+                    <button type="button" class="btn-ghost text-xs shrink-0" title="Remove the logo" onclick={clearLogoNow} disabled={siteBusy}>×</button>
+                  {/if}
+                </div>
+              </div>
               <button type="submit" class="btn btn-primary self-start" disabled={siteBusy}>{siteBusy ? 'Saving…' : 'Save site'}</button>
               {#if siteError}<p class="alert alert-err m-0" role="alert">{siteError}</p>{/if}
               {#if siteNote}<p class="alert alert-ok m-0">{siteNote}</p>{/if}
@@ -1988,23 +2220,54 @@
             {#if siteSettings.handles.length === 0}
               <p class="italic text-ink-soft m-0">The active template declares no handles — its stylesheet is the only way in.</p>
             {:else}
-              <p class="hint m-0">
-                The active template <b>{siteSettings.theme}</b> offers these knobs. Turn them here; the template's stylesheet keeps the layout.
-              </p>
-              <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                {#each siteSettings.handles as handle (handle.var)}
-                  <div class="field">
-                    <span>{handle.label}</span>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                <!-- LEFT: the color stack (2026-11-12, user order) — squares as
+                     tall as the text, stacked vertically, each with what it
+                     CHANGES beside it. The theme's color NAMES are gone: a
+                     label like "Crust — panels & header" speaks as "panels &
+                     header". The hook returns the template's default. -->
+                <div class="flex flex-col gap-1.5">
+                  {#each siteSettings.handles.filter((h) => h.type === 'color') as handle (handle.var)}
                     <div class="flex items-center gap-2">
-                      {#if handle.type === 'color'}
-                        <input type="color" class="h-9 w-14 cursor-pointer p-0" bind:value={handleValues[handle.var]} aria-label={handle.label} />
-                      {:else}
-                        <input class="input" bind:value={handleValues[handle.var]} aria-label={handle.label} />
-                      {/if}
-                      <button type="button" class="btn-ghost" title="Back to the template's default" onclick={() => resetHandle(handle.var, handle.default)}>↺</button>
+                      <input
+                        type="color"
+                        class="w-6 h-6 p-0 border border-line rounded cursor-pointer bg-transparent shrink-0"
+                        bind:value={handleValues[handle.var]}
+                        title={handle.label}
+                        aria-label={handle.label}
+                      />
+                      <button
+                        type="button"
+                        class="btn-ghost text-xs shrink-0"
+                        title="Back to the template's default ({handle.label})"
+                        onclick={() => resetHandle(handle.var, handle.default)}
+                      >↺</button>
+                      <span class="text-sm text-ink-soft truncate">{shortHandleLabel(handle.label)}</span>
                     </div>
-                  </div>
-                {/each}
+                  {/each}
+                </div>
+                <!-- RIGHT: the type side — the font moved here (2026-11-12,
+                     user order) from the site form; text handles ride along. -->
+                <div class="flex flex-col gap-3">
+                  {#each siteSettings.handles.filter((h) => h.type !== 'color') as handle (handle.var)}
+                    <div class="field">
+                      <span>{handle.label}</span>
+                      <div class="flex items-center gap-2">
+                        <input class="input" bind:value={handleValues[handle.var]} aria-label={handle.label} />
+                        <button type="button" class="btn-ghost" title="Back to the template's default" onclick={() => resetHandle(handle.var, handle.default)}>↺</button>
+                      </div>
+                    </div>
+                  {/each}
+                  <label class="field">
+                    <span>Font <span class="hint">(Google name, https:// URL, or upload)</span></span>
+                    <input class="input" bind:value={siteSettings.font} placeholder="e.g. Comic Neue — empty = theme default" />
+                    <label class="btn btn-secondary self-start cursor-pointer">
+                      <input class="hidden" type="file" accept=".woff2,.woff,.ttf,.otf" onchange={onFontPick} disabled={siteBusy} />
+                      {siteBusy ? 'Uploading…' : 'Upload font…'}
+                    </label>
+                    <span class="hint">A plain name uses Google Fonts; a https:// link is used as-is; an uploaded file is served from the site itself.</span>
+                  </label>
+                </div>
               </div>
               <button type="button" class="btn btn-primary self-start" onclick={saveHandlesNow} disabled={styleBusy}>{styleBusy ? 'Saving…' : 'Save style'}</button>
               {#if styleError}<p class="alert alert-err m-0" role="alert">{styleError}</p>{/if}
@@ -2033,9 +2296,33 @@
                   </svg>
                   <span class="text-xs font-bold">GitHub</span>
                 </button>
+                <!-- the SMTP oven, second in the rack (2026-11-12, user order):
+                     invites and password resets ride it; plumbed in, the mark
+                     wears the primary colour -->
+                <button
+                  class="flex flex-col items-center justify-center gap-2 aspect-square border border-line bg-batter/40 hover:bg-batter/70 transition-colors"
+                  title={mail?.configured ? `Mail — plumbed in via ${mail.host}` : 'Mail — connect an SMTP server'}
+                  onclick={openMailModal}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    class="w-12 h-12 {mail?.configured ? 'text-jam' : 'text-ink-soft'}"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    aria-hidden="true"
+                  >
+                    <rect x="3" y="5" width="18" height="14" rx="2" />
+                    <path d="M3 7l9 6 9-6" />
+                  </svg>
+                  <span class="text-xs font-bold">Mail</span>
+                </button>
               </div>
               {#if github?.connected}
                 <p class="m-0 text-xs text-ink-soft">connected as <b>{github.login}</b></p>
+              {/if}
+              {#if mail?.configured}
+                <p class="m-0 text-xs text-ink-soft">plumbed in via <b>{mail.host}</b></p>
               {/if}
               {#if githubError}<p class="alert alert-err m-0" role="alert">{githubError}</p>{/if}
               {#if githubNote}<p class="alert alert-ok m-0">{githubNote}</p>{/if}
@@ -2701,6 +2988,106 @@
   </div>
 {/if}
 
+{#if forgotModal}
+  <!-- the forgot-password door: two steps — ask for a token (enumeration-proof:
+       the answer never says whether the account exists), then spend it -->
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50 p-4" role="dialog" aria-modal="true" aria-label="Forgot password" tabindex="-1" onclick={() => (forgotModal = false)}>
+    <div class="modal-card" onclick={(e) => e.stopPropagation()}>
+      <header class="modal-head">
+        <h3>Forgot password</h3>
+        <button type="button" class="close-x" onclick={() => (forgotModal = false)}>×</button>
+      </header>
+      {#if forgotDone}
+        <p class="alert alert-ok m-0">The lock is turned — log in with the new password.</p>
+        <footer class="modal-foot">
+          <button type="button" class="btn btn-primary" onclick={() => (forgotModal = false)}>Back to login</button>
+        </footer>
+      {:else if forgotStep === 1}
+        <label class="field"><span>Account name</span><input class="input" bind:value={forgotUser} autocomplete="username" required /></label>
+        <p class="m-0 text-xs text-ink-soft">
+          If the account exists, has an email on file and the SMTP oven is plumbed in, a one-time reset token rides the mail — valid two hours.
+        </p>
+        {#if forgotError}<p class="alert alert-err m-0" role="alert">{forgotError}</p>{/if}
+        <footer class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick={() => (forgotModal = false)}>Cancel</button>
+          <button type="button" class="btn btn-primary" onclick={requestResetNow} disabled={forgotBusy || forgotUser.trim() === ''}>
+            {forgotBusy ? 'Sending…' : 'Send token'}
+          </button>
+        </footer>
+      {:else}
+        <p class="m-0 text-xs text-ink-soft">{forgotNoteFromServer}</p>
+        <label class="field"><span>Reset token <span class="hint">(from the mail)</span></span><input class="input" bind:value={forgotToken} autocomplete="off" /></label>
+        <label class="field"><span>New password</span><input class="input" type="password" bind:value={forgotPass} placeholder="min 8" minlength="8" autocomplete="new-password" required /></label>
+        {#if forgotError}<p class="alert alert-err m-0" role="alert">{forgotError}</p>{/if}
+        <footer class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick={() => (forgotModal = false)}>Cancel</button>
+          <button type="button" class="btn btn-primary" onclick={confirmResetNow} disabled={forgotBusy || forgotToken.trim() === '' || forgotPass.length < 8}>
+            {forgotBusy ? 'Turning…' : 'Set password'}
+          </button>
+        </footer>
+      {/if}
+    </div>
+  </div>
+{/if}
+
+{#if mailModal}
+  <!-- the SMTP oven: the line is dialed with CANDIDATE credentials first —
+       nothing is written until the test answers green -->
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 bg-[rgba(40,25,15,0.45)] grid place-items-center z-50 p-4" role="dialog" aria-modal="true" aria-label="Mail connection" tabindex="-1" onclick={() => (mailModal = false)}>
+    <div class="modal-card" onclick={(e) => e.stopPropagation()}>
+      <header class="modal-head">
+        <h3>Mail (SMTP)</h3>
+        <button type="button" class="close-x" onclick={() => (mailModal = false)}>×</button>
+      </header>
+      {#if mail?.configured}
+        <p class="m-0 text-xs text-ink-soft">
+          Plumbed in via <b>{mail.host}</b>:<b>{mail.port}</b> ({mail.secure}), sending as <b>{mail.fromEmail || mail.host}</b>. The password is never shown again — reconnect to change it.
+        </p>
+      {/if}
+      <label class="field"><span>SMTP host</span><input class="input" bind:value={mailHost} placeholder="mail.example.com" /></label>
+      <div class="flex gap-2">
+        <label class="field flex-1"><span>Port</span><input class="input" type="number" bind:value={mailPort} min="1" max="65535" /></label>
+        <label class="field flex-1"><span>Encryption</span>
+          <select class="input" bind:value={mailSecure}>
+            <option value="tls">STARTTLS (port 587)</option>
+            <option value="ssl">Implicit SSL (port 465)</option>
+            <option value="none">None (port 25)</option>
+          </select>
+        </label>
+      </div>
+      <label class="field"><span>Username <span class="hint">(empty = no auth)</span></span><input class="input" bind:value={mailUser} autocomplete="off" /></label>
+      <label class="field"><span>Password</span><input class="input" type="password" bind:value={mailPass} autocomplete="new-password" /></label>
+      <div class="flex gap-2">
+        <label class="field flex-1"><span>From address</span><input class="input" type="email" bind:value={mailFromEmail} placeholder="schmarrn@example.com" /></label>
+        <label class="field flex-1"><span>From name</span><input class="input" bind:value={mailFromName} /></label>
+      </div>
+      <p class="m-0 text-xs text-ink-soft">
+        This oven carries the house's letters — account invites and password resets. The password is sealed into the house vault (encrypted at rest, master key in a 0600 keyfile) and never shown again.
+      </p>
+      {#if mailTested?.ok}
+        <p class="alert alert-ok m-0">The line answers and the key turns — the oven is reachable.</p>
+      {/if}
+      {#if mailError}<p class="alert alert-err m-0" role="alert">{mailError}</p>{/if}
+      <footer class="modal-foot">
+        {#if mail?.configured}
+          <button type="button" class="btn btn-secondary" onclick={disconnectMailNow} disabled={mailBusy}>
+            {mailBusy ? '…' : 'Disconnect'}
+          </button>
+        {:else}
+          <button type="button" class="btn btn-secondary" onclick={testMailNow} disabled={mailBusy || mailHost.trim() === ''}>
+            {mailBusy ? 'Dialing…' : 'Test connection'}
+          </button>
+          <button type="button" class="btn btn-primary" onclick={connectMailNow} disabled={mailBusy || !mailTested?.ok}>
+            {mailBusy ? 'Plumbing…' : 'Connect'}
+          </button>
+        {/if}
+      </footer>
+    </div>
+  </div>
+{/if}
+
 {#if githubModal}
   <!-- the dark closes the modal (house law, 2026-11-09) -->
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -2722,7 +3109,7 @@
         />
       </label>
       <p class="m-0 text-xs text-ink-soft">
-        A token with repo read scope. Public repos work without one — the token only widens the reach to this account's private repos.
+        A token with repo read scope. Public repos work without one — the token only widens the reach to this account's private repos. It rests sealed in the house vault (encrypted at rest), never shown again.
       </p>
       {#if githubTested?.ok}
         <p class="alert alert-ok m-0">The token answers — it belongs to <b>{githubTested.login}</b>.</p>

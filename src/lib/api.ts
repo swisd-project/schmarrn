@@ -201,6 +201,7 @@ export interface SiteSettings {
   readonly theme: string;
   readonly home: string;
   readonly style: string;
+  readonly font: string;
   readonly handles: readonly ThemeHandle[];
 }
 
@@ -471,6 +472,80 @@ export function githubTest(
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
     body: JSON.stringify({ token })
   }).then((r) => json<{ ok: boolean; login: string | null; error: string }>(r));
+}
+
+// ——— the SMTP oven (2026-11-12, user order) ———
+
+export interface MailStatus {
+  configured: boolean;
+  host: string;
+  port: number;
+  secure: string;
+  fromEmail: string;
+  fromName: string;
+}
+
+export interface MailConfig {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+  secure: string;
+  fromEmail: string;
+  fromName: string;
+}
+
+/** What is plumbed in — the shape, never the password. */
+export function mailStatus(): Promise<MailStatus> {
+  return fetch('/bridge/mail/status').then((r) => json<MailStatus>(r));
+}
+
+/** TEST a candidate oven — the line dials, nothing is kept. */
+export function mailTest(cfg: MailConfig): Promise<{ ok: boolean; error: string }> {
+  return fetch('/bridge/mail/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify(cfg)
+  }).then((r) => json<{ ok: boolean; error: string }>(r));
+}
+
+/** Plumb the oven in — the config lands in the git-ignored local file. */
+export function mailConnect(cfg: MailConfig): Promise<MailStatus> {
+  return fetch('/bridge/mail/connect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+    body: JSON.stringify(cfg)
+  }).then((r) => json<MailStatus>(r));
+}
+
+/** Let the oven go. */
+export function mailDisconnect(): Promise<MailStatus> {
+  return fetch('/bridge/mail/disconnect', {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': csrfToken() }
+  }).then((r) => json<MailStatus>(r));
+}
+
+/** Ask for a reset token — enumeration-proof: the answer is always the same. */
+export function resetRequest(user: string): Promise<{ ok: boolean; message: string }> {
+  return fetch('/bridge/reset-request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user })
+  }).then((r) => json<{ ok: boolean; message: string }>(r));
+}
+
+/** Spend the token: one-time, two hours, then a new password. */
+export function resetConfirm(
+  user: string,
+  token: string,
+  password: string
+): Promise<{ ok: boolean }> {
+  return fetch('/bridge/reset-confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user, token, password })
+  }).then((r) => json<{ ok: boolean }>(r));
 }
 
 /** Let the account go. */

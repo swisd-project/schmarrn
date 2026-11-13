@@ -41,7 +41,7 @@ declare(strict_types=1);
 
 namespace Core;
 
-require_once __DIR__ . '/router.php';
+require_once __DIR__ . '/domain/error.php';
 
 const RELEASES_URL = 'https://api.github.com/repos/swisd-project/schmarrn/releases/latest';
 const TAGS_URL = 'https://api.github.com/repos/swisd-project/schmarrn/tags?per_page=100';
@@ -714,30 +714,30 @@ function peekPacket(string $path): ?string
 function parkPacket(): array
 {
     if (!class_exists('ZipArchive') && !extension_loaded('phar')) {
-        \Router\refuse(500, 'No unpacker in this kitchen — the host needs ext/zip or ext/phar.');
+        throw new \Domain\Error(500, 'No unpacker in this kitchen — the host needs ext/zip or ext/phar.');
     }
     $upload = $_FILES['file'] ?? null;
     if (!is_array($upload) || ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
         || !is_string($upload['tmp_name']) || (string)$upload['name'] === '') {
-        \Router\refuse(400, 'You promised a packet and brought an empty plate — no file in the upload.');
+        throw new \Domain\Error(400, 'You promised a packet and brought an empty plate — no file in the upload.');
     }
     if (str_ends_with(strtolower((string)$upload['name']), '.zip') === false) {
-        \Router\refuse(400, 'Only a .zip rides this door — a codeload packet, renamed to taste is fine.');
+        throw new \Domain\Error(400, 'Only a .zip rides this door — a codeload packet, renamed to taste is fine.');
     }
     if ((int)$upload['size'] > BYTE_CAP) {
-        \Router\refuse(400, 'The packet outweighs the shelf— ' . BYTE_CAP . ' bytes is the roof.');
+        throw new \Domain\Error(400, 'The packet outweighs the shelf— ' . BYTE_CAP . ' bytes is the roof.');
     }
     $parked = LOCAL_PACKET;
     $parking = $parked . '.' . bin2hex(random_bytes(3)) . '.tmp';
     if (!@move_uploaded_file((string)$upload['tmp_name'], $parking) || !@rename($parking, $parked)) {
         @unlink($parking);
-        \Router\refuse(500, 'The packet would not be parked — the cache dir may be unwritable.');
+        throw new \Domain\Error(500, 'The packet would not be parked — the cache dir may be unwritable.');
     }
     @chmod($parked, 0644);
     $version = peekPacket($parked);
     if ($version === null) {
         @unlink($parked);
-        \Router\refuse(400, 'The packet carries no core land — no bridge/CORE-VERSION among it. Nothing parked.');
+        throw new \Domain\Error(400, 'The packet carries no core land — no bridge/CORE-VERSION among it. Nothing parked.');
     }
     return ['ok' => true, 'version' => $version, 'bytes' => (int)@filesize($parked)];
 }
@@ -754,27 +754,27 @@ function parkPacket(): array
 function update(string $source = 'hub'): array
 {
     if ($source !== 'hub' && $source !== 'local') {
-        \Router\refuse(400, 'The update rides from "hub" or "local" — that is the whole menu.');
+        throw new \Domain\Error(400, 'The update rides from "hub" or "local" — that is the whole menu.');
     }
     $from = version(); // the floor before the ride — the gates and the note read it
     // no scratch before the gates — a refusal must not even leave empty dust
     if ($source === 'local') {
         if (!is_file(LOCAL_PACKET)) {
-            \Router\refuse(409, 'No packet is parked — upload the update zip first, then the knife comes.');
+            throw new \Domain\Error(409, 'No packet is parked — upload the update zip first, then the knife comes.');
         }
         $ver = peekPacket(LOCAL_PACKET);
         if ($ver === null) {
-            \Router\refuse(502, 'The parked packet carries no core land any more — park it again.');
+            throw new \Domain\Error(502, 'The parked packet carries no core land any more — park it again.');
         }
         if (version_compare($ver, $from) === -1) {
-            \Router\refuse(409, "The parked {$ver} is OLDER than the core's {$from} — never derates, even from local.");
+            throw new \Domain\Error(409, "The parked {$ver} is OLDER than the core's {$from} — never derates, even from local.");
         }
         $to = $ver;
         $packetPath = LOCAL_PACKET;
     } else {
         $ann = announce();
         if ($ann['latest'] === null) {
-            \Router\refuse(502, (string)$ann['error']);
+            throw new \Domain\Error(502, (string)$ann['error']);
         }
         $latest = (string)$ann['latest'];
         $latestBare = ltrim($latest, 'v');
@@ -785,7 +785,7 @@ function update(string $source = 'hub'): array
         $repair = version_compare($latestBare, $from) === 0
             && ($face === null || version_compare($latestBare, $face) === 1);
         if (version_compare($latestBare, $from) !== 1 && !$repair) {
-            \Router\refuse(409, "The core is already on {$from} — the newest RELEASED version is {$latest}." . (version_compare($latestBare, $from) === -1 ? ' The floor outran the release line — cut the release for the version this host carries.' : ''));
+            throw new \Domain\Error(409, "The core is already on {$from} — the newest RELEASED version is {$latest}." . (version_compare($latestBare, $from) === -1 ? ' The floor outran the release line — cut the release for the version this host carries.' : ''));
         }
         $to = ltrim($latest, 'v'); // the announced word without the tag's vanity prefix
         $scratch = scratchDir();
@@ -796,7 +796,7 @@ function update(string $source = 'hub'): array
         $bytes = fetchPacket($packet, $packetPath);
         if ($bytes === null) {
             partWith($scratch);
-            \Router\refuse(502, "The {$latest} packet would not come whole — the depot is dark, the cache refused, or it outweighs the " . BYTE_CAP . "-byte roof.");
+            throw new \Domain\Error(502, "The {$latest} packet would not come whole — the depot is dark, the cache refused, or it outweighs the " . BYTE_CAP . "-byte roof.");
         }
         // THE PACKET TRUTH GATE (audit U1): the packet's own CORE-VERSION is
         // the truth, the announce is the advertisement — the same
@@ -805,7 +805,7 @@ function update(string $source = 'hub'): array
         $packetVer = peekPacket($packetPath);
         if ($packetVer === null || version_compare($packetVer, $to) !== 0) {
             partWith($scratch);
-            \Router\refuse(502, "The {$latest} packet does not confess its own version"
+            throw new \Domain\Error(502, "The {$latest} packet does not confess its own version"
                 . ($packetVer === null ? ' — no readable bridge/CORE-VERSION in it' : " (it says {$packetVer})")
                 . ' — attach the asset built from that tag and ride again.');
         }
@@ -822,7 +822,7 @@ function update(string $source = 'hub'): array
             // beside the first. The knife file stays: zero-byte dust in a
             // writable cache, harmless and honest.
         }
-        \Router\refuse(409, 'One knife at a time — a core update is already on the table.');
+        throw new \Domain\Error(409, 'One knife at a time — a core update is already on the table.');
     }
 
     $marker = false; // did WE hold the window open?
@@ -844,11 +844,11 @@ function update(string $source = 'hub'): array
     [$staged, $entries, $stagedBytes] = stageCore($packetPath, $scratch);
     if ($staged === false) {
         partWith($scratch);
-        \Router\refuse(502, 'The packet would not open — is the zip machinery intact?');
+        throw new \Domain\Error(502, 'The packet would not open — is the zip machinery intact?');
     }
     if ($staged === null || !is_string($staged)) {
         partWith($scratch);
-        \Router\refuse(502, "The packet carries no core land (or beyond the roofs: {$entries} entries, {$stagedBytes} bytes) — the update is off.");
+        throw new \Domain\Error(502, "The packet carries no core land (or beyond the roofs: {$entries} entries, {$stagedBytes} bytes) — the update is off.");
     }
 
     // did the packet carry the dashboard? read it BEFORE the swap — the
@@ -870,7 +870,7 @@ function update(string $source = 'hub'): array
     // release's asset zip (scripts/ship-release.sh), attached or parked.
     if (!$dashboard) {
         partWith($scratch);
-        \Router\refuse(409, 'The packet carries no dashboard — the floor does not move without the face. '
+        throw new \Domain\Error(409, 'The packet carries no dashboard — the floor does not move without the face. '
             . 'Attach the release asset zip (scripts/ship-release.sh) to the release on GitHub — or park it here — and ride again.');
     }
 
@@ -881,7 +881,7 @@ function update(string $source = 'hub'): array
     [$files, $pagetypes, $error] = swap($staged, $scratch);
     if ($error !== null) {
         partWith($scratch);
-        \Router\refuse(500, (string)$error); // the rollback rode inside swap(); the shutdown ends the window
+        throw new \Domain\Error(500, (string)$error); // the rollback rode inside swap(); the shutdown ends the window
     }
 
     // bytecode may outlive a swap on hosts that pin validate_timestamps=0

@@ -23,6 +23,7 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/cache.php';
 require_once __DIR__ . '/site.php';
 require_once __DIR__ . '/plugins.php';
+require_once __DIR__ . '/domain/meta.php';
 
 const IDENTIFIER = '/^[a-z0-9]+(?:-[a-z0-9]+)*$/';
 
@@ -249,10 +250,9 @@ function styleOf(string $type, string $slug, array $site): string
         return 'frontpage';
     }
     $raw = \Store\read($type, $slug);
-    if ($raw !== null
-        && preg_match('/^style:\s*["\']?([a-z0-9]+(?:-[a-z0-9]+)*)["\']?\s*$/m', $raw, $m) === 1
-        && $m[1] !== 'frontpage' && in_array($m[1], $styles, true)) {
-        return $m[1];
+    $style = $raw !== null ? \Meta\peek($raw)['style'] : null;
+    if ($style !== null && $style !== 'frontpage' && in_array($style, $styles, true)) {
+        return $style;
     }
     if (($site['style'] ?? '') !== '' && in_array((string)$site['style'], $styles, true)) {
         return (string)$site['style'];
@@ -465,21 +465,63 @@ function fill(array $theme, array $site, string $title, string $bodyHtml, string
     return withThemeVars($out, $site);
 }
 
+/** The face's font (2026-11-12, user order): head furniture for the site's
+ *  chosen font — a <link> for an https stylesheet (the family name is lifted
+ *  back out of a Google css2 URL), an @font-face for an uploaded asset, or a
+ *  Google css2 link built from a bare family name — plus the ONE late rule
+ *  that applies the family to the body. It lands with the theme vars, last in
+ *  the document, so it beats the theme's own font stack (same law as the
+ *  handles: the core turns the knob, the theme keeps the layout). */
+function fontHead(array $site): string
+{
+    $font = trim((string)($site['font'] ?? ''));
+    if ($font === '') {
+        return '';
+    }
+    $family = '';
+    if (str_starts_with($font, '/')) {
+        // uploaded font asset — the lid in Site\sanitizeFont() vouched for the path shape
+        $url = htmlspecialchars($font, ENT_QUOTES);
+        $head = "<style>@font-face{font-family:'Schmarrn Custom';src:url('{$url}') format('woff2');font-display:swap;}</style>";
+        $family = 'Schmarrn Custom';
+    } elseif (str_starts_with($font, 'https://')) {
+        $head = '<link rel="preload" as="style" href="' . htmlspecialchars($font, ENT_QUOTES) . '" />';
+        $head .= '<link rel="stylesheet" href="' . htmlspecialchars($font, ENT_QUOTES) . '" />';
+        if (preg_match('/[?&]family=([^&]+)/', $font, $m) === 1) {
+            $family = trim(rawurldecode((string)$m[1]));
+        }
+    } else {
+        $family = $font;
+        [$namePart, $axisPart] = array_pad(explode(':', $font, 2), 2, '');
+        $head = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family='
+            . rawurlencode($namePart)
+            . ($axisPart !== '' ? ':' . $axisPart : '') . '&display=swap" />';
+    }
+    // the family must be a plain CSS identifier-ish token before it enters a style rule
+    // (the axis part ":wght@…" lives in the URL only — the family name is the bare name)
+    $family = explode(':', $family, 2)[0];
+    if ($family !== '' && preg_match("/^[A-Za-z0-9 ,+'_-]{1,60}$/", $family) === 1) {
+        $stack = "'" . str_replace(["'", '"', '\\', ';'], '', $family) . "', system-ui, sans-serif";
+        $head .= '<style>body{font-family:' . $stack . ';}</style>';
+    }
+    return $head;
+}
+
 /** The theme handles ride the page as a :root block — LAST in the document,
  *  so they beat the theme's own :root (same specificity, later wins). The
- *  theme's stylesheet still owns the layout; this only turns the knobs the
- *  theme declared. */
+ *  font head rides the same late block. The theme's stylesheet still owns the
+ *  layout; this only turns the knobs the theme declared — plus the face. */
 function withThemeVars(string $html, array $site): string
 {
-    $vars = themeVars($site);
-    if ($vars === '') {
+    $extra = fontHead($site) . themeVars($site);
+    if ($extra === '') {
         return $html;
     }
     $pos = stripos($html, '</body>');
     if ($pos === false) {
-        return $html . $vars;
+        return $html . $extra;
     }
-    return substr($html, 0, $pos) . $vars . substr($html, $pos);
+    return substr($html, 0, $pos) . $extra . substr($html, $pos);
 }
 
 /** The menu: published pages of "pages" as links — the navitem entity, core-owned.
@@ -514,21 +556,12 @@ function logoUrl(string $logo): string
     return '/' . $logo;
 }
 
-/** Byte-peek the title out of the frontmatter — sniffing, not parsing (Store discipline). */
+/** Byte-peek the title out of the frontmatter — ONE owner (Meta\peek). */
 function titleOf(string $type, string $slug, string $fallback): string
 {
     $raw = \Store\read($type, $slug);
-    if ($raw !== null && preg_match('/^title:\s*(.+)$/m', $raw, $m) === 1) {
-        $title = trim($m[1]);
-        $quote = $title[0] ?? '';
-        if (strlen($title) >= 2 && ($quote === '"' || $quote === "'") && str_ends_with($title, $quote)) {
-            $title = substr($title, 1, -1);
-        }
-        if ($title !== '') {
-            return $title;
-        }
-    }
-    return $fallback;
+    $title = $raw !== null ? \Meta\peek($raw)['title'] : null;
+    return $title !== null ? $title : $fallback;
 }
 
 /** SEO head: title tag + OpenGraph basics. og:url is best-effort (shared hosts lie). */

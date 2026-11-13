@@ -66,8 +66,15 @@ if (str_starts_with($path, '/_/')) {
     // their paths; a sub-path that names no page falls through to them. ———
     if ($sub !== '/index.html' && $sub !== '/dashboard.html') {
         require_once __DIR__ . '/bridge/serve.php';
-        if (\Serve\tryDispatch($path)) {
-            exit; // served in admin mode
+        try {
+            if (\Serve\tryDispatch($path)) {
+                exit; // served in admin mode
+            }
+        } catch (\Domain\Error $e) {
+            foreach ($e->headers as $name => $value) {
+                header("{$name}: {$value}");
+            }
+            \Router\refuse($e->status, $e->getMessage());
         }
     }
     // Host layout: a real _/ directory. Repo layout: the flat build/ output
@@ -162,4 +169,13 @@ if ($path !== '/') {
 
 // ——— everything else: the public site ———
 require_once __DIR__ . '/bridge/serve.php';
-\Serve\dispatch($path);
+try {
+    \Serve\dispatch($path);
+} catch (\Domain\Error $e) {
+    // The domain's refusal rides the same emitter the bridge API uses —
+    // byte-identical to what the domain wrote itself before the refactor.
+    foreach ($e->headers as $name => $value) {
+        header("{$name}: {$value}");
+    }
+    \Router\refuse($e->status, $e->getMessage());
+}

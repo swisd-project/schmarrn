@@ -106,7 +106,7 @@ function save(array $accounts): void
     $tmp = $target . '.' . bin2hex(random_bytes(6)) . '.tmp';
     if (file_put_contents($tmp, $php) === false || !rename($tmp, $target)) {
         @unlink($tmp);
-        \Router\refuse(500, 'The account tin is sealed shut — write failed.');
+        throw new \Domain\Error(500, 'The account tin is sealed shut — write failed.');
     }
     // The store is a PHP file, so opcache may serve the stale compiled copy
     // to the next request on this process (same-second writes defeat mtime
@@ -121,22 +121,22 @@ function save(array $accounts): void
 function assertKnownRole(string $role): void
 {
     if (!in_array($role, ROLES, true)) {
-        \Router\refuse(400, "Unknown role: {$role}");
+        throw new \Domain\Error(400, "Unknown role: {$role}");
     }
 }
 
 function add(string $user, string $hash, string $role, string $email = ''): void
 {
     if (!is_string($user) || preg_match(USER_PATTERN, $user) !== 1) {
-        \Router\refuse(400, 'That username falls apart in the batter.');
+        throw new \Domain\Error(400, 'That username falls apart in the batter.');
     }
     assertKnownRole($role);
     if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-        \Router\refuse(400, 'That email is half-baked — no proper address in the dough.');
+        throw new \Domain\Error(400, 'That email is half-baked — no proper address in the dough.');
     }
     $accounts = all();
     if (isset($accounts[$user])) {
-        \Router\refuse(409, "Account exists: {$user}");
+        throw new \Domain\Error(409, "Account exists: {$user}");
     }
     $accounts[$user] = ['role' => $role, 'passwordHash' => $hash, 'email' => $email, 'epoch' => 0];
     save($accounts);
@@ -145,11 +145,11 @@ function add(string $user, string $hash, string $role, string $email = ''): void
 function setEmail(string $user, string $email): void
 {
     if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-        \Router\refuse(400, 'That email is half-baked — no proper address in the dough.');
+        throw new \Domain\Error(400, 'That email is half-baked — no proper address in the dough.');
     }
     $accounts = all();
     if (!isset($accounts[$user])) {
-        \Router\refuse(404, "No account: {$user}");
+        throw new \Domain\Error(404, "No account: {$user}");
     }
     $accounts[$user]['email'] = $email;
     save($accounts);
@@ -159,7 +159,7 @@ function remove(string $user): void
 {
     $accounts = all();
     if (!isset($accounts[$user])) {
-        \Router\refuse(404, "No account: {$user}");
+        throw new \Domain\Error(404, "No account: {$user}");
     }
     unset($accounts[$user]);
     save($accounts);
@@ -170,7 +170,7 @@ function setRole(string $user, string $role): void
     assertKnownRole($role);
     $accounts = all();
     if (!isset($accounts[$user])) {
-        \Router\refuse(404, "No account: {$user}");
+        throw new \Domain\Error(404, "No account: {$user}");
     }
     $accounts[$user]['role'] = $role;
     save($accounts);
@@ -180,7 +180,7 @@ function setHash(string $user, string $hash): void
 {
     $accounts = all();
     if (!isset($accounts[$user])) {
-        \Router\refuse(404, "No account: {$user}");
+        throw new \Domain\Error(404, "No account: {$user}");
     }
     $accounts[$user]['passwordHash'] = $hash;
     // The session epoch: every existing session of this account was minted
@@ -211,7 +211,7 @@ function issueMailToken(string $user, string $to, int $ttl = 7200): void
     $tmp = $file . '.tmp';
     if (file_put_contents($tmp, json_encode($record)) === false || !rename($tmp, $file)) {
         @unlink($tmp);
-        \Router\refuse(500, 'The reset token slipped off the tray — storage failed.');
+        throw new \Domain\Error(500, 'The reset token slipped off the tray — storage failed.');
     }
     \Mail\send($to, "Schmarrn password reset ({$user})",
         "Someone asked for a Schmarrn password reset for the account '{$user}'.\n\n"
@@ -231,6 +231,6 @@ function takeMailToken(string $user, string $token): void
         && ($record['exp'] ?? 0) >= time()
         && hash_equals($record['t'], hash('sha256', $token));
     if (!$ok) {
-        \Router\refuse(401, 'That reset token is stale dough — expired, eaten, or never baked.');
+        throw new \Domain\Error(401, 'That reset token is stale dough — expired, eaten, or never baked.');
     }
 }

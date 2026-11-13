@@ -27,20 +27,34 @@
 │   ├── build-edit.mjs            # esbuild → bridge/assets/edit.esm.js (committed live-page editor)
 │   ├── ship-release.sh           # packs the release ASSET zip: tag source tree + built build/ (the only way the dashboard rides an update)
 │   ├── dev-serve.sh              # the dev server under the PORT LAW: knocks, never kicks; auto-steps to the next free port
+│   ├── run-tests.sh                # THE TEST RUNNER: `npm test` — byte-identity + arch-lint + the five batteries, one verdict
+│   ├── arch-lint.mjs               # the architecture law, enforced: domain purity, queries never write, commands unreachable from GET, every mutating route names a command (`npm run lint:arch`)
+│   ├── repair-frontmatter.php      # the frontmatter repair service, CLI door — the same service POST /bridge/meta/repair rides; whole tree or one page, never silent
 │   └── (*.mts)                   # dev probes
+├── tests/                          # the batteries live in the REPO now (p8 STEP 1 — the /tmp ones died with the machine)
+│   ├── harness.php                 # the shared verdict harness: check() = must-pass, xfail() = known defect (printed loudly, never blocking), verdict()
+│   ├── snapshot.php                # the BYTE-IDENTITY GATE: 26 public URLs, sha256 each, --write captures the baseline (tests/fixtures/baseline.json)
+│   ├── wares-battery.php           # the wares pipeline battery, rebuilt from the guardrails spec (24 cases) — sandboxed, local file:// shelf, no network
+│   ├── boundary-battery.php        # the plugin × core wall, rebuilt (21 cases)
+│   ├── lid-battery.php             # the code lid (14 cases, incl. the call-before-declaration repro)
+│   ├── battery-bienenstich.php     # the API ware's wall (30 cases) — rig built fresh from the tree every run
+│   ├── refusal-battery.php         # every domain refusal pinned to its exact status+body (24 cases) — the STEP 2 proof
+│   └── rig.php                     # the rig builder: a throwaway Schmarrn from the current tree (admin account, content, the bienenstich ware enabled)
+├── tests/fixtures/baseline.json    # the byte-identity baseline (committed — the gate's reference)
 ├── bridge/                       # PHP core — front controller + libs, no framework; lives under /bridge (bit-scan prey no longer fed)
 │   ├── .htaccess                 # legacy (root .htaccess is the law now)
-│   ├── index.php                 # JSON routes: login/session, pages, drafts, publish(+html), pagetypes, templates (admin theme inventory), public API, media, plugins
+│   ├── index.php                 # JSON routes: login/session, pages, drafts, publish(+html), pagetypes, templates (admin theme inventory), public API, media, plugins; p8 STEP 4: the six page routes dispatch through the page COMMANDS (write) and QUERIES (read); POST /bridge/meta/repair rides here too
 │   ├── serve.php                 # public serving engine: dispatch, templates, cached HTML, fallback shell, SEO head, plugin fills, editor injection (data-sm-edit-root + edit.esm.js; nav ghost RETIRED 2026-11-04 — navHtml is plain core nav, same bytes for editors and visitors); styleOf: page frontmatter → GLOBAL site style → theme default
 │   ├── site.php                  # brand settings load/save (template < site.local.php) + site assets (.assets/); `style` = GLOBAL style ('' | a theme-declared style, whitelist-validated); `styles` = the theme handles (per-theme CSS overrides: ['<theme>' => ['--var' => 'value']], git-ignored)
-│   ├── wares.php                 # Vitrine fetch + install (p6 slice 3): registry GET (TTL cache) + codeload packet zip → extract ONLY <path>/ (ZipArchive | PharData), manifest gate, version gate, disable-first upgrade w/ rollback; GET /bridge/wares + POST /bridge/wares/install (admin+CSRF); removal too (Wares\removePlugin/removeTemplate — tomb rename, lock + switch hygiene); URLs override in config/wares.local.php (ignored)
-│   ├── plugins.php               # p6 capability contract: scan/validate/load/dispatch, state in config/plugins.local.php
+│   ├── wares.php                 # Vitrine fetch + install (p6 slice 3): registry GET (TTL cache) + codeload packet zip → extract ONLY <path>/ (ZipArchive | PharData), manifest gate, version gate (hostSatisfies PARSES its constraint — >=, >, <=, <, = / == or a bare version; unreadable constraint fails CLOSED, 2026-11-13 fix), disable-first upgrade w/ rollback; GET /bridge/wares + POST /bridge/wares/install (admin+CSRF); removal too (Wares\removePlugin/removeTemplate — tomb rename, lock + switch hygiene); URLs override in config/wares.local.php (ignored)
+│   ├── plugins.php               # p6 capability contract: scan/validate/load/dispatch, state in config/plugins.local.php; codeCheck runs TWO-PASS (2026-11-13 fix): declarations collected first, calls judged second — a legal call-before-declaration passes
 │   ├── router.php
 │   ├── auth.php                  # Argon2id password, session, 24h
 │   ├── accounts.php              # file-backed account store + invites
 │   ├── mail.php                  # SMTP via vendored PHPMailer
+│   ├── vault.php                 # the house vault — secrets sealed via libsodium secretbox, master keyfile 0600
 │   ├── lock.php                  # write-path lock gates (acquire + assertFreeOrMine; TTL frees cold locks; HTTP lock endpoints retired with the canvas)
-│   ├── store.php                 # content store: list/read/write (atomic), slug discipline
+│   ├── store.php                 # content store: list/read/write (atomic), slug discipline; the write path runs the frontmatter gate (Meta\gate on write); listAll takes the explicit view parameter (null = session decides)
 │   ├── cache.php                 # raw cache + rendered-HTML cache (storeHtml/htmlStale), mtime sentinels
 │   ├── templates/                # the theme contract's dedicated home (was root-level themes/)
 │   │   ├── bakery/               # default theme (classical-first; slide.html too) — the BLUEPRINT
@@ -71,8 +85,12 @@
 │   │   ├── accounts.php          # TEMPLATE
 │   │   ├── mail.php              # TEMPLATE
 │   │   ├── site.php              # TEMPLATE (brand settings)
+│   │   ├── vault.local.php        # sealed envelopes (git-ignored)
+│   │   ├── vault.key              # vault master key (0600, git-ignored)
 │   │   └── (*.local.php)         # git-ignored real config
 │   ├── lib/phpmailer/            # vendored
+│   ├── domain/                     # the DOMAIN ring (p8): error.php (Domain\Error — the domain throws, the transport maps), leash.php (the editor leash), meta.php (the frontmatter contract: peek/gate/defects/repair — ONE owner, no YAML parser)
+│   ├── application/                # the APPLICATION ring (p8): commands/ (page.php — the page commands own the cache drop; meta-repair.php — the on-demand frontmatter repair), queries/ (page.php — index/one/publicOne/search, the view rides in explicitly), projections/ (html.php + index.php — the two NAMED read models)
 │   └── (cache/)                  # git-ignored writable cache (+ html/ subdir)
 ├── src/
 │   ├── app.html

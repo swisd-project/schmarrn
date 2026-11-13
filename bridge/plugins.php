@@ -395,6 +395,15 @@ function codeCheck(string $dir): ?string
     if ($files === []) {
         return null; // no code at all — the runtime law degrades, as always
     }
+    // TWO PASSES (2026-11-13, the lid battery's finding): the first pass
+    // collects EVERY function the ware declares, across all its files; the
+    // second judges the calls. The old single pass judged as it scanned, so
+    // a call BEFORE its declaration in the same file was a false positive —
+    // and PHP hoists top-level functions, so that code is legal. The
+    // Vitrine's bienenstich carried exactly that shape (call at 101,
+    // declaration at 324); a lid that refuses honest wares is worse than
+    // no lid.
+    $tokensOf = [];
     $declared = [];
     $problems = [];
     foreach ($files as $file) {
@@ -404,22 +413,26 @@ function codeCheck(string $dir): ?string
             continue;
         }
         $tokens = @token_get_all($src);
+        $tokensOf[] = $tokens;
         $count = count($tokens);
         for ($i = 0; $i < $count; $i++) {
             $t = $tokens[$i];
-            if (!is_array($t)) {
+            if (!is_array($t) || $t[0] !== T_FUNCTION) {
                 continue;
             }
-            if ($t[0] === T_FUNCTION) {
-                for ($j = $i + 1; $j < $count; $j++) {
-                    if (is_array($tokens[$j]) && $tokens[$j][0] === T_STRING) {
-                        $declared[$tokens[$j][1]] = true;
-                        break;
-                    }
+            for ($j = $i + 1; $j < $count; $j++) {
+                if (is_array($tokens[$j]) && $tokens[$j][0] === T_STRING) {
+                    $declared[$tokens[$j][1]] = true;
+                    break;
                 }
-                continue;
             }
-            if ($t[0] !== T_STRING) {
+        }
+    }
+    foreach ($tokensOf as $tokens) {
+        $count = count($tokens);
+        for ($i = 0; $i < $count; $i++) {
+            $t = $tokens[$i];
+            if (!is_array($t) || $t[0] !== T_STRING) {
                 continue;
             }
             $name = $t[1];
@@ -521,7 +534,7 @@ function setState(array $enabled): void
     }
     $export = "<?php\n\ndeclare(strict_types=1);\n\nreturn " . var_export($clean, true) . ";\n";
     if (file_put_contents(stateFile(), $export) === false) {
-        \Router\refuse(500, 'Plugin state will not set — like jam without sugar.');
+        throw new \Domain\Error(500, 'Plugin state will not set — like jam without sugar.');
     }
     if (function_exists('opcache_invalidate')) {
         opcache_invalidate(stateFile(), true);
@@ -580,7 +593,7 @@ function setting(string $plugin, string $key): string|bool|null
 function setSetting(string $plugin, string $key, string|bool $value): void
 {
     if (preg_match(IDENTIFIER, $plugin) !== 1 || preg_match('/^[a-z0-9_]{1,63}$/', $key) !== 1) {
-        \Router\refuse(400, 'That settings slot is unbaked dough.');
+        throw new \Domain\Error(400, 'That settings slot is unbaked dough.');
     }
     $all = storedSettings();
     $all[$plugin][$key] = $value;
@@ -589,7 +602,7 @@ function setSetting(string $plugin, string $key, string|bool $value): void
         @mkdir(__DIR__ . '/config', 0775, true);
     }
     if (file_put_contents(settingsFile(), $export, LOCK_EX) === false) {
-        \Router\refuse(500, 'Plugin settings will not save — the pantry shelf is full.');
+        throw new \Domain\Error(500, 'Plugin settings will not save — the pantry shelf is full.');
     }
     if (function_exists('opcache_invalidate')) {
         opcache_invalidate(settingsFile(), true);
@@ -732,7 +745,7 @@ function dispatch(string $name, string $route, string $method): never
     }
     $eff = effective();
     if ($plugin === null || !isset($eff[$name])) {
-        \Router\refuse(404, 'That plugin serves nothing — no such route.');
+        throw new \Domain\Error(404, 'That plugin serves nothing — no such route.');
     }
     $declared = null;
     foreach ($plugin['routes'] as $candidate) {
@@ -742,14 +755,14 @@ function dispatch(string $name, string $route, string $method): never
         }
     }
     if ($declared === null) {
-        \Router\refuse(404, 'That plugin serves nothing — no such route.');
+        throw new \Domain\Error(404, 'That plugin serves nothing — no such route.');
     }
     // The lid: the core gates the door, the handler never has to remember.
     if ($declared['auth'] !== 'public' && !\Auth\check()) {
-        \Router\refuse(401, 'The kitchen door is locked — log in first.');
+        throw new \Domain\Error(401, 'The kitchen door is locked — log in first.');
     }
     if ($declared['auth'] === 'admin' && !\Auth\isAdmin()) {
-        \Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
+        throw new \Domain\Error(403, 'Admins only — editors do not touch the sugar safe.');
     }
     if ($declared['csrf'] && $method !== 'GET') {
         \Auth\assertCsrf();
@@ -757,7 +770,7 @@ function dispatch(string $name, string $route, string $method): never
     load(); // plugin code in place — only after the lid has gated the door
     $fn = 'plugin_' . prefix($name) . '_route_' . str_replace('-', '_', $route);
     if (!function_exists($fn)) {
-        \Router\refuse(500, "Plugin route handler missing: {$fn}");
+        throw new \Domain\Error(500, "Plugin route handler missing: {$fn}");
     }
     $body = json_decode(file_get_contents('php://input') ?: '{}', true);
     $body = is_array($body) ? $body : [];
@@ -765,7 +778,7 @@ function dispatch(string $name, string $route, string $method): never
         $result = $fn($method, $body);
     } catch (\Throwable $e) {
         @error_log("[schmarrn-plugins] '{$name}/{$route}' failed: {$e->getMessage()}");
-        \Router\refuse(500, 'That plugin burned on the route.');
+        throw new \Domain\Error(500, 'That plugin burned on the route.');
     }
     // A handler may return dough (a string, null, whatever): it answers JSON,
     // never a fatal. _status is read only off arrays.

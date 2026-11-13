@@ -1,0 +1,130 @@
+{
+    "note": "Byte-identity baseline \u2014 captured by tests/snapshot.php --write. Every refactor step must keep every sha256 identical.",
+    "urls": {
+        "home": {
+            "status": 200,
+            "sha256": "057d0c1162e58e03d222bc5f4603046da02d015565bd00191536dd66e558c5d3",
+            "bytes": 1353
+        },
+        "page-hello": {
+            "status": 200,
+            "sha256": "8a521241415f174a3c5267f29dd97f36a63a7aa5518c9de8916ca65f478e737f",
+            "bytes": 1358
+        },
+        "page-test": {
+            "status": 200,
+            "sha256": "af82f641fe1283435b600c5629f2901f1eeae98605851b36407893eb4be16f68",
+            "bytes": 2131
+        },
+        "page-404": {
+            "status": 404,
+            "sha256": "d2f0595a7b7ca06fd992f357fe8480420a5f44f72b5f47e2b248183c43d0bb60",
+            "bytes": 1197
+        },
+        "api-pages": {
+            "status": 200,
+            "sha256": "08e4e315302986bdb13601ee65a5ce5da14007153b53112363c56a0bcd7fabb5",
+            "bytes": 231
+        },
+        "api-raw": {
+            "status": 200,
+            "sha256": "b5c0ea589c008f01b1d25016e248419828b3bfbb55762421c8b285bdae30fc1f",
+            "bytes": 111
+        },
+        "api-public": {
+            "status": 200,
+            "sha256": "3e031b2779c3cc2965f362aed9b485c8537eca034e9c94d23824d5f58164327f",
+            "bytes": 142
+        },
+        "api-search": {
+            "status": 401,
+            "sha256": "d49f3a1fe6f6343032c795e1e102c8ca68e89aeaa7e39dbc953468cd7ea2f2c8",
+            "bytes": 59
+        },
+        "api-session": {
+            "status": 200,
+            "sha256": "833c5053b3f9647c2251c932c5094260f61a366c5e264a906ab85b446e3df0ea",
+            "bytes": 53
+        },
+        "api-templates": {
+            "status": 401,
+            "sha256": "d49f3a1fe6f6343032c795e1e102c8ca68e89aeaa7e39dbc953468cd7ea2f2c8",
+            "bytes": 59
+        },
+        "api-plugins": {
+            "status": 401,
+            "sha256": "d49f3a1fe6f6343032c795e1e102c8ca68e89aeaa7e39dbc953468cd7ea2f2c8",
+            "bytes": 59
+        },
+        "api-drawer": {
+            "status": 401,
+            "sha256": "d49f3a1fe6f6343032c795e1e102c8ca68e89aeaa7e39dbc953468cd7ea2f2c8",
+            "bytes": 59
+        },
+        "api-editor-blocks": {
+            "status": 401,
+            "sha256": "d49f3a1fe6f6343032c795e1e102c8ca68e89aeaa7e39dbc953468cd7ea2f2c8",
+            "bytes": 59
+        },
+        "api-pagetypes": {
+            "status": 401,
+            "sha256": "d49f3a1fe6f6343032c795e1e102c8ca68e89aeaa7e39dbc953468cd7ea2f2c8",
+            "bytes": 59
+        },
+        "api-core": {
+            "status": 401,
+            "sha256": "d49f3a1fe6f6343032c795e1e102c8ca68e89aeaa7e39dbc953468cd7ea2f2c8",
+            "bytes": 59
+        },
+        "err-404-page": {
+            "status": 404,
+            "sha256": "ec1854757ec632784e66fb3b44ac6cfcbb256a9ec25b1258fb0aea00fc966525",
+            "bytes": 47
+        },
+        "err-404-public": {
+            "status": 404,
+            "sha256": "ec1854757ec632784e66fb3b44ac6cfcbb256a9ec25b1258fb0aea00fc966525",
+            "bytes": 47
+        },
+        "err-404-route": {
+            "status": 404,
+            "sha256": "ac4c98633089b472722fb7d18ea42ba73b4520574303dcd6afb36e820fae14f7",
+            "bytes": 37
+        },
+        "err-400-slug": {
+            "status": 404,
+            "sha256": "ac4c98633089b472722fb7d18ea42ba73b4520574303dcd6afb36e820fae14f7",
+            "bytes": 37
+        },
+        "err-400-type": {
+            "status": 404,
+            "sha256": "ac4c98633089b472722fb7d18ea42ba73b4520574303dcd6afb36e820fae14f7",
+            "bytes": 37
+        },
+        "err-401-search": {
+            "status": 401,
+            "sha256": "d49f3a1fe6f6343032c795e1e102c8ca68e89aeaa7e39dbc953468cd7ea2f2c8",
+            "bytes": 59
+        },
+        "err-401-plugins": {
+            "status": 401,
+            "sha256": "d49f3a1fe6f6343032c795e1e102c8ca68e89aeaa7e39dbc953468cd7ea2f2c8",
+            "bytes": 59
+        },
+        "err-404-plugin": {
+            "status": 404,
+            "sha256": "c88122ee616b4855e7b13fb790bce633c6671f317eb40f6dd6a2922a8cd9c8e4",
+            "bytes": 60
+        },
+        "err-404-plugin2": {
+            "status": 404,
+            "sha256": "c88122ee616b4855e7b13fb790bce633c6671f317eb40f6dd6a2922a8cd9c8e4",
+            "bytes": 60
+        },
+        "err-400-media": {
+            "status": 401,
+            "sha256": "d49f3a1fe6f6343032c795e1e102c8ca68e89aeaa7e39dbc953468cd7ea2f2c8",
+            "bytes": 59
+        }
+    }
+}

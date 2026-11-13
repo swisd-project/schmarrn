@@ -42,7 +42,7 @@ function acquire(string $type, string $slug, string $user, bool $force = false):
 {
     $record = record($type, $slug);
     if ($record !== null && $record['user'] !== $user && !$force) {
-        \Router\refuse(409, "Page locked by {$record['user']}. Take over or wait.");
+        throw new \Domain\Error(409, "Page locked by {$record['user']}. Take over or wait.");
         return;
     }
     $file = fileFor($type, $slug);
@@ -51,7 +51,7 @@ function acquire(string $type, string $slug, string $user, bool $force = false):
     $fresh = json_encode(['user' => $user, 'exp' => time() + TTL]);
     if (file_put_contents($tmp, $fresh) === false || !rename($tmp, $file)) {
         @unlink($tmp);
-        \Router\refuse(500, 'The kitchen ticket rail jammed — lock write failed.');
+        throw new \Domain\Error(500, 'The kitchen ticket rail jammed — lock write failed.');
     }
     if ($force && $record !== null && $record['user'] !== $user) {
         @error_log("[schmarrn-lock] {$user} took over {$type}/{$slug} from {$record['user']}");
@@ -63,6 +63,6 @@ function assertFreeOrMine(string $type, string $slug, string $user): void
 {
     $record = record($type, $slug);
     if ($record !== null && $record['user'] !== $user) {
-        \Router\refuse(409, "Page locked by {$record['user']}. Take over or wait.");
+        throw new \Domain\Error(409, "Page locked by {$record['user']}. Take over or wait.");
     }
 }

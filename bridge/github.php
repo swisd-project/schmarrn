@@ -24,6 +24,8 @@ namespace Github;
 const API = 'https://api.github.com';
 const BYTE_CAP = 20 * 1024 * 1024; // a repo zip under the roof — 20 MB
 
+require_once __DIR__ . '/vault.php'; // the vault rides every github load — token() opens envelopes
+
 /** The account store — git-ignored, writable, one file. */
 function configFile(): string
 {
@@ -47,9 +49,14 @@ function state(): array
     return is_array($data) ? $data : [];
 }
 
-/** The token, or null when no account is connected. */
+/** The token, or null when no account is connected. Vault-sealed first; the
+ *  pre-vault plaintext in the state file still answers (legacy rigs keep working). */
 function token(): ?string
 {
+    $sealed = \Vault\open('github.token');
+    if ($sealed !== null) {
+        return $sealed;
+    }
     $t = state()['token'] ?? null;
     return is_string($t) && $t !== '' ? $t : null;
 }
@@ -61,16 +68,19 @@ function login(): ?string
     return is_string($l) && $l !== '' ? $l : null;
 }
 
-/** Remember the account — the token and the login it belongs to. */
+/** Remember the account — the TOKEN lives sealed in the house vault; the state
+ *  file carries only the reference and the login it belongs to. A legacy
+ *  plaintext token (pre-vault) is wiped the moment a new one is sealed. */
 function remember(string $token, string $login): void
 {
+    \Vault\seal('github.token', $token);
     $dir = __DIR__ . '/config';
     if (!is_dir($dir)) {
         @mkdir($dir, 0775, true);
     }
     $file = configFile();
-    @file_put_contents($file, "<?php\n// GitHub account — written by the dashboard's Integrations card.\nreturn " . var_export([
-        'token' => $token,
+    @file_put_contents($file, "<?php\n// GitHub account — written by the dashboard's Integrations card. The token rests sealed in the vault.\nreturn " . var_export([
+        'tokenVault' => 'github.token',
         'login' => $login,
         'at' => time(),
     ], true) . ";\n");
@@ -82,6 +92,7 @@ function remember(string $token, string $login): void
 /** Let the account go — the token dies with the file. */
 function forget(): void
 {
+    \Vault\forget('github.token'); // the envelope dies with the account
     $file = configFile();
     if (is_file($file)) {
         @unlink($file);
@@ -471,15 +482,15 @@ function install(string $input, string $kind, string $path = ''): array
 {
     $parsed = parseRepo($input);
     if ($parsed === null) {
-        \Router\refuse(400, 'That is not a repo reference — give owner/repo or a GitHub URL.');
+        throw new \Domain\Error(400, 'That is not a repo reference — give owner/repo or a GitHub URL.');
     }
     [$owner, $repo] = $parsed;
     if (!in_array($kind, ['plugin', 'template'], true)) {
-        \Router\refuse(400, 'A ware is either a plugin or a template — the kind must say which.');
+        throw new \Domain\Error(400, 'A ware is either a plugin or a template — the kind must say which.');
     }
     $look = inspect($input);
     if (($look['error'] ?? '') !== '') {
-        \Router\refuse(400, (string)$look['error']);
+        throw new \Domain\Error(400, (string)$look['error']);
     }
     $ware = null;
     foreach ((array)($look['wares'] ?? []) as $candidate) {
@@ -491,10 +502,10 @@ function install(string $input, string $kind, string $path = ''): array
         }
     }
     if ($ware === null) {
-        \Router\refuse(404, "That repo holds no such {$kind} — the look and the stage must agree.");
+        throw new \Domain\Error(404, "That repo holds no such {$kind} — the look and the stage must agree.");
     }
     if (($ware['error'] ?? '') !== '') {
-        \Router\refuse(400, (string)$ware['error']);
+        throw new \Domain\Error(400, (string)$ware['error']);
     }
     $name = (string)$ware['name'];
 
@@ -505,20 +516,20 @@ function install(string $input, string $kind, string $path = ''): array
     if (!download($url, $zip)) {
         @unlink($zip);
         @rmdir($scratch);
-        \Router\refuse(502, "The repo would not come down — GitHub refused, or the packet is over the roof.");
+        throw new \Domain\Error(502, "The repo would not come down — GitHub refused, or the packet is over the roof.");
     }
     $top = unpack($zip, $scratch);
     @unlink($zip);
     if ($top === null) {
         @rmdir($scratch);
-        \Router\refuse(400, "The repo would not open — the pack job failed.");
+        throw new \Domain\Error(400, "The repo would not open — the pack job failed.");
     }
     $wareDir = $top;
     if ($path !== '') {
         $candidate = $top . '/' . $path;
         if (!is_dir($candidate)) {
             @rmdir($scratch);
-            \Router\refuse(400, "The repo's folder '{$path}' did not come down with it.");
+            throw new \Domain\Error(400, "The repo's folder '{$path}' did not come down with it.");
         }
         $wareDir = $candidate;
     }
@@ -538,7 +549,7 @@ function stageWare(string $wareDir, string $kind, string $name, array $ware, str
     $home = $kind === 'plugin' ? __DIR__ . '/plugins' : __DIR__ . '/templates';
     $target = $home . '/' . $name;
     if (is_dir($target)) {
-        \Router\refuse(409, "'{$name}' already sits on the shelf — delete it first if you want this one.");
+        throw new \Domain\Error(409, "'{$name}' already sits on the shelf — delete it first if you want this one.");
     }
     if (!is_dir($home)) {
         @mkdir($home, 0775, true);
@@ -548,24 +559,24 @@ function stageWare(string $wareDir, string $kind, string $name, array $ware, str
         $manifest = json_decode((string)@file_get_contents($wareDir . '/plugin.json'), true);
         $verdict = is_array($manifest) ? \Plugins\validate($name, $manifest) : 'manifest unreadable';
         if (!is_array($manifest) || ($manifest['name'] ?? null) !== $name || is_string($verdict)) {
-            \Router\refuse(400, "'{$name}' arrived with a plugin.json this core refuses"
+            throw new \Domain\Error(400, "'{$name}' arrived with a plugin.json this core refuses"
                 . (is_string($verdict) ? ": {$verdict} — nothing staged." : ' — nothing staged.'));
         }
         // THE LID: the code must resolve — and it stays UNRUN. The enable
         // switch is the only door to running it, and the admin's hand.
         $fault = \Plugins\codeCheck($wareDir);
         if ($fault !== null) {
-            \Router\refuse(400, "'{$name}' arrived with code this core refuses: {$fault} Nothing staged.");
+            throw new \Domain\Error(400, "'{$name}' arrived with code this core refuses: {$fault} Nothing staged.");
         }
     } else {
         $manifest = json_decode((string)@file_get_contents($wareDir . '/theme.json'), true);
         if (!is_array($manifest)) {
-            \Router\refuse(400, "'{$name}' arrived without an intact theme.json — nothing staged.");
+            throw new \Domain\Error(400, "'{$name}' arrived without an intact theme.json — nothing staged.");
         }
     }
 
     if (!place($wareDir, $target)) {
-        \Router\refuse(500, "The ware would not land on the shelf — the folder refused.");
+        throw new \Domain\Error(500, "The ware would not land on the shelf — the folder refused.");
     }
 
     // provenance: the ledger remembers where this came from
