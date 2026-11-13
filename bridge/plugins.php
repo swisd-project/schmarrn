@@ -278,6 +278,32 @@ function validate(string $name, array $manifest): array|string
         }
     }
 
+    // Admin tabs (2026-11-13, slice 5a): manifest-declared tabs the admin
+    // overlay carries beside the built-ins. {id,label,route} — id namespaced
+    // with the plugin's underscored prefix (the editorBlocks law), label
+    // ≤ 40, route must be one of the plugin's OWN declared routes above (no
+    // dead tabs, no borrowed doors). Four tabs per plugin is already a shelf.
+    $adminTabs = [];
+    foreach ((array)($caps['admin']['tabs'] ?? []) as $tab) {
+        if (!is_array($tab)) {
+            continue;
+        }
+        $tabId = is_string($tab['id'] ?? null) ? (string)$tab['id'] : '';
+        $tabLabel = is_string($tab['label'] ?? null) ? trim((string)$tab['label']) : '';
+        $tabRoute = is_string($tab['route'] ?? null) ? (string)$tab['route'] : '';
+        if (!str_starts_with($tabId, prefix($name) . '_')
+            || preg_match('/^[a-z0-9_-]{1,63}$/', $tabId) !== 1
+            || $tabLabel === ''
+            || preg_match(IDENTIFIER, $tabRoute) !== 1
+            || !in_array($tabRoute, array_map(fn($r) => $r['path'], $routes), true)) {
+            continue;
+        }
+        $adminTabs[] = ['id' => $tabId, 'label' => mb_substr($tabLabel, 0, 40), 'route' => $tabRoute];
+        if (count($adminTabs) >= 4) {
+            break;
+        }
+    }
+
     // Plugin settings (2026-11-11): manifest-declared admin-editable fields.
     // {key, label, type} — key is a storage slot under the plugin's own name
     // (no shared namespace, so no prefix law), label ≤ 60 chars, type ∈
@@ -351,6 +377,7 @@ function validate(string $name, array $manifest): array|string
         'editorBlocks' => $editorBlocks,
         'settings' => $settings,
         'panel' => $panel,
+        'adminTabs' => $adminTabs,
         'contentFilters' => $contentFilters,
         'drawer' => $drawer,
     ];

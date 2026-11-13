@@ -263,6 +263,13 @@ refusal('F2 an undeclared plugin route is 404', 404, 'That plugin serves nothing
 refusal('F3 a plugin that is not installed is 404', 404, 'That plugin serves nothing — no such route.',
     req('GET', '/bridge/plugin/no-such-plugin/status', null, $cookie, $csrf));
 
+refusal('F4 the admin-tabs shelf is locked to strangers', 401, 'The kitchen door is locked — log in first.',
+    req('GET', '/bridge/admin-tabs'));
+
+$r = req('GET', '/bridge/admin-tabs', null, $cookie, $csrf);
+$tabs = json_decode($r[1] ?? '[]', true);
+Harness::check('F5 the authed admin-tabs shelf answers an honest array', $r[0] === 200 && is_array($tabs) && $tabs === [], json_encode($tabs));
+
 // ——— the teardown ———
 proc_terminate($proc, SIGKILL);
 foreach ($pipes as $pipe) {

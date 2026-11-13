@@ -393,6 +393,26 @@ async function boot(root: HTMLElement): Promise<void> {
         }
       }, [label]));
     }
+    // The plugins' own tabs (slice 5a, 2026-11-13): navigation-only items
+    // under the built-ins — no plugin JS ever runs here. Fail-quiet: the
+    // band lands late and a dark shelf leaves the drawer bare.
+    void apiJson<{ tabs?: { name?: unknown; id?: unknown; label?: unknown }[] }>('/bridge/admin-tabs')
+      .then((res) => {
+        if (!Array.isArray(res?.tabs)) return;
+        for (const t of res.tabs) {
+          if (typeof t?.name !== 'string' || typeof t?.id !== 'string' || typeof t?.label !== 'string') continue;
+          const key = `plugin:${t.name}/${t.id}`;
+          menu.append(el('button', {
+            type: 'button',
+            role: 'menuitem',
+            onclick: (e) => {
+              e.stopPropagation();
+              window.location.href = backHref(window.location.pathname, window.location.hash, key);
+            }
+          }, [t.label]));
+        }
+      })
+      .catch(() => {});
     menu.append(
       el('button', {
         type: 'button',

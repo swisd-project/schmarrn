@@ -899,6 +899,34 @@ try {
             echo json_encode($defs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
             break;
 
+        // ——— admin tabs (slice 5a): the overlay tabs of every ENABLED plugin,———
+        // ——— visible only when the tab's route auth fits the session's role ———
+        case $method === 'GET' && $path === 'admin-tabs':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            $tabs = [];
+            foreach (Plugins\all() as $plugin) {
+                if (isset($plugin['error']) || $plugin['enabled'] !== true) {
+                    continue;
+                }
+                foreach ($plugin['adminTabs'] as $tab) {
+                    $auth = 'user';
+                    foreach ($plugin['routes'] as $r) {
+                        if ($r['path'] === $tab['route']) {
+                            $auth = $r['auth'];
+                            break;
+                        }
+                    }
+                    if ($auth === 'admin' && !Auth\isAdmin()) {
+                        continue;
+                    }
+                    $tabs[] = ['name' => $plugin['name'], 'id' => $tab['id'], 'label' => $tab['label'], 'route' => $tab['route']];
+                }
+            }
+            echo json_encode($tabs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            break;
+
         // ——— account management: admin-only, CSRF-gated ———
         case $method === 'GET' && $path === 'accounts':
             if (!Auth\check()) {

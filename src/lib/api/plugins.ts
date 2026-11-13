@@ -76,6 +76,19 @@ export function pluginPanelAction(
   }).then((r) => json<PluginPanel>(r));
 }
 
+/** The admin-tabs surface (slice 5a, 2026-11-13): every ENABLED plugin's
+ *  manifest-declared overlay tabs, role-filtered at the core. */
+export interface AdminTabDef {
+  readonly name: string;
+  readonly id: string;
+  readonly label: string;
+  readonly route: string;
+}
+
+export function fetchAdminTabs(): Promise<readonly AdminTabDef[]> {
+  return fetch('/bridge/admin-tabs').then((r) => json<readonly AdminTabDef[]>(r));
+}
+
 export interface PluginRef {
   readonly name: string;
   readonly title: string;

@@ -1,7 +1,7 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
   // a burger opens the full-screen overlay (Contents / Settings / Plugins & Templates / Users).
-  import { session, login, logout, pageCount, searchPages, deletePage, renamePage, setupStatus, runSetup, getSiteSettings, saveSiteSettings, uploadSiteAsset, listPlugins, setPlugins, deletePlugin, savePluginSettings, listTemplates, activateTemplate, deleteTemplate, coreStatus, uploadCorePacket, runCoreUpdate, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, githubStatus, githubInspect, githubInstall, mailStatus, type PageRef, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef, type ThemeHandle, type GithubLook, type MailStatus } from '$lib/api';
+  import { session, login, logout, fetchAdminTabs, pageCount, searchPages, deletePage, renamePage, setupStatus, runSetup, getSiteSettings, saveSiteSettings, uploadSiteAsset, listPlugins, setPlugins, deletePlugin, savePluginSettings, listTemplates, activateTemplate, deleteTemplate, coreStatus, uploadCorePacket, runCoreUpdate, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, githubStatus, githubInspect, githubInstall, mailStatus, type PageRef, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef, type ThemeHandle, type GithubLook, type MailStatus, type AdminTabDef } from '$lib/api';
   import { adminCloseTarget } from '$lib/back';
   import { base } from '$app/paths';
   import { schemaFor } from '$lib/schema';
@@ -25,6 +25,7 @@
   import PluginsTab from '$lib/components/PluginsTab.svelte';
   import ContentsTab from '$lib/components/ContentsTab.svelte';
   import Toasts from '$lib/components/Toasts.svelte';
+  import PluginPanel from '$lib/components/PluginPanel.svelte';
   import { toast } from '$lib/toast.svelte';
 
   let authenticated = $state<boolean | null>(null);
@@ -56,7 +57,9 @@
             const allowed: readonly Tab[] = s.role === 'admin'
               ? ['contents', 'settings', 'plugins', 'templates', 'updates', 'users']
               : ['contents'];
-            if ((allowed as readonly string[]).includes(wanted)) showTab(wanted as Tab);
+            // the plugins' own tabs ride the same door — shape-checked, not listed
+            const pluginTab = wanted.startsWith('plugin:') && /^[a-z0-9-]+\/[a-z0-9_-]{1,63}$/.test(wanted.slice(7));
+            if ((allowed as readonly string[]).includes(wanted) || pluginTab) showTab(wanted as Tab);
             openMenu();
             if (s.role === 'admin') {
               void loadCore();
@@ -220,12 +223,24 @@
   }
 
   // ——— the burger overlay: Pages / Site / Accounts / Media / Plugins ———
-  type Tab = 'contents' | 'settings' | 'plugins' | 'templates' | 'updates' | 'users';
+  type Tab = 'contents' | 'settings' | 'plugins' | 'templates' | 'updates' | 'users' | (string & {});
   let menuOpen = $state(false);
   let menuOpenedAt = 0;
   let allowClose = false; // blocks spurious untrusted closes (drawer-intent mount artifacts)
   let userClosing = false; // ONLY the X may trigger drawer-intent return
   let tab = $state<Tab>('contents');
+
+  // the plugins' own overlay tabs (slice 5a, 2026-11-13): manifest-declared,
+  // role-filtered by the core — rendered through the generic panel law.
+  let adminTabs = $state<readonly AdminTabDef[]>([]);
+
+  async function loadAdminTabs() {
+    try {
+      adminTabs = await fetchAdminTabs();
+    } catch {
+      adminTabs = []; // fail-quiet: a dark shelf leaves the nav bare
+    }
+  }
 
   /** The dialog takes focus when it mounts (auto-open leaves nothing focused —
    *  and without it, keyboard flow starts nowhere). Pure desktop manners. */
@@ -238,6 +253,7 @@
     userClosing = false;
     setTimeout(() => (allowClose = true), 1000);
     if (role === 'admin') void loadSiteSettings(); // warm the site form while the overlay opens
+    void loadAdminTabs(); // the plugins' own tabs ride the nav
   }
 
   async function closeMenu(e?: Event) {
@@ -874,6 +890,10 @@
         </button>
         <button class="btn {tab === 'users' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('users')}>Users</button>
       {/if}
+      {#each adminTabs as t, ti (ti)}
+        <button class="btn {tab === `plugin:${t.name}/${t.id}` ? 'btn-primary' : 'btn-secondary'}"
+          onclick={() => showTab(`plugin:${t.name}/${t.id}`)}>{t.label}</button>
+      {/each}
     </nav>
 
     <div class="flex-1 min-h-0 px-4 mx-auto w-full {tab === 'contents' || tab === 'templates' || tab === 'plugins' || tab === 'settings' ? 'pb-4 max-w-none' : 'pb-12 max-w-4xl overflow-y-auto'}">
@@ -907,6 +927,9 @@
         <UpdatesTab wares={vitrine} dark={vitrineDark} core={core} coreBusy={coreBusy}
           rideCore={updateCoreNow} parkPacket={parkCorePacket} refreshAfterCore={refreshAfterCore}
           installOne={installOne} />
+      {:else if tab.startsWith('plugin:')}
+        {@const [pname, proute] = tab.slice(7).split('/') as [string, string]}
+        <PluginPanel name={pname} route={proute} />
       {/if}
     </div>
   </div>

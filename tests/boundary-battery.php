@@ -136,5 +136,36 @@ Harness::check('B20 a foreign panel editor block is dropped', !in_array('foreign
 Harness::check('B21 the own editor blocks survive',
     in_array('probe_block', $blockNames, true) && in_array('probe_panel_block', $blockNames, true), implode(',', $blockNames));
 
+// ——— B22. the admin-tabs namespace (slice 5a) ———
+$m = \Plugins\validate('probe', [
+    'name' => 'probe', 'title' => 'Probe', 'version' => '0.1.0',
+    'capabilities' => [
+        'routes' => [['path' => 'desk', 'auth' => 'user']],
+        'admin' => ['tabs' => [
+            ['id' => 'probe_desk', 'label' => 'Desk', 'route' => 'desk'],
+            ['id' => 'foreign_desk', 'label' => 'Foreign', 'route' => 'desk'],
+            ['id' => 'probe_ghost', 'label' => 'Ghost', 'route' => 'no-such-route'],
+            ['id' => 'probe_dash', 'label' => 'No Door', 'route' => 'ghost-route'],
+            ['id' => 'probe_x', 'label' => '', 'route' => 'desk'],
+        ]],
+    ],
+]);
+$tabs = (array)($m['adminTabs'] ?? []);
+Harness::check('B22 the own namespaced tab with a declared route survives', count($tabs) === 1 && $tabs[0]['id'] === 'probe_desk', json_encode($tabs));
+Harness::check('B23 a foreign tab id is dropped', !in_array('foreign_desk', array_column($tabs, 'id'), true), 'survived');
+Harness::check('B24 a tab whose route the plugin never declared is dropped', !in_array('probe_ghost', array_column($tabs, 'id'), true), 'survived');
+
+$m = \Plugins\validate('probe', [
+    'name' => 'probe', 'title' => 'Probe', 'version' => '0.1.0',
+    'capabilities' => [
+        'routes' => [['path' => 'desk', 'auth' => 'user']],
+        'admin' => ['tabs' => array_map(
+            static fn($i) => ['id' => 'probe_t' . $i, 'label' => 'T' . $i, 'route' => 'desk'],
+            range(1, 6)
+        )],
+    ],
+]);
+Harness::check('B25 more than four tabs cap at four', count($m['adminTabs']) === 4, (string)count($m['adminTabs']));
+
 // ——— the verdict ———
 Harness::verdict('boundary battery');

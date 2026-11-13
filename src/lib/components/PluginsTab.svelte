@@ -20,7 +20,8 @@
    * 6. Copyright (c) 2026 Homahuki GmbH
    */
 
-  import { deletePlugin, fetchPluginPanel, listPlugins, pluginPanelAction, savePluginSettings, setPlugins, type GithubLook, type PluginPanel, type PluginRef, type WareRef } from '$lib/api';
+  import { deletePlugin, listPlugins, savePluginSettings, setPlugins, type GithubLook, type PluginRef, type WareRef } from '$lib/api';
+  import PluginPanel from '$lib/components/PluginPanel.svelte';
   import GithubShelf from './GithubShelf.svelte';
   import PanelModal from './PanelModal.svelte';
 
@@ -91,16 +92,6 @@
   let settingsBusy = $state(false);
   let settingsNote = $state('');
 
-  // The plugin's own PANEL (2026-11-12): the core renders what the plugin
-  // hands over and understands none of it — the words, the buttons, the list
-  // and the one-time reveal are the plugin's own. The plugin answers its
-  // declared panel route (GET = descriptor, POST = an action).
-  let panelData = $state<PluginPanel | null>(null);
-  let panelBusy = $state(false);
-  let panelNote = $state('');
-  let panelModal = $state<null | { id: string; label: string; type: string; placeholder: string }>(null);
-  let panelShow = $state<{ label: string; value: string } | null>(null);
-
   let pluginsBusy = $state(false);
   let pluginsError = $state('');
 
@@ -154,57 +145,11 @@
     pluginRows.find((r) => r.name === selectedPlugin) ?? pluginRows[0] ?? null
   );
 
-  async function loadPanel(plugin: PluginRef | null) {
-    if (!plugin?.panel) {
-      panelData = null;
-      return;
-    }
-    try {
-      panelData = await fetchPluginPanel(plugin.name, plugin.panel.route);
-    } catch (e) {
-      panelNote = e instanceof Error ? e.message : String(e);
-    }
-  }
-
-  async function panelAction(action: { id: string; label: string }, rowId = '', value = '') {
-    const plugin = selectedPluginRow?.plugin;
-    if (!plugin?.panel || panelBusy) return;
-    panelBusy = true;
-    panelNote = '';
-    try {
-      const data = await pluginPanelAction(plugin.name, plugin.panel.route, {
-        action: action.id,
-        id: rowId,
-        value
-      });
-      panelData = data;
-      panelModal = null;
-      if (data.show) panelShow = { label: data.show.label, value: data.show.value };
-    } catch (e) {
-      panelNote = e instanceof Error ? e.message : String(e);
-    } finally {
-      panelBusy = false;
-    }
-  }
-
-  async function copyPanelShow() {
-    if (!panelShow) return;
-    try {
-      await navigator.clipboard.writeText(panelShow.value);
-      panelNote = 'Copied.';
-    } catch {
-      panelNote = 'Copy failed — select it by hand.';
-    }
-  }
-
   $effect(() => {
     const row = selectedPluginRow;
     pluginSettingsDraft = { ...(row?.plugin?.settingsValues ?? {}) };
     revealedSecrets = {};
     settingsNote = '';
-    panelShow = null;
-    panelNote = '';
-    void loadPanel(row?.plugin ?? null);
   });
 
   async function savePluginSettingsNow() {
@@ -381,92 +326,7 @@
         {:else}
           <div class="flex flex-col gap-3">
             {#if selectedPluginRow.plugin?.panel}
-              {@const panel = panelData}
-              <div class="flex flex-col gap-2">
-                {#if panel?.title}
-                  <h4 class="m-0 text-sm font-semibold">{panel.title}</h4>
-                {/if}
-                {#if panel?.note}
-                  <p class="m-0 text-xs text-ink-soft">{panel.note}</p>
-                {/if}
-                {#if panel?.status}
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-sm font-semibold">{panel.status.label}</span>
-                    <span class="badge">{panel.status.value}</span>
-                  </div>
-                {/if}
-                {#if (panel?.actions?.length ?? 0) > 0}
-                  <div class="flex items-center gap-2 flex-wrap">
-                    {#each panel?.actions ?? [] as a, ai (ai)}
-                      {#if a.modal}
-                        {@const modal = a.modal}
-                        <button
-                          class="btn btn-secondary"
-                          disabled={panelBusy}
-                          onclick={() => {
-                            panelModal = {
-                              id: a.id,
-                              label: modal.label,
-                              type: modal.type ?? 'text',
-                              placeholder: modal.placeholder ?? ''
-                            };
-                          }}
-                        >{a.label}</button>
-                      {:else}
-                        <button
-                          class="btn btn-secondary"
-                          disabled={panelBusy}
-                          onclick={() => panelAction(a)}
-                        >{a.label}</button>
-                      {/if}
-                    {/each}
-                  </div>
-                {/if}
-
-                {#if panelShow}
-                  <div class="border border-line p-2 flex flex-col gap-1">
-                    <p class="m-0 text-xs text-ink-soft">{panelShow.label}</p>
-                    <code class="text-xs break-all select-all">{panelShow.value}</code>
-                    <div class="flex gap-2">
-                      <button class="btn btn-secondary" onclick={copyPanelShow}>Copy</button>
-                      <button class="btn-ghost" onclick={() => (panelShow = null)}>Dismiss</button>
-                    </div>
-                  </div>
-                {/if}
-
-                {#if panel?.list}
-                  <div class="flex items-center gap-2 text-xs uppercase tracking-wide text-ink-soft">
-                    <span class="h-px flex-1 bg-line"></span>
-                    <span>{panel.list.label ?? ''}</span>
-                    <span class="h-px flex-1 bg-line"></span>
-                  </div>
-                  {#if (panel.list.rows?.length ?? 0) === 0}
-                    <p class="m-0 italic text-ink-soft">Nothing here yet.</p>
-                  {:else}
-                    <ul class="list-none p-0 m-0 flex flex-col gap-1">
-                      {#each panel.list.rows ?? [] as row, i (row.id ?? i)}
-                        <li class="flex items-center gap-2 text-sm flex-wrap">
-                          {#each panel.list.columns ?? [] as col (col.key)}
-                            <span>{row.cells?.[col.key] ?? ''}</span>
-                          {/each}
-                          {#if (row.actions?.length ?? 0) > 0}
-                            <span class="flex gap-1 ml-auto">
-                              {#each row.actions ?? [] as ra, ri (ri)}
-                                <button
-                                  class="btn-ghost"
-                                  disabled={panelBusy}
-                                  onclick={() => panelAction(ra, row.id)}
-                                >{ra.label}</button>
-                              {/each}
-                            </span>
-                          {/if}
-                        </li>
-                      {/each}
-                    </ul>
-                  {/if}
-                {/if}
-                {#if panelNote}<p class="m-0 text-xs text-ink-soft">{panelNote}</p>{/if}
-              </div>
+              <PluginPanel name={selectedPluginRow.plugin.name} route={selectedPluginRow.plugin.panel.route} />
             {/if}
 
             {#if (selectedPluginRow.plugin?.settings?.length ?? 0) > 0}
@@ -638,5 +498,3 @@
   </section>
 </div>
 
-<PanelModal bind:request={panelModal} panel={panelData} bind:busy={panelBusy} bind:note={panelNote}
-  onaction={(act, value) => panelAction(act, '', value)} />
