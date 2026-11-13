@@ -208,9 +208,13 @@
   // ——— the parent keeps the index truth, the modals, and openPageSettings. ———
   /** Onto the live page: editing lives there (the injected editor). */
   function select(type: string, slug: string) {
-    // The canvas retired — editing lives on the LIVE page now (the injected editor).
-    // The dashboard is management-only: picking a page walks you onto it.
-    window.location.href = type === 'pages' ? `/${slug}` : `/${type}/${slug}`;
+    // The editor rides ONLY under /_ (the 2026-11-07 URL law; serve.php
+    // bounces an unauthed visitor there to the public face — the server-side
+    // guardrail). From the desk, the authed hand walks onto the LIVE page in
+    // editor mode; a lost session rides the plain path and reads it like a
+    // visitor (2026-11-13, user order: logged in = onto /_).
+    const path = type === 'pages' ? `/${slug}` : `/${type}/${slug}`;
+    window.location.href = authenticated === true ? `/_${path}` : path;
   }
 
   // ——— the burger overlay: Pages / Site / Accounts / Media / Plugins ———

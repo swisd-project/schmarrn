@@ -26,7 +26,8 @@
    * 6. Copyright (c) 2026 Homahuki GmbH
    */
 
-  import { deletePage, getDraftRaw, pageCount, putDraftRaw, renamePage, searchPages, type PageIndex, type PageRef } from '$lib/api';
+  import { deletePage, getDraftRaw, pageCount, publishDraft, putDraftRaw, renamePage, searchPages, type PageIndex, type PageRef } from '$lib/api';
+  import { renderMdms } from '$lib/render';
 
   let {
     index = $bindable<PageIndex | null>(null),
@@ -161,10 +162,19 @@
     deskError = '';
     deskNote = '';
     try {
+      // 1. the guarded write lands on the editorial copy first — the hash
+      //    guard holds against a concurrent editor, the lock rides on
       baseHash = await putDraftRaw(sel.type, sel.slug, raw, baseHash);
       baseline = raw;
       unlocked = false; // the lock returns when the page is saved — the law
-      deskNote = 'Draft saved — publish from ✑ when it is ready for the public face.';
+      // 2. a published page BAKES in the same move: the sidecar becomes the
+      //    page, the cache warms with the rendered body (the ✑ path's shape)
+      if (bakable) {
+        await publishDraft(sel.type, sel.slug, renderMdms(raw, { type: sel.type, slug: sel.slug }).fullHtml);
+        deskNote = 'Saved & baked — live on the public face.';
+      } else {
+        deskNote = "Saved — a draft-born page has no public face yet; ✑ or the editor carries its first bake.";
+      }
       index = await pageCount(); // the tree's draft/edits badges re-read
       if (searchQ.trim() !== '') onSearchInput(); // the needle re-runs — hits re-read
     } catch (e) {
@@ -174,8 +184,14 @@
     }
   }
 
+  // the bake verdict rides the state the sheet OPENED with (baseline): a
+  // published page bakes on save; a draft-born page has no public face to
+  // reach (2026-11-13, user order: an unlocked save saves AND bakes — the
+  // desk never makes you detour through ✑ to see your words live).
+  const bakable = $derived(sel !== null && /^published:[ \t]*true\b/m.test(baseline));
+
   function deskKeydown(event: KeyboardEvent) {
-    // Ctrl/Cmd+S saves the draft — the one reflex a text desk owes its writer.
+    // Ctrl/Cmd+S saves — and bakes a published page in one move.
     if ((event.ctrlKey || event.metaKey) && event.key === 's') {
       event.preventDefault();
       void saveRaw();
@@ -270,13 +286,20 @@
                   {#if row.page.draft}<span class="badge badge-draft">draft</span>{/if}
                   {#if row.page.hasDraft}<span class="badge badge-live">edits</span>{/if}
                 </button>
-                <!-- THE CURSOR LAW, FLIPPED (2026-11-13, user order):
-                     LOCKED sheet = the row's edit verbs are out of
-                     reach (not-allowed); UNLOCKED = they invite the
-                     hand. A user cannot unlock two files at a time —
-                     the eye reads which file is in surgery. -->
-                <button class="btn-ghost" class:cursor-not-allowed={!unlocked} title="Rename" onclick={() => startRename(row.type, row.page.slug)}>✎</button>
-                <button class="btn-ghost" class:cursor-not-allowed={!unlocked} title="Page settings" onclick={() => openPageSettings(row.type, row.page.slug)}>✑</button>
+                <!-- THE LOCK LAW, THIRD WORD (2026-11-13, user order —
+                     the cursor used to lie; now the gates carry it):
+                     LOCKED sheet = the mutators (✎ ✑ ×) are out of
+                     reach — disabled AND not-allowed; UNLOCKED =
+                     surgery open, the sheet owns the hands — the
+                     mutators answer, and ↗ steps back (never leave a
+                     file mid-surgery; the open-live door returns the
+                     moment the lock does). A user cannot unlock two
+                     files at a time — the eye reads which file is in
+                     surgery. -->
+
+
+                <button class="btn-ghost" class:cursor-not-allowed={!unlocked} disabled={!unlocked} title={unlocked ? 'Rename' : 'Open the page and press Unlock first — the row verbs follow the unlock'} onclick={() => startRename(row.type, row.page.slug)}>✎</button>
+                <button class="btn-ghost" class:cursor-not-allowed={!unlocked} disabled={!unlocked} title={unlocked ? 'Page settings' : 'Open the page and press Unlock first — the row verbs follow the unlock'} onclick={() => openPageSettings(row.type, row.page.slug)}>✑</button>
                 {#if row.page.home}
                   <!-- the home page stands: no delete, ever (the lid is server-side too) -->
                 {:else}
@@ -288,7 +311,7 @@
                     onclick={() => removePage(row.type, row.page.slug)}
                   >×</button>
                 {/if}
-                <button class="btn-ghost" class:cursor-not-allowed={!unlocked} title="Open the live page" onclick={() => openLive(row.type, row.page.slug)}>↗</button>
+                <button class="btn-ghost" class:cursor-not-allowed={unlocked} disabled={unlocked} title={unlocked ? 'Close the surgery first — never leave a file mid-surgery' : 'Open the live page'} onclick={() => openLive(row.type, row.page.slug)}>↗</button>
               </div>
               {#if renaming?.type === row.type && renaming?.slug === row.page.slug}
                 {@const to = renaming.value.trim().toLowerCase()}
@@ -316,14 +339,14 @@
     <div class="sm-desk-foot">
       {#if deskError}<p class="alert alert-err m-0" role="alert">{deskError}</p>{/if}
       {#if deskNote}<p class="alert alert-ok m-0">{deskNote}</p>{/if}
-      <!-- the save button only wakes when the sheet actually differs -->
+      <!-- the save button bakes a published page; a draft-born page saves its copy -->
       <button
         class="btn btn-primary w-full justify-center"
         disabled={!dirty || deskBusy}
         onclick={() => saveRaw()}
-        title="Save the draft (Ctrl+S)"
+        title={bakable ? 'Save & bake live (Ctrl+S)' : 'Save the draft (Ctrl+S)'}
       >
-        {#if deskBusy}Saving…{:else if dirty}Save draft{:else}Saved{/if}
+        {#if deskBusy}Baking…{:else if dirty}{bakable ? 'Save & bake' : 'Save draft'}{:else}Saved{/if}
       </button>
       <div class="flex gap-1">
         <button class="btn btn-secondary flex-1 justify-center" onclick={() => openNew?.()}>+ New</button>
@@ -340,7 +363,7 @@
   <div class="sm-desk-main">
     {#if sel === null}
       <div class="flex-1 grid place-items-center text-center p-6">
-        <p class="m-0 italic text-ink-soft">Pick a file from the tree — its markdown opens here. The draft saves guarded; publish from ✑.</p>
+        <p class="m-0 italic text-ink-soft">Pick a file from the tree — its markdown opens here. Ctrl+S on a published page saves AND bakes it live in one move; a draft-born page saves its editorial copy.</p>
       </div>
     {:else}
       <div class="flex items-center gap-2 flex-wrap">
@@ -358,7 +381,7 @@
       </div>
       <p class="m-0 text-xs text-ink-soft">
         The visual editor is the house way — open the live page (↗) and click what you see.
-        This sheet writes raw markdown: unlock only for surgery, and it locks again on save.
+        This sheet writes raw markdown: unlock only for surgery. Saving locks again — and a published page bakes live in the same move.
       </p>
       <textarea
         class="sm-desk-sheet"

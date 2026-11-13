@@ -70,14 +70,30 @@ function peek(string $raw): array
         $out['style'] = $m[1];
     }
 
-    // tags — the app's own flow-array shape, JSON-decoded in one move
+    // tags — the app's own flow-array shape: JSON (the ✑ writer: tags: ["a"])
+    // AND bare YAML (the visual editor's yaml serializer: tags: [a, b]) —
+    // both legal in the house; one tolerant reader, per-item (2026-11-13: the
+    // editor wrote tags the core could not read back — the listAll view lost
+    // them silently, the desk's tag filter stayed empty even after publish).
     if (preg_match('/^tags:[ \t]*\[(.*)\][ \t]*$/m', $raw, $m) === 1) {
-        $tags = json_decode('[' . trim($m[1]) . ']', true);
-        if (is_array($tags)) {
-            foreach ($tags as $tag) {
-                if (is_string($tag) && trim($tag) !== '') {
-                    $out['tags'][] = $tag;
+        foreach (explode(',', $m[1]) as $item) {
+            $tag = trim($item);
+            if ($tag === '') {
+                continue;
+            }
+            // a quoted item decodes through JSON when it can (escapes
+            // handled); a bare or single-quoted yaml word rides as itself,
+            // its matching quotes stripped
+            if ($tag[0] === '"' || $tag[0] === "'") {
+                $dec = json_decode($tag, true);
+                if (is_string($dec)) {
+                    $tag = $dec;
+                } elseif (strlen($tag) >= 2 && str_ends_with($tag, $tag[0])) {
+                    $tag = substr($tag, 1, -1);
                 }
+            }
+            if ($tag !== '') {
+                $out['tags'][] = $tag;
             }
         }
     }
