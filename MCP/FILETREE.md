@@ -39,6 +39,7 @@
 │   ├── lid-battery.php             # the code lid (14 cases, incl. the call-before-declaration repro)
 │   ├── battery-bienenstich.php     # the API ware's wall (30 cases) — rig built fresh from the tree every run
 │   ├── refusal-battery.php         # every domain refusal pinned to its exact status+body (24 cases) — the STEP 2 proof
+│   ├── core-update-battery.php     # the staging law + the FULL local ride (31 cases): isCore's word, a real packet through stageCore (rings carried, smuggles refused), then the knife on a rig — floor moved, rings survived, site still serves
 │   └── rig.php                     # the rig builder: a throwaway Schmarrn from the current tree (admin account, content, the bienenstich ware enabled)
 ├── tests/fixtures/baseline.json    # the byte-identity baseline (committed — the gate's reference)
 ├── bridge/                       # PHP core — front controller + libs, no framework; lives under /bridge (bit-scan prey no longer fed)

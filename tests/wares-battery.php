@@ -401,6 +401,34 @@ Harness::check('I1 a ware whose code calls what it never declares is refused',
 Harness::check('I2 nothing landed on the shelf',
     !is_file($core . '/bridge/plugins/mangled/plugin.php'), 'the broken ware landed');
 
+// ——— J. THE ENABLED LAW (2026-11-13, user order): enabled plugins are not
+// ——— deleted — disable first, then the shelf lets go.
+[$rc, $out] = ride($core, <<<'PHP'
+\Plugins\setState(['probe' => true]); // the switch flips ON
+try {
+    \Wares\removePlugin('probe');
+    echo "removed (!!)";
+} catch (\Domain\Error $e) {
+    echo "refused {$e->status}: {$e->getMessage()}";
+}
+PHP);
+Harness::check('J1 an ENABLED plugin is refused with 409', str_contains($out, 'refused 409') && str_contains($out, 'disable it before the deletion'), $out);
+Harness::check('J2 the enabled plugin is still on the shelf',
+    is_file($core . '/bridge/plugins/probe/plugin.json'), 'the folder left');
+
+[$rc, $out] = ride($core, <<<'PHP'
+\Plugins\setState(['probe' => false]); // the switch flips OFF
+try {
+    \Wares\removePlugin('probe');
+    echo "removed-ok";
+} catch (\Domain\Error $e) {
+    echo "refused {$e->status}: {$e->getMessage()}";
+}
+PHP);
+Harness::check('J3 a DISABLED plugin deletes', str_contains($out, 'removed-ok'), $out);
+Harness::check('J4 the shelf lets go of the folder',
+    !is_file($core . '/bridge/plugins/probe/plugin.json'), 'the folder survived');
+
 // ——— the verdict ———
 rmtree($sandbox);
 

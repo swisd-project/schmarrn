@@ -51,6 +51,7 @@ run "boundary battery (plugin × core wall)" php tests/boundary-battery.php
 run "lid battery (the code lid)" php tests/lid-battery.php
 run "bienenstich battery (the API ware's wall)" php tests/battery-bienenstich.php
 run "refusal battery (every domain refusal, pinned)" php tests/refusal-battery.php
+run "core-update battery (the staging law + the local ride)" php tests/core-update-battery.php
 
 # ——— the verdict ———
 echo ""

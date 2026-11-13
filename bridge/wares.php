@@ -752,6 +752,19 @@ function removePlugin(string $name): array
     if (!is_file($dir . '/plugin.json')) {
         throw new \Domain\Error(404, "'{$name}' is not an installed plugin.");
     }
+    // ——— THE ENABLED LAW (2026-11-13, user order): an ENABLED plugin cannot
+    // ——— be deleted — disable it first, then the shelf lets go. A running
+    // ——— ware's code disappearing under its own routes is a half-state the
+    // ——— site cannot survive; the gate lives HERE, server-side, not in a
+    // ——— hidden button.
+    foreach (\Plugins\all() as $p) {
+        if (($p['name'] ?? '') === $name) {
+            if (!empty($p['enabled'])) {
+                throw new \Domain\Error(409, "'{$name}' is enabled — disable it before the deletion.");
+            }
+            break;
+        }
+    }
     // ——— the chain law: a ware an EFFECTIVE ware stands on is not deleted ———
     foreach (\Plugins\all() as $p) {
         if (isset($p['error']) || empty($p['effective'])) {

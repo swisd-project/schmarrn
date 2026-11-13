@@ -366,8 +366,12 @@ function isCore(string $rel): bool
         return str_ends_with($rel, '.php') && !str_ends_with($rel, '.local.php');
     }
     if (str_starts_with($rel, 'build/') || str_starts_with($rel, '_/')
-        || str_starts_with($rel, 'bridge/assets/') || str_starts_with($rel, 'bridge/lib/')) {
+        || str_starts_with($rel, 'bridge/assets/') || str_starts_with($rel, 'bridge/lib/')
+        || str_starts_with($rel, 'bridge/domain/') || str_starts_with($rel, 'bridge/application/')) {
         return true; // the wholesale dirs — they walk in whole or not at all
+        // (bridge/domain/ + bridge/application/ joined 2026-11-13: the p8
+        // rings are core-owned code — an update that dropped them would
+        // brick every host, since the libs throw Domain\Error by import)
     }
     if (str_starts_with($rel, 'pagetypes/') && str_ends_with($rel, '.md')) {
         return true; // merge law — NEW shells land, dressed ones stay
