@@ -387,6 +387,93 @@ function handlesFor(array $site): array
     return $out;
 }
 
+/** ——— the theme's FONT ROLES (2026-11-15, user order): theme.json "fonts" ———
+ *  ——— declares which faces the page wears in which role (Headline, Paragraph,———
+ *  ——— …); the core understands none of the names, it only carries the ———
+ *  ——— stored overrides to the page. Same law as the handles. ——— */
+function themeFonts(array $site): array
+{
+    $declared = manifest($site)['fonts'] ?? null;
+    if (!is_array($declared)) {
+        return [];
+    }
+    $out = [];
+    foreach ($declared as $role) {
+        if (!is_array($role)) {
+            continue;
+        }
+        $key = is_string($role['role'] ?? null) ? trim((string)$role['role']) : '';
+        if (preg_match('/^[a-z0-9-]{1,40}$/', $key) !== 1) {
+            continue;
+        }
+        $elements = is_string($role['elements'] ?? null) ? trim((string)$role['elements']) : '';
+        // the selector lid: elements and classes only — a theme's role names
+        // WHERE the face lands, and nothing that could smuggle a rule rides
+        if ($elements === '' || preg_match('/^[a-zA-Z0-9, ._-]{1,160}$/', $elements) !== 1
+            || preg_match('#[<>{};/\\\\]#', $elements) === 1) {
+            continue;
+        }
+        $default = is_string($role['default'] ?? null) ? preg_replace('/[\'"\\\\;]+/', '', $role['default']) : '';
+        if ($default === '' || preg_match("/^[A-Za-z0-9 ,+'_-]{1,60}$/", $default) !== 1) {
+            continue;
+        }
+        $label = is_string($role['label'] ?? null) ? trim((string)$role['label']) : ucfirst($key);
+        $out[] = ['role' => $key, 'label' => mb_substr($label, 0, 60), 'elements' => $elements, 'default' => $default];
+    }
+    return $out;
+}
+
+/** The declared font roles with their effective faces — the Settings tab's
+ *  font list: the theme's declaration + the stored override, else the default. */
+function fontsFor(array $site): array
+{
+    $stored = \Site\fonts((string)$site['theme']);
+    $out = [];
+    foreach (themeFonts($site) as $role) {
+        $over = $stored[$role['role']] ?? null;
+        $family = is_array($over) && is_string($over['family'] ?? null) ? $over['family'] : '';
+        $styles = is_array($over) && is_string($over['styles'] ?? null) ? $over['styles'] : '';
+        if ($family === '' || preg_match("/^[A-Za-z0-9 ,+'_-]{1,60}$/", $family) !== 1
+            || ($styles !== '' && preg_match('/^(wght@[0-9;]+|ital,wght@[0-9;,]+)$/', $styles) !== 1)) {
+            $family = '';
+        }
+        $role['value'] = $family;
+        $role['styles'] = $family === '' ? '' : $styles;
+        $out[] = $role;
+    }
+    return $out;
+}
+
+/** The stored font-role overrides as a late <style> block + the Google css2
+ *  links they need — empty when the theme declares no roles or nothing was
+ *  overridden (the theme's own stylesheet + its own links rule untouched). */
+function fontRolesHead(array $site): string
+{
+    $stored = \Site\fonts((string)$site['theme']);
+    $links = [];
+    $rules = [];
+    foreach (themeFonts($site) as $role) {
+        $over = $stored[$role['role']] ?? null;
+        $family = is_array($over) && is_string($over['family'] ?? null) ? $over['family'] : '';
+        if ($family === '' || preg_match("/^[A-Za-z0-9 ,+'_-]{1,60}$/", $family) !== 1) {
+            continue;
+        }
+        $styles = is_array($over) && is_string($over['styles'] ?? null) ? $over['styles'] : '';
+        if ($styles !== '' && preg_match('/^(wght@[0-9;]+|ital,wght@[0-9;,]+)$/', $styles) !== 1) {
+            $styles = '';
+        }
+        $url = 'https://fonts.googleapis.com/css2?family=' . rawurlencode(str_replace('+', ' ', $family))
+            . ($styles !== '' ? ':' . $styles : '') . '&display=swap';
+        $links[] = '<link rel="stylesheet" href="' . htmlspecialchars($url, ENT_QUOTES) . '" />';
+        $safe = str_replace(["'", '"', '\\', ';'], '', $family);
+        $rules[] = $role['elements'] . '{font-family:\'' . $safe . '\'}';
+    }
+    if ($rules === []) {
+        return '';
+    }
+    return implode('', $links) . '<style id="sm-font-roles">' . implode('', $rules) . '</style>';
+}
+
 /** The stored handle values as a CSS :root block — empty when the theme
  *  declares no handles or nothing was changed. It lands LAST in the document,
  *  so the theme's own :root loses to it (same specificity, later wins). */
@@ -513,7 +600,7 @@ function fontHead(array $site): string
  *  layout; this only turns the knobs the theme declared — plus the face. */
 function withThemeVars(string $html, array $site): string
 {
-    $extra = fontHead($site) . themeVars($site);
+    $extra = fontHead($site) . themeVars($site) . fontRolesHead($site);
     if ($extra === '') {
         return $html;
     }

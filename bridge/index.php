@@ -317,6 +317,7 @@ try {
             // The theme handles ride along: the active theme's declared knobs
             // with their effective value (the stored override, else the default).
             $settings['handles'] = \Serve\handlesFor($settings);
+            $settings['fonts'] = \Serve\fontsFor($settings);
             echo json_encode($settings);
             break;
 
@@ -376,6 +377,62 @@ try {
                 $settings['styles'] = array_merge(
                     is_array($settings['styles'] ?? null) ? $settings['styles'] : [],
                     [$settings['theme'] => $stored]
+                );
+            }
+            // ——— the font roles: the same PATCH law over the theme's declared ———
+            // ——— roles. A choice sets family + styles; an EMPTY family resets ———
+            // ——— the role to the theme's default; an absent role stands. ———
+            $fonts = $body['fonts'] ?? null;
+            if (is_array($fonts)) {
+                $storedFonts = is_array($settings['fonts'][$settings['theme']] ?? null)
+                    ? $settings['fonts'][$settings['theme']]
+                    : [];
+                foreach (\Serve\themeFonts($settings) as $role) {
+                    if (!array_key_exists($role['role'], $fonts)) {
+                        continue; // not on the tray — the stored choice stands
+                    }
+                    $choice = $fonts[$role['role']];
+                    if ($choice === '' || $choice === null) {
+                        unset($storedFonts[$role['role']]); // empty = back to the theme's default
+                        continue;
+                    }
+                    if (!is_array($choice)) {
+                        continue;
+                    }
+                    $family = is_string($choice['family'] ?? null) ? preg_replace('/[\'"\\\\;]+/', '', trim($choice['family'])) : '';
+                    if ($family === '' || preg_match("/^[A-Za-z0-9 ,+'_-]{1,60}$/", $family) !== 1) {
+                        Router\refuse(400, "The font name for {$role['role']} refuses that value.");
+                    }
+                    // the ticked styles arrive as names ('300', '400 italic') —
+                    // the css2 axis is built HERE, canonically, never trusted
+                    $stylesIn = is_array($choice['styles'] ?? null) ? $choice['styles'] : [];
+                    $up = [];
+                    $it = [];
+                    foreach ($stylesIn as $s) {
+                        if (is_string($s) && preg_match('/^([1-9]00)( italic)?$/', trim($s), $m) === 1) {
+                            if (isset($m[2])) {
+                                $it[(int)$m[1]] = true;
+                            } else {
+                                $up[(int)$m[1]] = true;
+                            }
+                        }
+                    }
+                    ksort($up);
+                    ksort($it);
+                    if ($up === [] && $it === []) {
+                        Router\refuse(400, "Pick at least one style for {$role['role']}.");
+                    }
+                    $axis = $it === []
+                        ? 'wght@' . implode(';', array_keys($up))
+                        : 'ital,wght@' . implode(';', array_merge(
+                            array_map(fn($w) => "0,$w", array_keys($up)),
+                            array_map(fn($w) => "1,$w", array_keys($it))
+                        ));
+                    $storedFonts[$role['role']] = ['family' => $family, 'styles' => $axis];
+                }
+                $settings['fonts'] = array_merge(
+                    is_array($settings['fonts'] ?? null) ? $settings['fonts'] : [],
+                    [$settings['theme'] => $storedFonts]
                 );
             }
             Site\save($settings);
@@ -450,9 +507,30 @@ try {
             } elseif ($action === 'remove') {
                 \Fonts\remove($pack);
                 echo json_encode(['ok' => true] + \Fonts\listAll(), JSON_UNESCAPED_SLASHES);
+            } elseif ($action === 'styles' && is_array($body['weights'] ?? null)) {
+                \Fonts\setStyles($body['weights']);
+                echo json_encode(['ok' => true] + \Fonts\listAll(), JSON_UNESCAPED_SLASHES);
             } else {
                 Router\refuse(400, "Unknown font action: {$action}");
             }
+            break;
+
+        // ——— the font-style lister: what styles does a Google family offer? ———
+        // ——— The legacy css API answers with one block per style — the ———
+        // ——— dropdown's food. Admin-only; the name rides the same lid. ———
+        case $method === 'GET' && $path === 'font-styles':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
+            }
+            $family = is_string($_GET['family'] ?? null) ? trim($_GET['family']) : '';
+            $styles = \Fonts\listGoogleStyles($family);
+            if ($styles === []) {
+                Router\refuse(400, 'That font name refuses the door.');
+            }
+            echo json_encode(['family' => $family, 'styles' => $styles], JSON_UNESCAPED_SLASHES);
             break;
 
         // ——— the Vitrine (public wares showcase): admin's fetch + install lid ———

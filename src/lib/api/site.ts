@@ -28,6 +28,18 @@ export interface ThemeHandle {
   readonly value: string;
 }
 
+/** A theme-declared font role — a face the page wears in one role; the
+ *  theme dictates the roles (2026-11-15, user order). `value` is the stored
+ *  override's family, '' = the theme's default wears the role. */
+export interface FontRole {
+  readonly role: string;
+  readonly label: string;
+  readonly elements: string;
+  readonly default: string;
+  readonly value: string;
+  readonly styles: string;
+}
+
 export interface SiteSettings {
   readonly name: string;
   readonly claim: string;
@@ -37,12 +49,17 @@ export interface SiteSettings {
   readonly style: string;
   readonly font: string;
   readonly handles: readonly ThemeHandle[];
+  readonly fonts: readonly FontRole[];
 }
 
 /** The settings patch. The handles ride as a map of var → value — the ACTIVE
  *  theme's overrides; an absent handle falls back to the theme's default
- *  (that is how a handle is reset). */
-export type SiteSettingsPatch = Partial<Omit<SiteSettings, 'handles'>> & { handles?: Record<string, string> };
+ *  (that is how a handle is reset). A font role: '' resets the role to the
+ *  theme's default; {family, styles} sets the face. */
+export type SiteSettingsPatch = Partial<Omit<SiteSettings, 'handles' | 'fonts'>> & {
+  handles?: Record<string, string>;
+  fonts?: Record<string, { family: string; styles: readonly string[] } | ''>;
+};
 
 export function getSiteSettings(): Promise<SiteSettings> {
   return fetch('/bridge/site').then((r) => json<SiteSettings>(r));

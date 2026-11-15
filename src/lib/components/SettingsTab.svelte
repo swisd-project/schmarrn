@@ -24,8 +24,10 @@
   import { saveSiteSettings, uploadSiteAsset, inviteAccount, listAccounts, removeAccount, type AccountRef, type MailStatus, type ThemeHandle } from '$lib/api';
   import UsersAddModal from './UsersAddModal.svelte';
   import FontsModal from './FontsModal.svelte';
+  import FontRoleModal from './FontRoleModal.svelte';
+  import { getSiteSettings, type FontRole } from '$lib/api';
 
-  type SiteSettings = { name: string; claim: string; logo: string; theme: string; home: string; style: string; font: string; handles: readonly ThemeHandle[] };
+  type SiteSettings = { name: string; claim: string; logo: string; theme: string; home: string; style: string; font: string; handles: readonly ThemeHandle[]; fonts: readonly FontRole[] };
   type CoreInfo = {
     current: string;
     latest: string | null;
@@ -74,6 +76,8 @@
   let usersError = $state('');
   let addOpen = $state(false);
   let fontsOpen = $state(false);
+  let roleEdit = $state<FontRole | null>(null);
+  let roleEditOpen = $state(false);
 
   $effect(() => {
     void loadAccounts();
@@ -215,23 +219,13 @@
     }
   }
 
-  /** The font upload: same pantry as the logo — the stored URL lands in the
-   *  font field; SAVE puts it on the public face. */
-  async function onFontPick(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file || siteSettings === null) return;
-    siteBusy = true;
-    siteError = '';
+  /** The font roles re-swept after a modal save — the tab's face of truth. */
+  async function reloadFonts() {
     try {
-      const stored = await uploadSiteAsset(file);
-      siteSettings = { ...siteSettings, font: stored.url };
-      toast(`Font uploaded as ${stored.name} — save to put it on the public face.`);
-    } catch (e) {
-      siteError = e instanceof Error ? e.message : String(e);
-    } finally {
-      siteBusy = false;
+      const fresh = await getSiteSettings();
+      siteSettings = siteSettings === null ? siteSettings : { ...siteSettings, fonts: fresh.fonts };
+    } catch {
+      /* the stale list survives a failed sweep — the next mount sweeps fresh */
     }
   }
 </script>
@@ -351,14 +345,22 @@
             </div>
           {/each}
           <label class="field">
-            <span>Font <span class="hint">(Google name, https:// URL, or upload)</span></span>
-            <input class="input" bind:value={siteSettings.font} placeholder="e.g. Comic Neue — empty = theme default" />
-            <label class="btn btn-secondary self-start cursor-pointer">
-              <input class="hidden" type="file" accept=".woff2,.woff,.ttf,.otf" onchange={onFontPick} disabled={siteBusy} />
-              {siteBusy ? 'Uploading…' : 'Upload font…'}
-            </label>
-            <span class="hint">A plain name uses Google Fonts; a https:// link is used as-is; an uploaded file is served from the site itself.</span>
-            <button type="button" class="btn-ghost text-xs self-start" onclick={() => (fontsOpen = true)}>Font packs…</button>
+            <span>Fonts <span class="hint">(the roles the template dictates)</span></span>
+            <div class="flex flex-col gap-1">
+              {#each siteSettings.fonts as fontRole (fontRole.role)}
+                <div class="flex items-center justify-between gap-2 text-sm">
+                  <span class="truncate">
+                    {fontRole.label}
+                    <span class="hint">{fontRole.value || fontRole.default}{fontRole.styles ? ' · ' + fontRole.styles.replace('wght@', 'w ') : ''}</span>
+                  </span>
+                  <button type="button" class="btn-ghost shrink-0" title={`Set the ${fontRole.label.toLowerCase()} face`} onclick={() => { roleEdit = fontRole; roleEditOpen = true; }}>Edit</button>
+                </div>
+              {/each}
+              <div class="flex items-center justify-between gap-2 text-sm">
+                <span>MD-Editor <span class="hint">(locked) · Noto Sans</span></span>
+                <button type="button" class="btn-ghost shrink-0" title="Styles & languages to download" onclick={() => (fontsOpen = true)}>Edit</button>
+              </div>
+            </div>
           </label>
         </div>
       </div>
@@ -456,6 +458,7 @@
   </div>
   <UsersAddModal bind:open={addOpen} oncreated={loadAccounts} />
   <FontsModal bind:open={fontsOpen} />
+  {#if roleEdit}<FontRoleModal bind:open={roleEditOpen} role={roleEdit} onsaved={reloadFonts} />{/if}
 {:else}
   <p class="italic text-ink-soft">Reaching for the settings…</p>
 {/if}

@@ -83,10 +83,53 @@ function sanitizeStyles(mixed $styles): array
     return $out;
 }
 
+/** The stored font-role overrides of ONE theme — lidded like every word that
+ *  enters a <style> block (2026-11-15, user order: the font roles are the
+ *  theme's declaration; only a family name and a Google styles axis ride). */
+function sanitizeFonts(mixed $fonts): array
+{
+    if (!is_array($fonts)) {
+        return [];
+    }
+    $out = [];
+    foreach ($fonts as $theme => $roles) {
+        if (!is_string($theme) || preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $theme) !== 1 || !is_array($roles)) {
+            continue;
+        }
+        $map = [];
+        foreach ($roles as $role => $choice) {
+            if (!is_string($role) || preg_match('/^[a-z0-9-]{1,40}$/', $role) !== 1 || !is_array($choice)) {
+                continue;
+            }
+            $family = is_string($choice['family'] ?? null) ? preg_replace('/[\'"\\\\;]+/', '', $choice['family']) : '';
+            $styles = is_string($choice['styles'] ?? null) ? $choice['styles'] : '';
+            if ($family === '' || preg_match("/^[A-Za-z0-9 ,+'_-]{1,60}$/", $family) !== 1) {
+                continue;
+            }
+            if ($styles !== '' && preg_match('/^(wght@[0-9;]+|ital,wght@[0-9;,]+)$/', $styles) !== 1) {
+                continue;
+            }
+            $map[$role] = ['family' => $family, 'styles' => $styles];
+        }
+        if ($map !== []) {
+            $out[$theme] = $map;
+        }
+    }
+    return $out;
+}
+
 /** The stored handle overrides of ONE theme — ['--crust' => '#fff', …]. */
 function styles(string $theme): array
 {
     $all = load()['styles'] ?? [];
+    $mine = is_array($all[$theme] ?? null) ? $all[$theme] : [];
+    return is_array($mine) ? $mine : [];
+}
+
+/** The stored font-role overrides of ONE theme — ['headline' => ['family' => …, 'styles' => …]]. */
+function fonts(string $theme): array
+{
+    $all = load()['fonts'] ?? [];
     $mine = is_array($all[$theme] ?? null) ? $all[$theme] : [];
     return is_array($mine) ? $mine : [];
 }
@@ -128,6 +171,10 @@ function load(bool $wipe = false): array
         if (isset($local['styles']) && is_array($local['styles'])) {
             $settings['styles'] = $local['styles'];
         }
+        // The font-role overrides ride the same road.
+        if (isset($local['fonts']) && is_array($local['fonts'])) {
+            $settings['fonts'] = $local['fonts'];
+        }
     }
     return $memo = $settings;
 }
@@ -153,6 +200,7 @@ function save(array $settings): void
         $clean[$key] = $value;
     }
     $clean['styles'] = sanitizeStyles($settings['styles'] ?? []);
+    $clean['fonts'] = sanitizeFonts($settings['fonts'] ?? []);
     $export = "<?php\n\ndeclare(strict_types=1);\n\nreturn " . var_export($clean, true) . ";\n";
     if (file_put_contents(configFile(), $export) === false) {
         throw new \Domain\Error(500, 'Site settings slid off the plate — write failed.');

@@ -1,7 +1,7 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
   // a burger opens the full-screen overlay (Contents / Settings / Plugins & Templates).
-  import { session, login, logout, fetchAdminTabs, pageCount, searchPages, deletePage, renamePage, setupStatus, runSetup, getSiteSettings, saveSiteSettings, uploadSiteAsset, listPlugins, setPlugins, deletePlugin, savePluginSettings, listTemplates, activateTemplate, deleteTemplate, coreStatus, uploadCorePacket, runCoreUpdate, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, githubStatus, githubInspect, githubInstall, mailStatus, type PageRef, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef, type ThemeHandle, type GithubLook, type MailStatus, type AdminTabDef } from '$lib/api';
+  import { session, login, logout, fetchAdminTabs, pageCount, searchPages, deletePage, renamePage, setupStatus, runSetup, getSiteSettings, saveSiteSettings, uploadSiteAsset, listPlugins, setPlugins, deletePlugin, savePluginSettings, listTemplates, activateTemplate, deleteTemplate, coreStatus, uploadCorePacket, runCoreUpdate, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, githubStatus, githubInspect, githubInstall, mailStatus, type PageRef, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef, type ThemeHandle, type GithubLook, type MailStatus, type AdminTabDef, type FontRole } from '$lib/api';
   import { adminCloseTarget } from '$lib/back';
   import { base } from '$app/paths';
   import { schemaFor } from '$lib/schema';
@@ -132,7 +132,7 @@
   }
 
   // ——— brand settings (admin) ———
-  let siteSettings = $state<{ name: string; claim: string; logo: string; theme: string; home: string; style: string; font: string; handles: readonly ThemeHandle[] } | null>(null);
+  let siteSettings = $state<{ name: string; claim: string; logo: string; theme: string; home: string; style: string; font: string; handles: readonly ThemeHandle[]; fonts: readonly FontRole[] } | null>(null);
   // ——— the theme handles: the active template's declared CSS variables, as the
   // ——— pickers see them. The template's stylesheet keeps the layout; these
   // ——— knobs only turn the colors it declared. (STRIP 8c: the knobs live in

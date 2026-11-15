@@ -27,5 +27,9 @@
     { "var": "--ink", "label": "Ink — text", "type": "color", "default": "#5f564a" },
     { "var": "--ink-soft", "label": "Soft ink — secondary text", "type": "color", "default": "#6e6459" },
     { "var": "--line", "label": "Line — hairlines", "type": "color", "default": "#e3dbcd" }
+  ],
+  "fonts": [
+    { "role": "headline", "label": "Headline (H1, H2, H3)", "elements": "h1, h2, h3", "default": "Cormorant Upright" },
+    { "role": "paragraph", "label": "Paragraph (p, a, li, …)", "elements": "p, a, li, blockquote, figcaption, td, th", "default": "Noto Sans" }
   ]
 }

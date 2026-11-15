@@ -58,12 +58,15 @@ const PACK_BYTE_CAP = 32 * 1024 * 1024;
  *  else gets full TTFs — the wrong format for this ride. */
 const BROWSER_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36';
 
-/** The installed packs: ['packs' => [key => ['css' => …, 'files' => […]]]]. */
+/** The installed packs: ['packs' => [key => ['css' => …, 'files' => […]]]] plus
+ *  the core bake's ticked weights (the variable font serves any ladder). */
 function local(): array
 {
     $data = is_file(LOCAL) ? include LOCAL : [];
     $packs = is_array($data['packs'] ?? null) ? $data['packs'] : [];
-    return ['packs' => $packs];
+    $weights = is_array($data['weights'] ?? null) ? $data['weights'] : [300, 400, 700];
+    $coreCss = is_string($data['coreCss'] ?? null) ? $data['coreCss'] : '';
+    return ['packs' => $packs, 'weights' => $weights, 'coreCss' => $coreCss];
 }
 
 function saveLocal(array $data): void
@@ -71,11 +74,13 @@ function saveLocal(array $data): void
     file_put_contents(LOCAL, "<?php\n\nreturn " . var_export($data, true) . ";\n");
 }
 
-/** The generated sheet: the committed seed + every installed pack's blocks. */
+/** The generated sheet: the core bake (the seed until a styles choice
+ *  re-fetches it) + every installed pack's blocks. */
 function regen(): void
 {
-    $css = (string)file_get_contents(SEED);
-    foreach (local()['packs'] as $pack) {
+    $state = local();
+    $css = $state['coreCss'] !== '' ? $state['coreCss'] : (string)file_get_contents(SEED);
+    foreach ($state['packs'] as $pack) {
         if (is_string($pack['css'] ?? null)) {
             $css .= "\n" . $pack['css'];
         }
@@ -83,10 +88,12 @@ function regen(): void
     file_put_contents(SHEET, $css);
 }
 
-/** The door's view: what the modal shows. */
+/** The door's view: what the modal shows — the core, its ticked weights,
+ *  the packs. */
 function listAll(): array
 {
-    $installed = array_keys(local()['packs']);
+    $state = local();
+    $installed = array_keys($state['packs']);
     $available = [];
     foreach (CATALOG as $key => $pack) {
         if (!in_array($key, $installed, true)) {
@@ -95,9 +102,66 @@ function listAll(): array
     }
     return [
         'baked' => ['pack' => 'core', 'label' => 'Core (latin, greek, cyrillic)', 'kb' => 430],
+        'weights' => ['available' => [100, 200, 300, 400, 500, 600, 700, 800, 900], 'installed' => $state['weights']],
         'installed' => array_map(fn($k) => ['pack' => $k, 'label' => CATALOG[$k]['label'], 'kb' => CATALOG[$k]['kb']], $installed),
         'available' => $available,
     ];
+}
+
+/** The core bake re-cut to the ticked weights: the css2 sheet re-fetched
+ *  (the variable font serves any ladder from the same subsets), the sheet
+ *  and its files kept under the same lids as a pack install. */
+function setStyles(array $weights): void
+{
+    $clean = [];
+    foreach ($weights as $w) {
+        if (is_int($w) && $w >= 100 && $w <= 900 && $w % 100 === 0) {
+            $clean[$w] = $w;
+        }
+    }
+    if ($clean === []) {
+        \Router\refuse(400, 'A font needs at least one weight.');
+    }
+    ksort($clean);
+    $axis = 'wght@' . implode(';', $clean);
+    $css = httpGet('https://fonts.googleapis.com/css2?family=Noto+Sans:' . $axis . '&display=swap');
+    if ($css === null || substr_count($css, '@font-face') === 0) {
+        \Router\refuse(502, 'The depot went dark — no font sheet for the core.');
+    }
+    preg_match_all('#https://fonts\.gstatic\.com/[^)\s]+\.woff2#', (string)$css, $m);
+    $urls = array_values(array_unique($m[0]));
+    if ($urls === [] || count($urls) > PACK_FILE_CAP) {
+        \Router\refuse(502, 'The sheet names no sane file set.');
+    }
+    $files = [];
+    $total = 0;
+    foreach ($urls as $url) {
+        $file = 'n-' . basename($url);
+        if (!is_file(DIR . '/' . $file)) {
+            $bytes = fetchTo(DIR . '/' . $file, $url);
+            if ($bytes === null) {
+                \Router\refuse(502, 'The depot went dark mid-bake — the core pulled back.');
+            }
+            $total += $bytes;
+            if ($total > PACK_BYTE_CAP) {
+                \Router\refuse(502, 'The core bake jumps the byte roof.');
+            }
+        }
+        $files[] = $file;
+        $css = str_replace($url, '/bridge/assets/noto/' . $file, $css);
+    }
+    // the weights that left the ladder retire their subsets (the packs keep
+    // their own p- prefixed files — only the n- core set is re-cut here)
+    foreach (glob(DIR . '/n-*.woff2') ?: [] as $old) {
+        if (!in_array(basename($old), $files, true)) {
+            @unlink($old);
+        }
+    }
+    $state = local();
+    $state['weights'] = array_values($clean);
+    $state['coreCss'] = $css;
+    saveLocal($state);
+    regen();
 }
 
 /** Pull a pack onto the host: the css2 sheet, then its woff2 subsets. */
@@ -159,6 +223,43 @@ function remove(string $key): void
     unset($state['packs'][$key]);
     saveLocal($state);
     regen();
+}
+
+/** What styles does a Google family offer? The dropdown's food — ONE ask:
+ *  the full discrete ladder (upright + italic tuples); families outside the
+ *  ladder simply answer with the styles they have. */
+function listGoogleStyles(string $family): array
+{
+    $family = preg_replace('/[\'"\\\\;]+/', '', trim($family));
+    if ($family === '' || preg_match("/^[A-Za-z0-9 ,+'_-]{1,60}$/", $family) !== 1) {
+        return [];
+    }
+    $q = str_replace(' ', '+', $family);
+    $tuples = [];
+    foreach ([100, 200, 300, 400, 500, 600, 700, 800, 900] as $w) {
+        $tuples[] = "0,$w";
+        $tuples[] = "1,$w";
+    }
+    $sheet = httpGet('https://fonts.googleapis.com/css2?family=' . $q . ':ital,wght@' . implode(';', $tuples));
+    if ($sheet === null || !str_contains($sheet, '@font-face')) {
+        return [];
+    }
+    return parseStyleBlocks((string)$sheet);
+}
+
+/** The style names off a css2 sheet: ranges expand to their hundred steps. */
+function parseStyleBlocks(string $sheet): array
+{
+    preg_match_all('/font-style:\s*(\w+)\s*;\s*font-weight:\s*(\d+)(?:\s+(\d+))?/', $sheet, $m, PREG_SET_ORDER);
+    $out = [];
+    foreach ($m as [, $style, $a, $b]) {
+        $lo = (int)$a;
+        $hi = $b !== '' && $b !== null ? (int)$b : $lo;
+        for ($w = (int)ceil($lo / 100) * 100; $w <= $hi; $w += 100) {
+            $out[] = $style === 'italic' ? "$w italic" : (string)$w;
+        }
+    }
+    return array_values(array_unique($out));
 }
 
 /** The css2 sheet with a browser's voice. */
