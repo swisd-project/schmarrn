@@ -46,9 +46,10 @@
   --color-warn: #c98a1b;
   --color-error: #c23a2b;
 
-  /* type — the soft law's face (2026-11-15, user order): Cormorant Upright;
-     the sans stays the fallback when the font fails to load */
-  --font-body: 'Cormorant Upright', Georgia, system-ui, sans-serif;
+  /* type — the pairing law (2026-11-15, user order): the body reads in
+     Noto Sans; Cormorant Upright keeps the headlines (.mg-h, modal h3) */
+  --font-body: 'Noto Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-headline: 'Cormorant Upright', Georgia, 'Times New Roman', serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
 
   /* scale (1.25 ratio) */
@@ -108,6 +109,7 @@ body {
   margin: 0 0 0.5rem;
   font-size: var(--text-sm);
   font-weight: 400;
+  font-family: var(--font-headline); /* the headline serif */
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--color-ink-soft);
@@ -331,7 +333,7 @@ textarea.input { resize: vertical; min-height: 5rem; }
   padding: 1rem 1.25rem;
 }
 .modal-head { display: flex; justify-content: space-between; align-items: center; }
-.modal-head h3 { margin: 0; font-weight: 400; font-size: var(--text-lg); }
+.modal-head h3 { margin: 0; font-weight: 400; font-size: var(--text-lg); font-family: var(--font-headline); }
 .modal-foot { display: flex; justify-content: flex-end; gap: 0.5rem; }
 .close-x { border: none; background: none; font-size: var(--text-lg); cursor: pointer; color: var(--color-ink-soft); }
 .close-x:hover { color: var(--color-ink); }

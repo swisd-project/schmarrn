@@ -45,7 +45,11 @@ body {
   margin: 0;
   background: var(--batter);
   color: var(--ink);
-  font-family: 'Cormorant Upright', Georgia, 'Times New Roman', serif;
+  /* the pairing law (2026-11-15, user order): the serif is TOO FINE for
+     body reading — Cormorant Upright keeps the headlines, the body reads
+     in Noto Sans (the BAKED core subsets: /bridge/assets/noto/noto.css,
+     linked in the theme's heads — no third-party fetch for the body). */
+  font-family: 'Noto Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-weight: 300; /* the soft law (2026-11-15, user order): 300 body, 400 headlines */
   line-height: 1.65;
 }
@@ -69,6 +73,7 @@ body {
 .site-name {
   font-size: 1.5rem;
   font-weight: 400;
+  font-family: 'Cormorant Upright', Georgia, 'Times New Roman', serif; /* the headline serif */
   letter-spacing: 0.02em;
 }
 
@@ -89,7 +94,10 @@ main {
   padding: 2.5rem 1.5rem 3rem;
 }
 
-main h1, main h2, main h3 { line-height: 1.25; color: var(--ink); font-weight: 400; }
+main h1, main h2, main h3 {
+  line-height: 1.25; color: var(--ink); font-weight: 400;
+  font-family: 'Cormorant Upright', Georgia, 'Times New Roman', serif; /* the headline serif */
+}
 main a { color: var(--jam); }
 main img, main video { max-width: 100%; height: auto; border-radius: 6px; }
 main blockquote {
@@ -139,6 +147,7 @@ body.slide {
 }
 .slide-brand a {
   font-weight: 400;
+  font-family: 'Cormorant Upright', Georgia, 'Times New Roman', serif; /* the headline serif */
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-size: 0.85rem;

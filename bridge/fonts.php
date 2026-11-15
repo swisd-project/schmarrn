@@ -94,7 +94,7 @@ function listAll(): array
         }
     }
     return [
-        'baked' => ['pack' => 'core', 'label' => 'Core (latin, greek, cyrillic)', 'kb' => 476],
+        'baked' => ['pack' => 'core', 'label' => 'Core (latin, greek, cyrillic)', 'kb' => 430],
         'installed' => array_map(fn($k) => ['pack' => $k, 'label' => CATALOG[$k]['label'], 'kb' => CATALOG[$k]['kb']], $installed),
         'available' => $available,
     ];
