@@ -52,7 +52,9 @@ function rigBuild(string $root, array $opts = []): string
     // the assets (the editor/fallback bundles) — the public face links them
     @mkdir($rig . '/bridge/assets', 0775, true);
     foreach (glob($root . '/bridge/assets/*') ?: [] as $file) {
-        if (is_file($file)) {
+        if (is_dir($file)) {
+            rigCopyTree($file, $rig . '/bridge/assets/' . basename($file)); // sub-shelves ride whole (the baked noto/)
+        } else {
             copy($file, $rig . '/bridge/assets/' . basename($file));
         }
     }

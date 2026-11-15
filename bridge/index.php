@@ -44,6 +44,7 @@ require_once __DIR__ . '/cache.php';
 require_once __DIR__ . '/site.php';
 require_once __DIR__ . '/plugins.php';
 require_once __DIR__ . '/wares.php';
+require_once __DIR__ . '/fonts.php'; // the font-pack station (the editor's every-letter law)
 require_once __DIR__ . '/core.php'; // the core's self-update (GitHub versions)
 require_once __DIR__ . '/github.php'; // the GitHub door (private repos as ware sources)
 require_once __DIR__ . '/serve.php'; // public JSON API reuses the serving engine's byte-peeks
@@ -416,6 +417,43 @@ try {
             header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox");
             readfile($assetPath);
             exit;
+
+        // ——— the font-pack station: the editor bakes the core; the admin ———
+        // ——— pulls more writing systems onto the host on demand ———
+        case $method === 'GET' && $path === 'fonts':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
+            }
+            echo json_encode(\Fonts\listAll(), JSON_UNESCAPED_SLASHES);
+            break;
+
+        case $method === 'POST' && $path === 'fonts':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            if (!Auth\isAdmin()) {
+                Router\refuse(403, 'Admins only — editors do not touch the sugar safe.');
+            }
+            Auth\assertCsrf();
+            $body = json_decode(file_get_contents('php://input') ?: '{}', true);
+            $action = is_string($body['action'] ?? null) ? $body['action'] : '';
+            $pack = is_string($body['pack'] ?? null) ? $body['pack'] : '';
+            if ($pack !== '' && preg_match('/^[a-z0-9-]+$/', $pack) !== 1) {
+                Router\refuse(400, 'No such pack.');
+            }
+            if ($action === 'install') {
+                \Fonts\install($pack);
+                echo json_encode(['ok' => true] + \Fonts\listAll(), JSON_UNESCAPED_SLASHES);
+            } elseif ($action === 'remove') {
+                \Fonts\remove($pack);
+                echo json_encode(['ok' => true] + \Fonts\listAll(), JSON_UNESCAPED_SLASHES);
+            } else {
+                Router\refuse(400, "Unknown font action: {$action}");
+            }
+            break;
 
         // ——— the Vitrine (public wares showcase): admin's fetch + install lid ———
         case $method === 'GET' && $path === 'wares':

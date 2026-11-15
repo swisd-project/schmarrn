@@ -23,6 +23,7 @@
 
   import { saveSiteSettings, uploadSiteAsset, inviteAccount, listAccounts, removeAccount, type AccountRef, type MailStatus, type ThemeHandle } from '$lib/api';
   import UsersAddModal from './UsersAddModal.svelte';
+  import FontsModal from './FontsModal.svelte';
 
   type SiteSettings = { name: string; claim: string; logo: string; theme: string; home: string; style: string; font: string; handles: readonly ThemeHandle[] };
   type CoreInfo = {
@@ -72,6 +73,7 @@
   let accounts = $state<readonly AccountRef[]>([]);
   let usersError = $state('');
   let addOpen = $state(false);
+  let fontsOpen = $state(false);
 
   $effect(() => {
     void loadAccounts();
@@ -356,6 +358,7 @@
               {siteBusy ? 'Uploading…' : 'Upload font…'}
             </label>
             <span class="hint">A plain name uses Google Fonts; a https:// link is used as-is; an uploaded file is served from the site itself.</span>
+            <button type="button" class="btn-ghost text-xs self-start" onclick={() => (fontsOpen = true)}>Font packs…</button>
           </label>
         </div>
       </div>
@@ -452,6 +455,7 @@
 
   </div>
   <UsersAddModal bind:open={addOpen} oncreated={loadAccounts} />
+  <FontsModal bind:open={fontsOpen} />
 {:else}
   <p class="italic text-ink-soft">Reaching for the settings…</p>
 {/if}

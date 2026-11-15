@@ -21,6 +21,7 @@ export * from './api/plugins';
 export * from './api/wares';
 export * from './api/core';
 export * from './api/integrations';
+export * from './api/fonts';
 
 
 
