@@ -235,17 +235,17 @@
 </script>
 
 <!-- THE BENTO (2026-11-11, user order; repacked 2026-11-15, user order):
-     3 columns x 2 rows — attribution 1x1, site settings 1x1, integrations
-     1x1 | theme style 2x1, users 1x1. SIX units on a SIX-unit shelf: NO
-     empty cell, no empty lower band (the 5-column packing left four
-     holes in row 2 — the "empty lower border" the user called out).
-     Every tile covers ONE row of height and scrolls inside itself:
-     the page never moves. The DOM order matters — grid auto-placement
-     fills row-major, so the integrations card rides BEFORE the theme
-     card, or the theme's double width pushes the users card down into
-     a third row. -->
+     4 columns x 2 rows = EIGHT cells, filled by EIGHT units — row 1:
+     attribution | site settings | integrations | users (1x1 each), row 2:
+     theme style as the full-width band (4 units). Every card covers ONE
+     row of height and scrolls inside itself: the page never moves, and
+     no cell is ever left empty (the old 5-column packing left four
+     dead cells in row 2 — the "empty lower border" the user called
+     out). The DOM order is LAW: grid auto-placement fills row-major, so
+     the theme card rides LAST, or its four-unit width swallows a row
+     and pushes a 1x1 card down into a third row. -->
 {#if siteSettings}
-  <div class="grid grid-cols-1 gap-4 min-h-0 overflow-y-auto lg:grid-cols-3 lg:grid-rows-2 lg:h-full lg:overflow-hidden">
+  <div class="grid grid-cols-1 gap-4 min-h-0 overflow-y-auto lg:grid-cols-4 lg:grid-rows-2 lg:h-full lg:overflow-hidden">
     <!-- THE ATTRIBUTION CARD (2026-11-12, user order): first in the
          bento, 1x1. The release's own name + day, the people behind
          it, the way to support it, the door back to GitHub. -->
@@ -358,7 +358,32 @@
       {#if githubError}<p class="alert alert-err m-0" role="alert">{githubError}</p>{/if}
     </section>
 
-    <section class="mg flex flex-col gap-3 lg:col-span-2 lg:overflow-y-auto lg:min-h-0">
+    <!-- THE USERS CARD (2026-11-15, user order): the accounts live here now,
+         moved from the old users tab — a 1x1 bento card, the list on top,
+         the New button at the bottom opening the add modal. An account
+         never removes itself. -->
+    <section class="mg flex flex-col gap-2 lg:col-span-1 lg:overflow-y-auto lg:min-h-0">
+      <h4 class="mg-h">Users</h4>
+      <ul class="list-none p-0 m-0 flex flex-col gap-1 overflow-y-auto">
+        {#each accounts as account (account.user)}
+          <li class="flex items-center justify-between gap-2 text-sm">
+            <span class="truncate">{account.user} · {account.role}</span>
+            {#if account.user !== user}
+              <span class="flex gap-1 shrink-0">
+                {#if account.email}
+                  <button class="btn-ghost" title="Mail freshly issued credentials" onclick={() => inviteNow(account.user)}>✉</button>
+                {/if}
+                <button class="btn-ghost danger" aria-label={`Remove account ${account.user}`} onclick={() => deleteNow(account.user)}>×</button>
+              </span>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+      {#if usersError}<p class="alert alert-err m-0" role="alert">{usersError}</p>{/if}
+      <button type="button" class="btn btn-primary self-start" onclick={() => (addOpen = true)}>New user</button>
+    </section>
+
+    <section class="mg flex flex-col gap-3 lg:col-span-4 lg:overflow-y-auto lg:min-h-0">
       <h4 class="mg-h">Theme style</h4>
     {#if siteSettings.handles.length === 0}
       <p class="italic text-ink-soft m-0">The active template declares no handles — its stylesheet is the only way in.</p>
@@ -418,30 +443,6 @@
     </section>
 
 
-    <!-- THE USERS CARD (2026-11-15, user order): the accounts live here now,
-         moved from the old users tab — a 1x1 bento card, the list on top,
-         the New button at the bottom opening the add modal. An account
-         never removes itself. -->
-    <section class="mg flex flex-col gap-2 lg:col-span-1 lg:overflow-y-auto lg:min-h-0">
-      <h4 class="mg-h">Users</h4>
-      <ul class="list-none p-0 m-0 flex flex-col gap-1 overflow-y-auto">
-        {#each accounts as account (account.user)}
-          <li class="flex items-center justify-between gap-2 text-sm">
-            <span class="truncate">{account.user} · {account.role}</span>
-            {#if account.user !== user}
-              <span class="flex gap-1 shrink-0">
-                {#if account.email}
-                  <button class="btn-ghost" title="Mail freshly issued credentials" onclick={() => inviteNow(account.user)}>✉</button>
-                {/if}
-                <button class="btn-ghost danger" aria-label={`Remove account ${account.user}`} onclick={() => deleteNow(account.user)}>×</button>
-              </span>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-      {#if usersError}<p class="alert alert-err m-0" role="alert">{usersError}</p>{/if}
-      <button type="button" class="btn btn-primary self-start" onclick={() => (addOpen = true)}>New user</button>
-    </section>
   </div>
   <UsersAddModal bind:open={addOpen} oncreated={loadAccounts} />
 {:else}
