@@ -47,8 +47,10 @@ function rigBuild(string $root, array $opts = []): string
     }
     // the vendored mail library — mail.php requires it at the top
     rigCopyTree($root . '/bridge/lib', $rig . '/bridge/lib');
-    // the theme — the house default dresses the rig
-    rigCopyTree($root . '/bridge/templates/bakery', $rig . '/bridge/templates/bakery');
+    // the themes — every template shelf rides whole (a theme ride needs its theme)
+    foreach (glob($root . '/bridge/templates/*', GLOB_ONLYDIR) ?: [] as $theme) {
+        rigCopyTree($theme, $rig . '/bridge/templates/' . basename($theme));
+    }
     // the assets (the editor/fallback bundles) — the public face links them
     @mkdir($rig . '/bridge/assets', 0775, true);
     foreach (glob($root . '/bridge/assets/*') ?: [] as $file) {

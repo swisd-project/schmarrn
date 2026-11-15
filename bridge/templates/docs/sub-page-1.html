@@ -1,0 +1,34 @@
+<!doctype html>
+<!--
+  sub-page-1 — THE DOC PAGE: a fixed left sidebar (brand + nav), the
+  content column beside it. This is the theme's default style — every
+  ordinary page renders through it. Narrow screens stack: the sidebar
+  becomes a top band, the nav runs horizontally.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {{seoHead}}
+  <link rel="stylesheet" href="/bridge/assets/noto/noto.css">
+  <link rel="stylesheet" href="{{themeBase}}assets/theme.css">
+</head>
+<body class="doc-page">
+  <aside class="doc-side">
+    <a class="brand" href="/">
+      {{logoHtml}}
+      <span class="site-name">{{siteName}}</span>
+    </a>
+    {{navHtml}}
+    {{claimHtml}}
+  </aside>
+
+  <main>
+{{bodyHtml}}
+  </main>
+
+  <footer class="site-foot">
+    <p>© {{year}} {{siteName}}</p>
+  </footer>
+</body>
+</html>

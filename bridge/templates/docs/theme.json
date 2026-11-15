@@ -1,0 +1,35 @@
+{
+  "name": "docs",
+  "title": "Docs",
+  "version": "0.1.0",
+  "style": "sub-page-1",
+  "defaultStyle": "sub-page-1",
+  "styles": ["frontpage", "sub-page-1"],
+  "description": "Documentation theme for software projects — grey on white, minimalist.",
+  "placeholders": [
+    "siteName",
+    "claim",
+    "claimHtml",
+    "logoUrl",
+    "logoHtml",
+    "pageTitle",
+    "bodyHtml",
+    "seoHead",
+    "themeBase",
+    "year"
+  ],
+  "handles": [
+    { "var": "--crust", "label": "Crust — sidebar, panels & code", "type": "color", "default": "#f6f7f9" },
+    { "var": "--batter", "label": "Batter — the page", "type": "color", "default": "#ffffff" },
+    { "var": "--blossom", "label": "Blossom — strong rules & borders", "type": "color", "default": "#e9edf1" },
+    { "var": "--sky", "label": "Sky — notes", "type": "color", "default": "#e3ecf3" },
+    { "var": "--jam", "label": "Jam — links & accents", "type": "color", "default": "#0550ae" },
+    { "var": "--ink", "label": "Ink — text", "type": "color", "default": "#1f2328" },
+    { "var": "--ink-soft", "label": "Soft ink — secondary text", "type": "color", "default": "#59636e" },
+    { "var": "--line", "label": "Line — hairlines", "type": "color", "default": "#e4e8ec" }
+  ],
+  "fonts": [
+    { "role": "headline", "label": "Headline (H1, H2, H3)", "elements": "h1, h2, h3, .site-name", "default": "Noto Sans" },
+    { "role": "paragraph", "label": "Paragraph (p, a, li, …)", "elements": "p, a, li, blockquote, figcaption, td, th", "default": "Noto Sans" }
+  ]
+}

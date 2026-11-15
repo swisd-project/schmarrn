@@ -1,0 +1,33 @@
+<!doctype html>
+<!--
+  page — the BASE template (the fallback every undeclared style renders on).
+  The docs theme's base is deliberately plain: a top bar with the brand and
+  the nav, the content column under it. The doc layout lives in
+  sub-page-1.html (the sidebar page); the landing in frontpage.html.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {{seoHead}}
+  <link rel="stylesheet" href="/bridge/assets/noto/noto.css">
+  <link rel="stylesheet" href="{{themeBase}}assets/theme.css">
+</head>
+<body>
+  <header class="site-head">
+    <a class="brand" href="/">
+      {{logoHtml}}
+      <span class="site-name">{{siteName}}</span>
+    </a>
+    {{navHtml}}
+  </header>
+
+  <main>
+{{bodyHtml}}
+  </main>
+
+  <footer class="site-foot">
+    <p>© {{year}} {{siteName}}</p>
+  </footer>
+</body>
+</html>

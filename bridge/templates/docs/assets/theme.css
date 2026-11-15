@@ -1,0 +1,291 @@
+/* ═══════════════════════════════════════════════════════════════════
+   DOCS — a documentation theme for software projects.
+
+   Grey on white. Minimalist, crisp. The blueprint is bakery: ONE
+   stylesheet, the markup only links it, the tokens below are the
+   handles the dashboard turns. The eight handle names are the
+   dashboard's MIRROR list — same names, same meanings:
+     crust  = panels (sidebar, code blocks)     batter = the page
+     blossom = strong rules & borders           line   = hairlines
+     sky    = notes                             jam    = links, accents
+     ink    = text                              ink-soft = secondary text
+
+   THE CRISP LAW: nothing decorative. No gradients, no shadows, no
+   rounded corners beyond 4px. Structure comes from hairlines and
+   whitespace, hierarchy from weight and size. One accent (jam) —
+   links, current nav, active marks; everything else is grey.
+
+   Type: the whole page reads in Noto Sans (the BAKED core subsets,
+   /bridge/assets/noto/noto.css — linked in the theme's heads, no
+   third-party fetch). Headlines 600, body 400, code in the mono
+   stack. Crisp = weight does the work serif play does elsewhere.
+
+   YOUR SHELF IMAGE: drop a preview.png next to theme.json (square is
+   the shape the shelf draws) — or don't; an honest absence, never a
+   broken picture.
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  --crust: #f6f7f9;    /* handle: Crust — sidebar, panels, code blocks  */
+  --batter: #ffffff;   /* handle: Batter — the page itself              */
+  --blossom: #e9edf1;  /* handle: Blossom — strong rules, borders       */
+  --sky: #e3ecf3;      /* handle: Sky — notes, cool fills               */
+  --jam: #0550ae;      /* handle: Jam — links, the one accent           */
+  --ink: #1f2328;      /* handle: Ink — body text                       */
+  --ink-soft: #59636e; /* handle: Soft ink — secondary text, meta       */
+  --line: #e4e8ec;     /* handle: Line — hairlines, dividers            */
+  --mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', 'Source Code Pro', Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--batter);
+  color: var(--ink);
+  font-family: 'Noto Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 400;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ——— brand ——— */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+  color: var(--ink);
+}
+.brand .logo { height: 1.75rem; width: auto; }
+.site-name {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ——— nav (the core fills .sm-nav; the theme only dresses it) ——— */
+.sm-nav { display: flex; gap: 1.25rem; flex-wrap: wrap; }
+.sm-nav a { color: var(--ink-soft); text-decoration: none; font-size: 0.9rem; }
+.sm-nav a:hover { color: var(--ink); }
+.sm-nav a[aria-current] { color: var(--jam); font-weight: 600; }
+
+.claim {
+  margin: 0.5rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+/* ——— the top bar (base page + landing) ——— */
+.site-head {
+  background: var(--batter);
+  border-bottom: 1px solid var(--line);
+  padding: 0.9rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+.site-head .sm-nav { margin-left: auto; }
+
+/* ——— the doc layout: fixed sidebar + content column ——— */
+body.doc-page { display: block; }
+.doc-side {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 16rem;
+  padding: 1.5rem 1.25rem;
+  background: var(--crust);
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+.doc-side .brand { margin-bottom: 1.25rem; }
+.doc-side .sm-nav { flex-direction: column; gap: 0.15rem; }
+.doc-side .sm-nav a {
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.doc-side .sm-nav a:hover { background: var(--blossom); color: var(--ink); }
+.doc-side .sm-nav a[aria-current] {
+  background: var(--batter);
+  color: var(--jam);
+  font-weight: 600;
+}
+
+body.doc-page main {
+  margin-left: 16rem;
+  max-width: 46rem;
+  padding: 2.5rem 2rem 3rem;
+}
+body.doc-page .site-foot { margin-left: 16rem; }
+
+@media (max-width: 60rem) {
+  .doc-side {
+    position: static;
+    width: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .doc-side .sm-nav { flex-direction: row; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.75rem; }
+  body.doc-page main { margin-left: 0; }
+  body.doc-page .site-foot { margin-left: 0; }
+}
+
+/* ——— the content column (all layouts) ——— */
+main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 3rem;
+}
+
+/* headings: weight does the hierarchy, tight leading, hairline under h2 */
+main h1, main h2, main h3 {
+  color: var(--ink);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+main h1 { font-size: 2rem; margin: 0 0 1.25rem; }
+main h2 {
+  font-size: 1.35rem;
+  margin: 2.5rem 0 0.9rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--line);
+}
+main h3 { font-size: 1.1rem; margin: 2rem 0 0.6rem; }
+main h1 + p, main h2 + p, main h3 + p { margin-top: 0; }
+
+main p, main li { color: var(--ink); }
+main a { color: var(--jam); text-decoration: none; }
+main a:hover { text-decoration: underline; }
+
+main img, main video { max-width: 100%; height: auto; border-radius: 4px; }
+
+main blockquote {
+  margin: 1.5rem 0;
+  padding: 0.25rem 1.25rem;
+  border-left: 3px solid var(--line);
+  color: var(--ink-soft);
+}
+
+/* code: panels on crust, hairline box, mono stack */
+main code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  background: var(--crust);
+  border: 1px solid var(--line);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+main pre {
+  background: var(--crust);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+main pre code { background: none; border: none; padding: 0; font-size: 0.85rem; }
+
+main table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.925rem;
+  margin: 1.5rem 0;
+}
+main th, main td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+main th { font-weight: 600; color: var(--ink); border-bottom: 1px solid var(--blossom); }
+
+main hr { border: none; border-top: 1px solid var(--line); margin: 2.5rem 0; }
+
+/* ——— the landing hero (frontpage) ——— */
+.doc-hero { padding: 3.5rem 0 2.5rem; border-bottom: 1px solid var(--line); margin-bottom: 2.5rem; }
+.doc-hero h1 { font-size: clamp(2rem, 5vw, 3rem); margin: 0 0 0.5rem; }
+.doc-hero .claim { font-size: 1.1rem; margin: 0; }
+
+/* ——— modules that arrived unknown or failed validation — inert, visible, honest ——— */
+.sm-unknown-module {
+  border: 1px dashed var(--blossom);
+  background: var(--crust);
+  color: var(--ink-soft);
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+/* client-side fallback shell target — brief blank while the browser bakes */
+.sm-fallback:empty { min-height: 40vh; }
+
+/* ——— the empty image slot: a fillable placeholder (page-type scaffolds seed it) ——— */
+.sm-empty-slot {
+  margin: 1.5rem 0;
+  padding: 2.5rem 1.5rem;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  text-align: center;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+/* ——— the callout (:::note) ——— */
+.sm-note {
+  padding: 0.9rem 1.25rem;
+  border-left: 3px solid var(--sky);
+  background: var(--sky);
+  border-radius: 4px;
+  font-size: 0.925rem;
+}
+.sm-note-tip { border-left-color: var(--blossom); background: var(--crust); }
+.sm-note-warn { border-left-color: var(--jam); background: var(--sky); }
+
+/* ——— the disclosure (:::details) ——— */
+.sm-details {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  margin: 1.5rem 0;
+}
+.sm-details > summary {
+  cursor: pointer;
+  padding: 0.7rem 1.25rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.sm-details > *:not(summary) { padding: 0 1.25rem 1rem; }
+.sm-details > *:first-child { margin-top: 0; }
+
+/* ——— the teaser fold (:::more) ——— */
+hr.sm-more {
+  border: none;
+  border-top: 1px solid var(--line);
+  width: 40%;
+  margin: 2.5rem auto;
+}
+
+/* ——— the 404 ——— */
+.sm-notfound {
+  min-height: calc(100dvh - 12rem);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  text-align: center;
+  gap: 0.5rem;
+}
+.sm-notfound h1 { margin: 0; font-size: clamp(5rem, 16vw, 11rem); line-height: 1; color: var(--line); }
+.sm-notfound p { margin: 0; color: var(--ink-soft); }
+.sm-notfound a { color: var(--jam); }
+
+/* ——— footer ——— */
+.site-foot {
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  padding: 1.25rem 1.5rem;
+}
+.site-foot p { margin: 0; }
