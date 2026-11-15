@@ -3,22 +3,22 @@
     "urls": {
         "home": {
             "status": 200,
-            "sha256": "3b016d3b307d66608618cddda627f0d43a05a5867b15778385f174eac74c64ea",
+            "sha256": "ffe8b0fcf5ed0932b018d175bb2dcebac4a79fd232ccfebd3059d09e6cf0d6a2",
             "bytes": 1691
         },
         "page-hello": {
             "status": 200,
-            "sha256": "12b6b3812f76f2100c7270374c12af447f70cab3fa74a722d0b6cd87a7a22e4b",
+            "sha256": "129111a3cc2d98889e9211ab5cad18dd811fa0bbd4fbcba4448af587f0b81299",
             "bytes": 1696
         },
         "page-test": {
             "status": 200,
-            "sha256": "926b0303796a0077ca633c9e6b00fe9f6942049d46181695680bce3687b3b0e7",
+            "sha256": "b28704f280463ef5e2341ac2c35e0988c966f086c43aead12cdfbbb7a030568e",
             "bytes": 2148
         },
         "page-404": {
             "status": 404,
-            "sha256": "0c5efe32d40e7840a141ab44887c6643d14e615401b394bdf29f1433dd273eaf",
+            "sha256": "79885d598ac71f200e3673280f29982f312ef19446d734dc5baa8523a1e036be",
             "bytes": 1535
         },
         "api-pages": {

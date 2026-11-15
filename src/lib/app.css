@@ -17,6 +17,15 @@
    TOKENS — the one block to retokenize (mirrors /design)
    ———————————————————————————————————————————————— */
 @theme {
+  /* ═══ THE COLOR SYNTAX LAW (2026-11-15, user order) ═══
+     Every color in the dashboard is ONE of these tokens. The token block
+     is the only place a hex may live. The MIRROR (+page.svelte) feeds
+     these tokens from the active theme's handles — turn a handle in the
+     settings and every surface wearing the token moves, live. NO hex
+     outside this block; NO inline gradients in markup; a component that
+     needs a color asks for its token. The feedback set (alert-ok/warn/
+     err + the neons) is semantic, not theme-mirrored, and lives by its
+     own tokens/literals — marked where it appears. ═══ */
   /* surfaces — one flesh for bg and mg; depth comes from shadow, not color.
      THE SOFT LAW (2026-15-11, user order): extremely bright sand-grey
      (almost white), warm grey type — the grey warmed with batter/dough;
@@ -87,13 +96,19 @@
 
 body {
   /* the page wears BATTER (the theme's word: batter = the page itself);
-     the depth edge breathes crust — both stops ride the theme's handles */
+     the depth edge breathes crust — both stops ride the theme's handles.
+     .sm-theme-page is the SAME face for full-screen layers (the menu
+     overlay's dialog) — one syntax, both surfaces. */
   background: linear-gradient(145deg, var(--color-batter) 0%, var(--color-batter) 55%, var(--color-crust) 100%);
   color: var(--color-ink);
   font-family: var(--font-body);
   font-size: var(--text-base);
   font-weight: 300; /* the soft law (2026-11-15, user order): 300 body, 400 headlines */
   line-height: 1.6;
+}
+
+.sm-theme-page {
+  background: linear-gradient(145deg, var(--color-batter) 0%, var(--color-batter) 55%, var(--color-crust) 100%);
 }
 
 /* ————————————————————————————————————————————————
@@ -137,7 +152,7 @@ body {
 .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
 
 .btn-secondary { background: linear-gradient(145deg, var(--color-batter), var(--color-crust) 75%); }
-.btn-primary { background: linear-gradient(145deg, #f06a52, var(--color-jam) 55%, #c94630); color: #fff; }
+.btn-primary { background: var(--color-jam); color: #fff; }
 .btn-primary:hover:not(:disabled) { filter: brightness(1.06); }
 .btn-attention { background: linear-gradient(145deg, #ff55a0, var(--color-neon-pink) 55%, #d9006a); color: #fff; }
 .btn-attention:hover:not(:disabled) { filter: brightness(1.08); }
@@ -187,8 +202,8 @@ textarea.input { resize: vertical; min-height: 5rem; }
   padding: 0.15rem 0.75rem;
   letter-spacing: 0.05em; text-transform: uppercase;
 }
-.badge-draft { background: linear-gradient(145deg, #f8ccd6, var(--color-blossom)); }
-.badge-live { background: linear-gradient(145deg, #d3e7f4, var(--color-sky)); }
+.badge-draft { background: var(--color-blossom); }
+.badge-live { background: var(--color-sky); }
 .badge-err { background: linear-gradient(145deg, #e05746, var(--color-error)); color: #fff; }
 .badge-neon { background: var(--color-neon-pink); color: #fff; animation: pulse 2.2s ease-in-out infinite; }
 @keyframes pulse {
@@ -318,12 +333,12 @@ textarea.input { resize: vertical; min-height: 5rem; }
   position: fixed; right: 0; top: 50%; transform: translateY(-50%);
   z-index: 50; /* above the overlay (z-40), below the modals (z-50 cards) */
   width: 2.4rem; height: 3.4rem;
-  background: #fff; border: 2px solid #e3dccd; border-right: none;
+  background: #fff; border: 2px solid var(--color-line); border-right: none;
   border-radius: 6px 0 0 6px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.10);
-  font: inherit; font-size: 1.1rem; font-weight: 700; color: #767676;
+  font: inherit; font-size: 1.1rem; font-weight: 700; color: var(--color-ink-soft);
   cursor: pointer;
 }
-.sm-overlay-x:hover { color: #4f4a42; background: #f4efe6; }
+.sm-overlay-x:hover { color: var(--color-ink); background: var(--color-crust); }
 
 /* ————————————————————————————————————————————————
    08 · OVERLAY BITS — overlays float above the whole stack;

@@ -927,9 +927,8 @@
 {#if menuOpen}
   <!-- The dialog takes focus itself on mount; there is no Escape — the X is
        the door (2026-11-09, user order). -->
-  <div class="fixed inset-0 z-40 flex flex-col overflow-hidden" role="dialog" aria-modal="true" aria-label="Menu" tabindex="-1"
+  <div class="fixed inset-0 z-40 flex flex-col overflow-hidden sm-theme-page" role="dialog" aria-modal="true" aria-label="Menu" tabindex="-1"
     use:dialogFocus
-    style="background: linear-gradient(145deg, #fffdf7 0%, #fff8ef 45%, #f9ecd9 100%);"
   >
     <!-- the overlay's chrome, slimmed by law (2026-11-07): tabs on top, the
          close X at the right edge where the live page wears its triangle,

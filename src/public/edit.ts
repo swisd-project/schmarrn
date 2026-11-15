@@ -101,11 +101,11 @@ const EDIT_CSS = `
   width:2.4rem; height:3.4rem;
   background:#fff; border:2px solid var(--line,#e3dccd); border-right:none;
   border-radius:6px 0 0 6px; box-shadow:0 1px 4px rgba(0,0,0,.10);
-  font:inherit; font-size:1.1rem; font-weight:700; color:#767676;
+  font:inherit; font-size:1.1rem; font-weight:700; color:var(--color-ink-soft);
   cursor:pointer; display:none; /* shown when the drawer is collapsed */
   align-items:center; justify-content:center;
 }
-.sm-admin-back:hover { color:#4f4a42; background:#f4efe6; }
+.sm-admin-back:hover { color:var(--color-ink); background:var(--color-crust); }
 .sm-admin-root.open { cursor:auto; }
 .sm-admin-menu { display:flex; flex-direction:column; gap:.15rem; flex:1 1 auto; min-height:0; overflow-y:auto; }
 /* the retail band: the shelf between the tabs and Log out — same item law,
@@ -114,9 +114,9 @@ const EDIT_CSS = `
 .sm-admin-menu button {
   display:block; width:100%; text-align:left; white-space:nowrap;
   background:none; border:none; padding:.5rem .65rem; border-radius:4px;
-  font:inherit; font-size:12.5px; font-weight:600; color:#767676; cursor:pointer;
+  font:inherit; font-size:12.5px; font-weight:600; color:var(--color-ink-soft); cursor:pointer;
 }
-.sm-admin-menu button:hover { background:#f4efe6; color:#4f4a42; }
+.sm-admin-menu button:hover { background:var(--color-crust); color:var(--color-ink); }
 /* Log out lives at the drawer's foot — the full-height law's floor */
 .sm-admin-menu > :last-child { margin-top: auto; }
 .sm-edit-layer { position:fixed; inset:0; background:rgba(40,25,15,.45); z-index:9999; display:grid; place-items:center; }
@@ -148,8 +148,8 @@ textarea.sm-input { resize:vertical; min-height:8rem; font-family:ui-monospace,m
 .sm-btn:disabled { opacity:.45; cursor:not-allowed; transform:none; box-shadow:none; }
 .sm-btn-primary { background:linear-gradient(145deg,#f06a52,var(--color-jam) 55%,#c94630); color:#fff; }
 .sm-btn-primary:hover:not(:disabled) { filter:brightness(1.06); }
-.sm-btn-secondary { background:linear-gradient(145deg,#fffdf7,var(--color-batter) 55%,#f5e7d2); }
-.sm-btn-danger { background:linear-gradient(145deg,#ff55a0,var(--color-neon-pink) 55%,#d9006a); color:#fff; }
+.sm-btn-secondary { background:var(--color-batter); }
+.sm-btn-danger { background:var(--color-neon-pink); color:#fff; }
 .sm-alert { padding:.5rem .75rem; border-radius:4px; font-size:13px; }
 .sm-alert-err { background:rgba(194,58,43,.12); color:var(--color-error); }
 .sm-alert-ok { background:rgba(77,143,95,.14); color:var(--color-ok); }
