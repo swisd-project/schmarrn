@@ -3,13 +3,13 @@
     "urls": {
         "home": {
             "status": 200,
-            "sha256": "057d0c1162e58e03d222bc5f4603046da02d015565bd00191536dd66e558c5d3",
-            "bytes": 1353
+            "sha256": "4314d16d654a907fedd4cd135af34bb1ed7ace079f3f6c14ebda1f46375f8181",
+            "bytes": 1612
         },
         "page-hello": {
             "status": 200,
-            "sha256": "8a521241415f174a3c5267f29dd97f36a63a7aa5518c9de8916ca65f478e737f",
-            "bytes": 1358
+            "sha256": "46f5451594256c1759adcdd2adb1576492b370e9733ade17822558b1c1b65766",
+            "bytes": 1617
         },
         "page-test": {
             "status": 200,
@@ -18,8 +18,8 @@
         },
         "page-404": {
             "status": 404,
-            "sha256": "d2f0595a7b7ca06fd992f357fe8480420a5f44f72b5f47e2b248183c43d0bb60",
-            "bytes": 1197
+            "sha256": "49cd31f018f7abd0134a09c9e5fc6f85e0466a95efa131fa6148fed5f3754acc",
+            "bytes": 1456
         },
         "api-pages": {
             "status": 200,
