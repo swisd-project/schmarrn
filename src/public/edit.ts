@@ -42,16 +42,24 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 /** The design system, distilled for the public page (tokens + the classes we use). */
 const EDIT_CSS = `
+/* THE BAKED NOTO (2026-11-15, user order): the content-md-editor displays
+   what the world types — every script the Noto Project covers rides in
+   bridge/assets/noto/ (46 woff2 subsets, OFL-licensed, no network fetch:
+   the editor ships baked). CJK families are NOT baked (a ~20 MB fork the
+   user has not bought); those glyphs fall through to the system's fonts.
+   Re-bake: fetch css2?family=<Family>:wght@400;700 from fonts.googleapis.com
+   with a modern-Chrome UA, rewrite the gstatic URLs to local paths. */
+@import url('/bridge/assets/noto/noto.css');
 :root {
-  --color-batter:#fff8ef; --color-crust:#f6e7d7; --color-line:#e5d5c0;
-  --color-jam:#e2543e; --color-neon-pink:#ff2e88; --color-neon-blue:#00cfff;
-  --color-ink:#3a2e26; --color-ink-soft:#6f5d4f;
+  --color-batter:#f8f5ef; --color-crust:#f1ebe1; --color-line:#e3dbcd;
+  --color-jam:#d6006f; --color-neon-pink:#ff2e88; --color-neon-blue:#00cfff;
+  --color-ink:#5f564a; --color-ink-soft:#6e6459;
   --color-ok:#4d8f5f; --color-warn:#c98a1b; --color-error:#c23a2b;
-  --light:rgba(255,255,255,.95); --shade:rgba(58,46,38,.16); --shade-strong:rgba(58,46,38,.28);
+  --light:rgba(255,255,255,.95); --shade:rgba(95,86,74,.16); --shade-strong:rgba(95,86,74,.28);
   --raise-mg:-5px -5px 12px var(--light),6px 6px 14px var(--shade);
   --hover-lift:3px 4px 10px var(--shade);
   --press:inset 3px 3px 8px var(--shade),inset -3px -3px 8px var(--light);
-  --float-shadow:var(--raise-mg),0 18px 44px rgba(58,46,38,.22);
+  --float-shadow:var(--raise-mg),0 18px 44px rgba(95,86,74,.22);
   --lift:.16s cubic-bezier(.34,1.3,.64,1);
 }
 .sm-edit * { box-sizing:border-box; }
@@ -59,7 +67,7 @@ const EDIT_CSS = `
 [data-sm-edit-root]>* { position:relative; cursor:pointer; }
 [data-sm-edit-root]>*:hover::after {
   content:''; position:absolute; inset:-2px; pointer-events:none;
-  outline:2px dashed rgba(0,207,255,.55); outline-offset:2px;
+  outline:2px dashed rgba(255,46,136,.55); outline-offset:2px;
 }
 /* surgery: the raw sheet owns the draft — the block buttons look and act dead */
 .${SURGERY_CLASS} > * { cursor:not-allowed !important; }
@@ -78,7 +86,7 @@ const EDIT_CSS = `
   transition:width .15s ease; cursor:pointer;
   display:flex; flex-direction:column;
   z-index:9990; /* above every page/template menu; below editor modals (9999) */
-  font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size:12.5px;
+  font-family:'Noto Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size:12.5px;
 }
 /* identical to the overlay's close X (right edge, middle) but '<' — opens the
    admin drawer; drawer links open the overlay. Visible only when collapsed. */
@@ -111,9 +119,9 @@ const EDIT_CSS = `
   background:var(--color-batter); border-radius:4px; box-shadow:var(--float-shadow);
   width:min(34rem,92vw); max-height:84vh; overflow:auto;
   display:flex; flex-direction:column; gap:.7rem; padding:1rem 1.25rem;
-  color:var(--color-ink); font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size:14px;
+  color:var(--color-ink); font-family:'Noto Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size:14px;
 }
-.sm-modal h3 { margin:0; font-weight:800; font-size:18px; }
+.sm-modal h3 { margin:0; font-weight:400; font-size:18px; }
 .sm-plugin-preview { width:100%; height:320px; border:0; display:block; border-radius:4px; background:#fff; }
 .sm-modal-head { display:flex; justify-content:space-between; align-items:center; }
 .sm-field { display:flex; flex-direction:column; gap:.25rem; }
@@ -123,8 +131,8 @@ const EDIT_CSS = `
   border:none; border-radius:4px; padding:.5rem .75rem; width:100%;
   box-shadow:var(--press); transition:box-shadow var(--lift);
 }
-.sm-input:focus { outline:none; box-shadow:var(--press),0 0 0 3px rgba(0,207,255,.25); }
-textarea.sm-input { resize:vertical; min-height:8rem; font-family:ui-monospace,monospace; }
+.sm-input:focus { outline:none; box-shadow:var(--press),0 0 0 3px rgba(255,46,136,.25); }
+textarea.sm-input { resize:vertical; min-height:8rem; font-family:ui-monospace,monospace,'Noto Sans'; }
 .sm-btn {
   display:inline-flex; align-items:center; gap:.5rem; font:inherit; font-weight:700; font-size:13px;
   padding:.5rem 1rem; border-radius:4px; border:none; cursor:pointer; text-decoration:none;
@@ -152,7 +160,7 @@ textarea.sm-input { resize:vertical; min-height:8rem; font-family:ui-monospace,m
   position:fixed; z-index:9997; display:flex; flex-direction:column; gap:.25rem;
   background:var(--color-ink); color:#fff; padding:.35rem; border-radius:4px;
   box-shadow:0 8px 20px rgba(58,46,38,.3);
-  font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  font-family:'Noto Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
 }
 .sm-float-row { display:flex; gap:.25rem; }
 .sm-float button {

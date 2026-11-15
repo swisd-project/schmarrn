@@ -46,8 +46,9 @@
   --color-warn: #c98a1b;
   --color-error: #c23a2b;
 
-  /* type — sans everywhere */
-  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* type — the soft law's face (2026-11-15, user order): Cormorant Upright;
+     the sans stays the fallback when the font fails to load */
+  --font-body: 'Cormorant Upright', Georgia, system-ui, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
 
   /* scale (1.25 ratio) */
