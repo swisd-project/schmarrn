@@ -234,13 +234,18 @@
   }
 </script>
 
-<!-- THE BENTO (2026-11-11, user order): 5 columns x 2 rows — site
-     settings 1x1, theme style 2x1; the empty cells wait for later
-     freight. Every tile covers ONE row of height (2026-11-15, user
-     order: lg:auto-rows-fr — both rows equal) and scrolls inside
-     itself: the page never moves. -->
+<!-- THE BENTO (2026-11-11, user order; repacked 2026-11-15, user order):
+     3 columns x 2 rows — attribution 1x1, site settings 1x1, integrations
+     1x1 | theme style 2x1, users 1x1. SIX units on a SIX-unit shelf: NO
+     empty cell, no empty lower band (the 5-column packing left four
+     holes in row 2 — the "empty lower border" the user called out).
+     Every tile covers ONE row of height and scrolls inside itself:
+     the page never moves. The DOM order matters — grid auto-placement
+     fills row-major, so the integrations card rides BEFORE the theme
+     card, or the theme's double width pushes the users card down into
+     a third row. -->
 {#if siteSettings}
-  <div class="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:auto-rows-fr lg:overflow-hidden min-h-0 overflow-y-auto">
+  <div class="grid grid-cols-1 gap-4 min-h-0 overflow-y-auto lg:grid-cols-3 lg:grid-rows-2 lg:h-full lg:overflow-hidden">
     <!-- THE ATTRIBUTION CARD (2026-11-12, user order): first in the
          bento, 1x1. The release's own name + day, the people behind
          it, the way to support it, the door back to GitHub. -->
@@ -301,6 +306,58 @@
       {#if siteError}<p class="alert alert-err m-0" role="alert">{siteError}</p>{/if}
     </form>
 
+    <!-- THE INTEGRATIONS CARD (2026-11-12, user order): last in the
+         bento, 1x1. A rack of squares, two per row — GitHub is the
+         first; a live logo wears the primary colour. -->
+    <section class="mg flex flex-col gap-3 lg:col-span-1 lg:overflow-y-auto lg:min-h-0">
+      <h4 class="mg-h">Integrations</h4>
+      <div class="grid grid-cols-2 gap-2">
+        <button
+          class="flex flex-col items-center justify-center gap-2 aspect-square border border-line bg-batter/40 hover:bg-batter/70 transition-colors"
+          title={github?.connected ? `GitHub — connected as ${github.login}` : 'GitHub — connect an account'}
+          onclick={() => ongithub?.()}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            class="w-12 h-12 {github?.connected ? 'text-jam' : 'text-ink-soft'}"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+          </svg>
+          <span class="text-xs font-bold">GitHub</span>
+        </button>
+        <!-- the SMTP oven, second in the rack (2026-11-12, user order):
+             invites and password resets ride it; plumbed in, the mark
+             wears the primary colour -->
+        <button
+          class="flex flex-col items-center justify-center gap-2 aspect-square border border-line bg-batter/40 hover:bg-batter/70 transition-colors"
+          title={mail?.configured ? `Mail — plumbed in via ${mail.host}` : 'Mail — connect an SMTP server'}
+          onclick={() => onmail?.()}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            class="w-12 h-12 {mail?.configured ? 'text-jam' : 'text-ink-soft'}"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            aria-hidden="true"
+          >
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <path d="M3 7l9 6 9-6" />
+          </svg>
+          <span class="text-xs font-bold">Mail</span>
+        </button>
+      </div>
+      {#if github?.connected}
+        <p class="m-0 text-xs text-ink-soft">connected as <b>{github.login}</b></p>
+      {/if}
+      {#if mail?.configured}
+        <p class="m-0 text-xs text-ink-soft">plumbed in via <b>{mail.host}</b></p>
+      {/if}
+      {#if githubError}<p class="alert alert-err m-0" role="alert">{githubError}</p>{/if}
+    </section>
+
     <section class="mg flex flex-col gap-3 lg:col-span-2 lg:overflow-y-auto lg:min-h-0">
       <h4 class="mg-h">Theme style</h4>
     {#if siteSettings.handles.length === 0}
@@ -360,57 +417,6 @@
     {/if}
     </section>
 
-    <!-- THE INTEGRATIONS CARD (2026-11-12, user order): last in the
-         bento, 1x1. A rack of squares, two per row — GitHub is the
-         first; a live logo wears the primary colour. -->
-    <section class="mg flex flex-col gap-3 lg:col-span-1 lg:overflow-y-auto lg:min-h-0">
-      <h4 class="mg-h">Integrations</h4>
-      <div class="grid grid-cols-2 gap-2">
-        <button
-          class="flex flex-col items-center justify-center gap-2 aspect-square border border-line bg-batter/40 hover:bg-batter/70 transition-colors"
-          title={github?.connected ? `GitHub — connected as ${github.login}` : 'GitHub — connect an account'}
-          onclick={() => ongithub?.()}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            class="w-12 h-12 {github?.connected ? 'text-jam' : 'text-ink-soft'}"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
-          </svg>
-          <span class="text-xs font-bold">GitHub</span>
-        </button>
-        <!-- the SMTP oven, second in the rack (2026-11-12, user order):
-             invites and password resets ride it; plumbed in, the mark
-             wears the primary colour -->
-        <button
-          class="flex flex-col items-center justify-center gap-2 aspect-square border border-line bg-batter/40 hover:bg-batter/70 transition-colors"
-          title={mail?.configured ? `Mail — plumbed in via ${mail.host}` : 'Mail — connect an SMTP server'}
-          onclick={() => onmail?.()}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            class="w-12 h-12 {mail?.configured ? 'text-jam' : 'text-ink-soft'}"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.6"
-            aria-hidden="true"
-          >
-            <rect x="3" y="5" width="18" height="14" rx="2" />
-            <path d="M3 7l9 6 9-6" />
-          </svg>
-          <span class="text-xs font-bold">Mail</span>
-        </button>
-      </div>
-      {#if github?.connected}
-        <p class="m-0 text-xs text-ink-soft">connected as <b>{github.login}</b></p>
-      {/if}
-      {#if mail?.configured}
-        <p class="m-0 text-xs text-ink-soft">plumbed in via <b>{mail.host}</b></p>
-      {/if}
-      {#if githubError}<p class="alert alert-err m-0" role="alert">{githubError}</p>{/if}
-    </section>
 
     <!-- THE USERS CARD (2026-11-15, user order): the accounts live here now,
          moved from the old users tab — a 1x1 bento card, the list on top,
