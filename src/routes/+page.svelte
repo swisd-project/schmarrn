@@ -142,10 +142,76 @@
     if (siteSettings !== null) return;
     try {
       siteSettings = { ...(await getSiteSettings()) };
-    } catch {
-      // the settings card shows its "reaching" note; not a page-top error
+    } catch {      // the settings card shows its "reaching" note; not a page-top error
     }
   }
+
+  // ——— THE MIRROR (2026-11-15, user order: "theme css affect both frontend
+  // and backend"): the overlay listens to the theme. The handle values the
+  // admin turns on the public face are mapped onto the dashboard's own
+  // tokens — live, client-side, no second serve. The mapping list is
+  // core-declared: these are the var names the dashboard understands; a
+  // theme declaring others simply leaves the dashboard's defaults standing.
+  // The font roles mirror the same road: an overridden role's face is
+  // injected here with its css2 link, so the overlay's type follows too.
+  const MIRROR_VARS = ['crust', 'batter', 'blossom', 'sky', 'jam', 'ink', 'ink-soft', 'line'];
+
+  function css2Url(family: string, styles: string): string {
+    return 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(family).replace(/%20/g, '+')
+      + (styles !== '' ? ':' + styles : '') + '&display=swap';
+  }
+
+  $effect(() => {
+    const s = siteSettings;
+    const decls: string[] = [];
+    if (s !== null) {
+      for (const handle of s.handles) {
+        const name = handle.var.replace(/^--/, '');
+        if (MIRROR_VARS.includes(name) && handle.value !== '') {
+          decls.push(`--color-${name}:${handle.value}`);
+        }
+      }
+      for (const role of s.fonts ?? []) {
+        const face = role.value || role.default;
+        if (face === '') continue;
+        decls.push(role.role === 'headline'
+          ? `--font-headline:'${face}'`
+          : `--font-body:'${face}',system-ui,sans-serif`);
+      }
+    }
+    let el = document.getElementById('sm-theme-mirror');
+    if (decls.length === 0) {
+      el?.remove();
+    } else {
+      if (el === null) {
+        el = document.createElement('style');
+        el.id = 'sm-theme-mirror';
+        document.head.append(el);
+      }
+      el.textContent = `:root{${decls.join(';')}}`;
+    }
+    // the overridden faces must LOAD in the overlay — one link per stored
+    // override, removed again when the role returns to the theme's default
+    if (s !== null) {
+      for (const role of s.fonts ?? []) {
+        const id = `sm-overlay-font-${role.role}`;
+        const existing = document.getElementById(id);
+        if (role.value !== '') {
+          const href = css2Url(role.value, role.styles);
+          if (existing === null || existing.getAttribute('href') !== href) {
+            existing?.remove();
+            const link = document.createElement('link');
+            link.id = id;
+            link.rel = 'stylesheet';
+            link.href = href;
+            document.head.append(link);
+          }
+        } else {
+          existing?.remove();
+        }
+      }
+    }
+  });
 
 
   /** The landing page after login (2026-11-07 law): the site's home in admin

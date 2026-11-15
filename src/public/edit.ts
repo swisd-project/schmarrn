@@ -51,9 +51,14 @@ const EDIT_CSS = `
    with a modern-Chrome UA, rewrite the gstatic URLs to local paths. */
 @import url('/bridge/assets/noto/noto.css');
 :root {
-  --color-batter:#f8f5ef; --color-crust:#f1ebe1; --color-line:#e3dbcd;
-  --color-jam:#d6006f; --color-neon-pink:#ff2e88; --color-neon-blue:#00cfff;
-  --color-ink:#5f564a; --color-ink-soft:#6e6459;
+  /* the mirror law (2026-11-15, user order: theme css affects BOTH faces):
+     the editor lives IN the themed page, so its chrome drinks the page's
+     own tokens through var() indirection — a handle turned in the settings
+     moves the editor with the site, live. The baked values below are the
+     fallbacks for a page that declares nothing. */
+  --color-batter:var(--batter,#f8f5ef); --color-crust:var(--crust,#f1ebe1); --color-line:var(--line,#e3dbcd);
+  --color-jam:var(--jam,#d6006f); --color-neon-pink:#ff2e88; --color-neon-blue:#00cfff;
+  --color-ink:var(--ink,#5f564a); --color-ink-soft:var(--ink-soft,#6e6459);
   --color-ok:#4d8f5f; --color-warn:#c98a1b; --color-error:#c23a2b;
   --light:rgba(255,255,255,.95); --shade:rgba(95,86,74,.16); --shade-strong:rgba(95,86,74,.28);
   --raise-mg:-5px -5px 12px var(--light),6px 6px 14px var(--shade);

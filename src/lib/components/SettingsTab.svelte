@@ -167,6 +167,15 @@
       // the card's save speaks for the whole card (2026-11-12, user order):
       // the handles AND the font — the font field lives here now.
       await saveSiteSettings({ handles, font: siteSettings.font });
+      // the mirror eats fresh truth at once: the effective values move now,
+      // not on the next reload
+      siteSettings = {
+        ...siteSettings,
+        handles: siteSettings.handles.map((h) => {
+          const saved = handleValues[h.var];
+          return { ...h, value: saved !== undefined && saved !== '' && saved !== h.default ? saved : h.default };
+        })
+      };
       toast('Saved. The public face updates on the next serve.');
     } catch (e) {
       styleError = e instanceof Error ? e.message : String(e);
