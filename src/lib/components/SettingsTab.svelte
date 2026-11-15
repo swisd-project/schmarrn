@@ -1,12 +1,14 @@
 <script lang="ts">
   /**
    * 1. Relative path: src/lib/components/SettingsTab.svelte
-   * 2. Description: THE SETTINGS BENTO (strip 8c of the p8 STEP 6 dashboard
-   *                 split) — the attribution card, the site/brand form (the
-   *                 logo IS the field, saved at once), the theme-style card
-   *                 (the active template's declared handles + the font), and
-   *                 the Integrations rack (GitHub / Mail squares opening the
-   *                 parent's modals). Owns both save flows and their
+ * 2. Description: THE SETTINGS BENTO (strip 8c of the p8 STEP 6 dashboard
+ *                 split) — the attribution card, the site/brand form (the
+ *                 logo IS the field, saved at once), the theme-style card
+ *                 (the active template's declared handles + the font), the
+ *                 Integrations rack (GitHub / Mail squares opening the
+ *                 parent's modals), and the Users card (2026-11-15: the old
+ *                 users tab demoted to a 1x1 bento card — the list + the New
+ *                 button opening the add modal). Owns both save flows and their
    *                 busy/note slices; `siteSettings` is $bindable — the
    *                 templates tab's theme switch and the crown move mutate
    *                 the same truth. The handles' values seed themselves from
@@ -19,7 +21,8 @@
    * 6. Copyright (c) 2026 Homahuki GmbH
    */
 
-  import { saveSiteSettings, uploadSiteAsset, type MailStatus, type ThemeHandle } from '$lib/api';
+  import { saveSiteSettings, uploadSiteAsset, inviteAccount, listAccounts, removeAccount, type AccountRef, type MailStatus, type ThemeHandle } from '$lib/api';
+  import UsersAddModal from './UsersAddModal.svelte';
 
   type SiteSettings = { name: string; claim: string; logo: string; theme: string; home: string; style: string; font: string; handles: readonly ThemeHandle[] };
   type CoreInfo = {
@@ -40,6 +43,7 @@
     github = null,
     mail = null,
     githubError = '',
+    user = '',
     ongithub,
     onmail,
   }: {
@@ -48,6 +52,7 @@
     github?: { connected: boolean; login: string | null } | null;
     mail?: MailStatus | null;
     githubError?: string;
+    user?: string;
     ongithub?: () => void;
     onmail?: () => void;
   } = $props();
@@ -59,6 +64,45 @@
   let handleValues = $state<Record<string, string>>({});
   let styleBusy = $state(false);
   let styleError = $state('');
+
+  // ——— the users panel (moved from the old users tab, 2026-11-15): the
+  // bento's own card sweeps the account list on mount (the tab's {#if}
+  // mounts the settings fresh every visit); the add form lives in the
+  // modal the New button opens. An account never removes itself.
+  let accounts = $state<readonly AccountRef[]>([]);
+  let usersError = $state('');
+  let addOpen = $state(false);
+
+  $effect(() => {
+    void loadAccounts();
+  });
+
+  async function loadAccounts() {
+    try {
+      accounts = await listAccounts();
+    } catch (e) {
+      usersError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function deleteNow(name: string) {
+    try {
+      await removeAccount(name);
+      await loadAccounts();
+    } catch (e) {
+      usersError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function inviteNow(name: string) {
+    usersError = '';
+    try {
+      await inviteAccount(name);
+      toast(`Credentials mailed to ${name}.`);
+    } catch (e) {
+      usersError = e instanceof Error ? e.message : String(e);
+    }
+  }
 
   // the handle values seed themselves from every fresh load of the settings
   // (write-only effect: the values it writes are never read here — no loop)
@@ -365,7 +409,33 @@
       {/if}
       {#if githubError}<p class="alert alert-err m-0" role="alert">{githubError}</p>{/if}
     </section>
+
+    <!-- THE USERS CARD (2026-11-15, user order): the accounts live here now,
+         moved from the old users tab — a 1x1 bento card, the list on top,
+         the New button at the bottom opening the add modal. An account
+         never removes itself. -->
+    <section class="mg flex flex-col gap-2 lg:col-span-1">
+      <h4 class="mg-h">Users</h4>
+      <ul class="list-none p-0 m-0 flex flex-col gap-1 overflow-y-auto">
+        {#each accounts as account (account.user)}
+          <li class="flex items-center justify-between gap-2 text-sm">
+            <span class="truncate">{account.user} · {account.role}</span>
+            {#if account.user !== user}
+              <span class="flex gap-1 shrink-0">
+                {#if account.email}
+                  <button class="btn-ghost" title="Mail freshly issued credentials" onclick={() => inviteNow(account.user)}>✉</button>
+                {/if}
+                <button class="btn-ghost danger" aria-label={`Remove account ${account.user}`} onclick={() => deleteNow(account.user)}>×</button>
+              </span>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+      {#if usersError}<p class="alert alert-err m-0" role="alert">{usersError}</p>{/if}
+      <button type="button" class="btn btn-primary self-start" onclick={() => (addOpen = true)}>New user</button>
+    </section>
   </div>
+  <UsersAddModal bind:open={addOpen} oncreated={loadAccounts} />
 {:else}
   <p class="italic text-ink-soft">Reaching for the settings…</p>
 {/if}

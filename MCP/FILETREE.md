@@ -107,14 +107,14 @@
 │   │   ├── render.ts             # THE one render pipeline (fallback + editor share it)
 │   │   ├── schema.ts             # Zod: PageFrontmatter (blog left for plugin-land)
 │   │   ├── app.css               # tokens: crust/batter/raisin/jam; .card-shelf (the shelf card: square picture flush left, three lines) + .btn-static (the inert "active" label)
-│   │   └── components/            # p8 STEP 6 dashboard split (2026-11-13), 17 components: ForgotModal GithubModal MailModal ConfirmModal UploadModal PageSettingsModal NewPageModal MediaModal PanelModal GithubShelf (shared by Plugins + Templates tabs) UsersTab UpdatesTab SettingsTab TemplatesTab PluginsTab ContentsTab — ContentsTab is `$bindable` on `index`; the tab sweeps/re-sweeps it itself
+│   │   └── components/            # p8 STEP 6 dashboard split (2026-11-13), 16 components: ForgotModal GithubModal MailModal ConfirmModal UploadModal PageSettingsModal NewPageModal MediaModal PanelModal GithubShelf (shared by Plugins + Templates tabs) UsersAddModal UpdatesTab SettingsTab (carries the users card — accounts list + New-user modal, 2026-11-15) TemplatesTab PluginsTab ContentsTab — ContentsTab is `$bindable` on `index`; the tab sweeps/re-sweeps it itself
 │   ├── public/
 │   │   ├── fallback.ts           # client fallback renderer → render.esm.js
 │   │   └── edit.ts               # live-page editor, canvas-only since 2026-11-04 (one-management-overlay law: click-to-edit float menu + modals + toast; the admin door at the right middle = white rect tab → expandable side menu (Backend / Log out), carrying ?back=<page>) → edit.esm.js
 │   ├── routes/
 │   │   ├── +layout.svelte        # imports ../lib/app.css (relative — $lib evasion, see GUIDE)
 │   │   ├── +layout.ts            # prerender = true
-│   │   ├── +page.svelte          # 932 lines (was 3,318 — p8 STEP 6 dashboard split, 2026-11-13): login/setup + auth shell + menu chrome + the `{#if menuOpen}` overlay with six one-line tab members + modal instances at root; tab bodies live in src/lib/components/; select() walks authed hands onto the editor URL `/_/<slug>` (or `/_/<type>/<slug>`), lost session rides the plain path (serve.php adminMode 302 = guest rail) — /_ walk law, 2026-11-13
+│   │   ├── +page.svelte          # 932 lines (was 3,318 — p8 STEP 6 dashboard split, 2026-11-13): login/setup + auth shell + menu chrome + the `{#if menuOpen}` overlay with five one-line tab members (Users tab removed 2026-11-15 — accounts in the Settings bento) + modal instances at root; tab bodies live in src/lib/components/; select() walks authed hands onto the editor URL `/_/<slug>` (or `/_/<type>/<slug>`), lost session rides the plain path (serve.php adminMode 302 = guest rail) — /_ walk law, 2026-11-13
 │   └── content/                  # install-local user data — GITIGNORED, never committed
 │       ├── pages/                # content types (dirs = types, subdirs = slugs)
 │       │   └── <slug>/index.md   # + .draft.md sidecar + page-local media files

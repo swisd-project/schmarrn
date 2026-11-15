@@ -1,6 +1,6 @@
 <script lang="ts">
   // Login wall + page tree + editor — the Schmarrn kitchen. p4 chrome: no sidebar;
-  // a burger opens the full-screen overlay (Contents / Settings / Plugins & Templates / Users).
+  // a burger opens the full-screen overlay (Contents / Settings / Plugins & Templates).
   import { session, login, logout, fetchAdminTabs, pageCount, searchPages, deletePage, renamePage, setupStatus, runSetup, getSiteSettings, saveSiteSettings, uploadSiteAsset, listPlugins, setPlugins, deletePlugin, savePluginSettings, listTemplates, activateTemplate, deleteTemplate, coreStatus, uploadCorePacket, runCoreUpdate, listPagetypes, listWares, installWare, getDraftRaw, putDraftRaw, publishDraft, githubStatus, githubInspect, githubInstall, mailStatus, type PageRef, type PluginRef, type TemplateRef, type PagetypeRef, type WareRef, type ThemeHandle, type GithubLook, type MailStatus, type AdminTabDef } from '$lib/api';
   import { adminCloseTarget } from '$lib/back';
   import { base } from '$app/paths';
@@ -18,7 +18,6 @@
   import PageSettingsModal from '$lib/components/PageSettingsModal.svelte';
   import NewPageModal from '$lib/components/NewPageModal.svelte';
   import MediaModal from '$lib/components/MediaModal.svelte';
-  import UsersTab from '$lib/components/UsersTab.svelte';
   import UpdatesTab from '$lib/components/UpdatesTab.svelte';
   import SettingsTab from '$lib/components/SettingsTab.svelte';
   import TemplatesTab from '$lib/components/TemplatesTab.svelte';
@@ -55,7 +54,7 @@
           if (drawerIntent) {
             const wanted = params.get('tab') ?? '';
             const allowed: readonly Tab[] = s.role === 'admin'
-              ? ['contents', 'settings', 'plugins', 'templates', 'updates', 'users']
+              ? ['contents', 'settings', 'plugins', 'templates', 'updates']
               : ['contents'];
             // the plugins' own tabs ride the same door — shape-checked, not listed
             const pluginTab = wanted.startsWith('plugin:') && /^[a-z0-9-]+\/[a-z0-9_-]{1,63}$/.test(wanted.slice(7));
@@ -223,7 +222,7 @@
   }
 
   // ——— the burger overlay: Pages / Site / Accounts / Media / Plugins ———
-  type Tab = 'contents' | 'settings' | 'plugins' | 'templates' | 'updates' | 'users' | (string & {});
+  type Tab = 'contents' | 'settings' | 'plugins' | 'templates' | 'updates' | (string & {});
   let menuOpen = $state(false);
   let menuOpenedAt = 0;
   let allowClose = false; // blocks spurious untrusted closes (drawer-intent mount artifacts)
@@ -639,8 +638,6 @@
   }
 
 
-  // ——— accounts (admin): STRIP 8a of the split — the whole tab lives in
-  // ——— src/lib/components/UsersTab.svelte (it sweeps itself on mount). ———
   // ——— new page → modal: title, slug, style, a page-type scaffold, draft-vs-publish ———
   // The style is a creation-time choice (2026-11-09, user order): the options
   // are the ACTIVE THEME's declared styles, the frontpage among them — picking
@@ -888,7 +885,6 @@
         >
           {updatesAvailable ? 'Update available' : 'Up to date'}
         </button>
-        <button class="btn {tab === 'users' ? 'btn-primary' : 'btn-secondary'}" onclick={() => showTab('users')}>Users</button>
       {/if}
       {#each adminTabs as t, ti (ti)}
         <button class="btn {tab === `plugin:${t.name}/${t.id}` ? 'btn-primary' : 'btn-secondary'}"
@@ -902,10 +898,8 @@
           openNew={openNew} onupload={onUploadPick} onmedia={() => (mediaModal = true)}
           openLive={select} uploadError={uploadError} />
       {:else if tab === 'settings' && role === 'admin'}
-        <SettingsTab bind:siteSettings={siteSettings} core={core} github={github} mail={mail}
+        <SettingsTab bind:siteSettings={siteSettings} core={core} github={github} mail={mail} user={user}
           ongithub={() => (githubModal = true)} onmail={() => (mailModal = true)} />
-      {:else if tab === 'users' && role === 'admin'}
-        <UsersTab user={user} />
       {:else if tab === 'plugins' && role === 'admin'}
         <PluginsTab bind:plugins={plugins} wares={vitrine} bind:brokenPreviews={brokenPreviews}
           folds={openSections} toggle={toggleSection}
