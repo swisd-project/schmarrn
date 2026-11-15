@@ -5,7 +5,7 @@
   "style": "sub-page-1",
   "defaultStyle": "sub-page-1",
   "styles": ["frontpage", "sub-page-1"],
-  "description": "The house loaf — warm bakery default theme.",
+  "description": "The house theme — grey on white, crisp documentation dress.",
   "placeholders": [
     "siteName",
     "claim",
@@ -19,17 +19,17 @@
     "year"
   ],
   "handles": [
-    { "var": "--crust", "label": "Crust — panels & header", "type": "color", "default": "#f1ebe1" },
-    { "var": "--batter", "label": "Batter — the page", "type": "color", "default": "#f8f5ef" },
-    { "var": "--blossom", "label": "Blossom — rules & borders", "type": "color", "default": "#f0dfd7" },
-    { "var": "--sky", "label": "Sky — notes", "type": "color", "default": "#c5cfd4" },
-    { "var": "--jam", "label": "Jam — links & accents", "type": "color", "default": "#d6006f" },
-    { "var": "--ink", "label": "Ink — text", "type": "color", "default": "#5f564a" },
-    { "var": "--ink-soft", "label": "Soft ink — secondary text", "type": "color", "default": "#6e6459" },
-    { "var": "--line", "label": "Line — hairlines", "type": "color", "default": "#e3dbcd" }
+    { "var": "--crust", "label": "Crust — panels & header", "type": "color", "default": "#f6f7f9" },
+    { "var": "--batter", "label": "Batter — the page", "type": "color", "default": "#ffffff" },
+    { "var": "--blossom", "label": "Blossom — rules & borders", "type": "color", "default": "#e9edf1" },
+    { "var": "--sky", "label": "Sky — notes", "type": "color", "default": "#e3ecf3" },
+    { "var": "--jam", "label": "Jam — links & accents", "type": "color", "default": "#0550ae" },
+    { "var": "--ink", "label": "Ink — text", "type": "color", "default": "#1f2328" },
+    { "var": "--ink-soft", "label": "Soft ink — secondary text", "type": "color", "default": "#59636e" },
+    { "var": "--line", "label": "Line — hairlines", "type": "color", "default": "#e4e8ec" }
   ],
   "fonts": [
-    { "role": "headline", "label": "Headline (H1, H2, H3)", "elements": "h1, h2, h3, .site-name, .slide-brand a", "default": "Cormorant Upright" },
+    { "role": "headline", "label": "Headline (H1, H2, H3)", "elements": "h1, h2, h3, .site-name, .slide-brand a", "default": "Noto Sans" },
     { "role": "paragraph", "label": "Paragraph (p, a, li, …)", "elements": "p, a, li, blockquote, figcaption, td, th", "default": "Noto Sans" }
   ]
 }

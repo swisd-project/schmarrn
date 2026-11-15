@@ -3,40 +3,47 @@
 
    ONE STYLESHEET. Every style this theme wears lives in THIS file.
    The theme's HTML files only LINK it — nothing carries styles inline,
-   nothing is split over three stylesheets. A new theme is this folder
-   copied over: rename theme.json, rewrite the markup, restyle HERE.
+   nothing is split over three stylesheets.
 
    THE TOKEN LAYER (top of the file, below). Each custom property in
    :root is a HANDLE: it is declared in theme.json under "handles" and
    can be turned from the dashboard's Settings tab by anyone — no CSS
    knowledge needed. Keep the two in sync: a handle's "default" in
    theme.json MUST equal its value here, or the Settings tab lies.
+   The eight handle names are the dashboard's MIRROR list — same names,
+   same meanings:
+     crust  = panels, header, code blocks      batter = the page
+     blossom = rules & borders                 line   = hairlines
+     sky    = notes                            jam    = links, accents
+     ink    = text                             ink-soft = secondary text
 
-   The rules below consume the tokens and never hardcode a colour.
-   Change a token, the whole theme follows.
+   THE CRISP LAW (2026-11-15, user order — bakery becomes a template for
+   software-project documentation): grey on white, clean, minimalist.
+   Nothing decorative — no gradients, no shadows, radius ≤ 4px.
+   Structure comes from hairlines and whitespace, hierarchy from weight.
+   The whole page reads in Noto Sans (the BAKED core subsets,
+   /bridge/assets/noto/noto.css — linked in the theme's heads, no
+   third-party fetch): headlines 600, body 400, code in the mono stack.
+   One accent (jam) — links, current nav, active marks; everything else
+   is grey. No serif: the 2026-11-15 pairing law's lesson (the serif is
+   hard to read) taken to its conclusion — the headline role's default
+   is now Noto Sans too.
 
    YOUR SHELF IMAGE (the theme's own face on the Templates tab): drop a
-   preview.png next to theme.json (preview.jpg, preview.jpeg and preview.webp
-   work too — SQUARE is the shape the shelf draws) and the shelf shows your
-   theme as a thumbnail, and your chosen theme's picture in full. This
-   folder's own preview.png is a real screenshot of this theme in use. A theme
-   without one shows a small "no preview" notice — an honest absence, never a
-   broken picture — so ship it or don't, your call.
-
-   Warm hipster bakery tokens: peach paper, vanilla batter, cherry
-   blossom, baby blue, one jam-red accent. Nothing fancy; the content
-   is the pastry.
+   preview.png next to theme.json (SQUARE is the shape the shelf draws)
+   — a real screenshot of the theme in use, or none at all.
    ═══════════════════════════════════════════════════════════════════ */
 
 :root {
-  --crust: #f1ebe1;      /* handle: Crust — panels, header, code blocks   */
-  --batter: #f8f5ef;    /* handle: Batter — the page itself              */
-  --blossom: #f0dfd7;   /* handle: Blossom — rules, borders, tips         */
-  --sky: #c5cfd4;        /* handle: Sky — notes, cool accents              */
-  --jam: #d6006f;        /* handle: Jam — links, the one loud accent      */
-  --ink: #5f564a;        /* handle: Ink — body text                        */
-  --ink-soft: #6e6459;   /* handle: Soft ink — secondary text, meta        */
-  --line: #e3dbcd;       /* handle: Line — hairlines, dividers            */
+  --crust: #f6f7f9;    /* handle: Crust — panels, header, code blocks   */
+  --batter: #ffffff;   /* handle: Batter — the page itself              */
+  --blossom: #e9edf1;  /* handle: Blossom — rules, borders              */
+  --sky: #e3ecf3;      /* handle: Sky — notes, cool fills               */
+  --jam: #0550ae;      /* handle: Jam — links, the one accent           */
+  --ink: #1f2328;      /* handle: Ink — body text                       */
+  --ink-soft: #59636e; /* handle: Soft ink — secondary text, meta       */
+  --line: #e4e8ec;     /* handle: Line — hairlines, dividers            */
+  --mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', 'Source Code Pro', Menlo, Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -45,19 +52,20 @@ body {
   margin: 0;
   background: var(--batter);
   color: var(--ink);
-  /* the pairing law (2026-11-15, user order): the serif is TOO FINE for
-     body reading — Cormorant Upright keeps the headlines, the body reads
-     in Noto Sans (the BAKED core subsets: /bridge/assets/noto/noto.css,
-     linked in the theme's heads — no third-party fetch for the body). */
   font-family: 'Noto Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  font-weight: 300; /* the soft law (2026-11-15, user order): 300 body, 400 headlines */
-  line-height: 1.65;
+  font-weight: 400;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
 }
 
 .site-head {
   background: var(--crust);
-  border-bottom: 3px solid var(--blossom);
-  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+  padding: 0.9rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  flex-wrap: wrap;
 }
 
 .brand {
@@ -68,25 +76,27 @@ body {
   color: var(--ink);
 }
 
-.brand .logo { height: 2.4rem; width: auto; }
+.brand .logo { height: 1.75rem; width: auto; }
 
 .site-name {
-  font-size: 1.5rem;
-  font-weight: 400;
-  font-family: 'Cormorant Upright', Georgia, 'Times New Roman', serif; /* the headline serif */
-  letter-spacing: 0.02em;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .claim {
-  margin: 0.35rem 0 0;
+  margin: 0.5rem 0 0;
   color: var(--ink-soft);
-  font-style: italic;
+  font-size: 0.9rem;
 }
 
-.sm-nav { margin-top: 0.6rem; display: flex; gap: 1.25rem; flex-wrap: wrap; }
+.sm-nav { display: flex; gap: 1.25rem; flex-wrap: wrap; }
 .sm-nav a { color: var(--ink-soft); text-decoration: none; font-size: 0.9rem; }
-.sm-nav a:hover { color: var(--jam); }
-.sm-nav a[aria-current] { color: var(--jam); font-weight: 700; }
+.sm-nav a:hover { color: var(--ink); }
+.sm-nav a[aria-current] { color: var(--jam); font-weight: 600; }
+
+.site-head .sm-nav { margin-left: auto; }
+.site-head .claim { margin: 0; }
 
 main {
   max-width: 44rem;
@@ -95,47 +105,93 @@ main {
 }
 
 main h1, main h2, main h3 {
-  line-height: 1.25; color: var(--ink); font-weight: 400;
-  font-family: 'Cormorant Upright', Georgia, 'Times New Roman', serif; /* the headline serif */
+  color: var(--ink);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
 }
-main a { color: var(--jam); }
-main img, main video { max-width: 100%; height: auto; border-radius: 6px; }
+main h1 { font-size: 2rem; margin: 0 0 1.25rem; }
+main h2 {
+  font-size: 1.35rem;
+  margin: 2.5rem 0 0.9rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--line);
+}
+main h3 { font-size: 1.1rem; margin: 2rem 0 0.6rem; }
+main h1 + p, main h2 + p, main h3 + p { margin-top: 0; }
+
+main a { color: var(--jam); text-decoration: none; }
+main a:hover { text-decoration: underline; }
+main img, main video { max-width: 100%; height: auto; border-radius: 4px; }
 main blockquote {
   margin: 1.5rem 0;
-  padding: 0.5rem 1.25rem;
-  border-left: 4px solid var(--blossom);
-  background: var(--crust);
+  padding: 0.25rem 1.25rem;
+  border-left: 3px solid var(--line);
   color: var(--ink-soft);
 }
 main code {
+  font-family: var(--mono);
+  font-size: 0.85em;
   background: var(--crust);
+  border: 1px solid var(--line);
   padding: 0.1rem 0.35rem;
   border-radius: 4px;
-  font-size: 0.9em;
 }
-main pre { overflow-x: auto; }
-main pre code { background: none; padding: 0; }
-main hr { border: none; border-top: 2px dashed var(--line); margin: 2.5rem 0; }
+main pre {
+  background: var(--crust);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+main pre code { background: none; border: none; padding: 0; font-size: 0.85rem; }
+
+main table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.925rem;
+  margin: 1.5rem 0;
+}
+main th, main td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+main th { font-weight: 600; border-bottom: 1px solid var(--blossom); }
+
+main hr { border: none; border-top: 1px solid var(--line); margin: 2.5rem 0; }
 
 /* Modules that arrived unknown or failed validation — inert, visible, honest. */
 .sm-unknown-module {
-  border: 2px dashed var(--blossom);
+  border: 1px dashed var(--blossom);
   background: var(--crust);
   color: var(--ink-soft);
   padding: 0.75rem 1rem;
-  border-radius: 6px;
+  border-radius: 4px;
   font-size: 0.9rem;
 }
 
 /* Client-side fallback shell target — brief blank while the browser bakes. */
 .sm-fallback:empty { min-height: 40vh; }
 
+/* ——— the empty image slot: a fillable placeholder (page-type scaffolds seed it) ——— */
+.sm-empty-slot {
+  margin: 1.5rem 0;
+  padding: 2.5rem 1.5rem;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  text-align: center;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
 /* ——— slide style: the full-screen page standard ——— */
 body.slide {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background: linear-gradient(160deg, var(--batter) 0%, var(--crust) 55%, var(--blossom) 130%);
+  background: var(--batter);
 }
 
 .slide-brand {
@@ -144,10 +200,10 @@ body.slide {
   align-items: baseline;
   gap: 1.5rem;
   padding: 1rem 2rem;
+  border-bottom: 1px solid var(--line);
 }
 .slide-brand a {
-  font-weight: 400;
-  font-family: 'Cormorant Upright', Georgia, 'Times New Roman', serif; /* the headline serif */
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-size: 0.85rem;
@@ -178,30 +234,20 @@ body.slide {
   padding: 1rem 2rem;
   color: var(--ink-soft);
   font-size: 0.85rem;
-  border-top: 2px dashed var(--line);
+  border-top: 1px solid var(--line);
 }
 
 .sm-notfound { text-align: center; padding: 3rem 0; }
 .sm-notfound h1 { font-size: 4rem; margin: 0; color: var(--jam); }
 
 .site-foot {
-  border-top: 2px dashed var(--line);
+  border-top: 1px solid var(--line);
   color: var(--ink-soft);
   font-size: 0.85rem;
   text-align: center;
   padding: 1.25rem;
 }
-
-/* ——— the empty image slot: a fillable placeholder (page-type scaffolds seed it) ——— */
-.sm-empty-slot {
-  margin: 1.5rem 0;
-  padding: 2.5rem 1.5rem;
-  border: 2px dashed var(--line, #ccc);
-  border-radius: 4px;
-  text-align: center;
-  color: var(--ink-soft, #777);
-  font-style: italic;
-}
+.site-foot p { margin: 0; }
 
 /* ——— the deck: the DOCUMENT scrolls, the root snaps. No inner scroller cage. ———
    Native snap = native momentum, native keys, native anchors. scroll-snap-stop:
@@ -261,13 +307,14 @@ html:has(.slide-stage > .sm-slide) .slide-foot a { color: inherit; }
 
 /* ——— the callout (:::note) ——— */
 .sm-note {
-  padding: 1rem 1.25rem;
-  border-left: 4px solid var(--sky);
-  background: rgba(122, 170, 187, 0.1);
+  padding: 0.9rem 1.25rem;
+  border-left: 3px solid var(--sky);
+  background: var(--sky);
   border-radius: 4px;
+  font-size: 0.925rem;
 }
-.sm-note-tip { border-left-color: var(--blossom); }
-.sm-note-warn { border-left-color: var(--jam, #a33); background: rgba(170, 51, 51, 0.08); }
+.sm-note-tip { border-left-color: var(--blossom); background: var(--crust); }
+.sm-note-warn { border-left-color: var(--jam); }
 
 /* ——— the disclosure (:::details) ——— */
 .sm-details {
@@ -277,7 +324,7 @@ html:has(.slide-stage > .sm-slide) .slide-foot a { color: inherit; }
 }
 .sm-details > summary {
   cursor: pointer;
-  padding: 0.8rem 1.25rem;
+  padding: 0.7rem 1.25rem;
   font-weight: 600;
   color: var(--ink-soft);
 }
@@ -287,10 +334,9 @@ html:has(.slide-stage > .sm-slide) .slide-foot a { color: inherit; }
 /* ——— the teaser fold (:::more) ——— */
 hr.sm-more {
   border: none;
-  border-top: 2px dotted var(--ink-soft);
+  border-top: 1px solid var(--line);
   width: 40%;
   margin: 2.5rem auto;
-  opacity: 0.5;
 }
 
 /* ——— deck dots (deck.js builds them; this is the dress) ——— */
@@ -329,6 +375,6 @@ html:has(.slide-stage > .sm-slide) .sm-slide:not(.active) { opacity: 0.92; }
   text-align: center;
   gap: 0.5rem;
 }
-.sm-notfound h1 { margin: 0; font-size: clamp(5rem, 16vw, 11rem); line-height: 1; color: var(--ink); }
+.sm-notfound h1 { margin: 0; font-size: clamp(5rem, 16vw, 11rem); line-height: 1; color: var(--line); }
 .sm-notfound p { margin: 0; color: var(--ink-soft); }
 .sm-notfound a { color: var(--jam); }
