@@ -236,13 +236,15 @@
 
 <!-- THE BENTO (2026-11-11, user order): 5 columns x 2 rows — site
      settings 1x1, theme style 2x1; the empty cells wait for later
-     freight. Every tile scrolls inside itself: the page never moves. -->
+     freight. Every tile covers ONE row of height (2026-11-15, user
+     order: lg:auto-rows-fr — both rows equal) and scrolls inside
+     itself: the page never moves. -->
 {#if siteSettings}
-  <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 min-h-0 overflow-y-auto">
+  <div class="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:auto-rows-fr lg:overflow-hidden min-h-0 overflow-y-auto">
     <!-- THE ATTRIBUTION CARD (2026-11-12, user order): first in the
          bento, 1x1. The release's own name + day, the people behind
          it, the way to support it, the door back to GitHub. -->
-    <section class="mg flex flex-col gap-2 lg:col-span-1">
+    <section class="mg flex flex-col gap-2 lg:col-span-1 lg:overflow-y-auto lg:min-h-0">
       <h4 class="mg-h">Schmarrn v{core?.current ?? ''}</h4>
       {#if core?.published}<p class="m-0 text-xs text-ink-soft">published {core.published}</p>{/if}
       <hr class="border-line" />
@@ -269,7 +271,7 @@
         <a href="https://hideosnes.online" target="_blank" rel="noopener" class="underline">Hidéo Snes</a>
       </p>
     </section>
-    <form class="mg flex flex-col gap-3 lg:col-span-1" onsubmit={saveSiteNow}>
+    <form class="mg flex flex-col gap-3 lg:col-span-1 lg:overflow-y-auto lg:min-h-0" onsubmit={saveSiteNow}>
       <h4 class="mg-h">Site settings</h4>
       <label class="field"><span>Site name</span><input class="input" bind:value={siteSettings.name} required /></label>
       <label class="field"><span>Claim</span><input class="input" bind:value={siteSettings.claim} /></label>
@@ -299,7 +301,7 @@
       {#if siteError}<p class="alert alert-err m-0" role="alert">{siteError}</p>{/if}
     </form>
 
-    <section class="mg flex flex-col gap-3 lg:col-span-2">
+    <section class="mg flex flex-col gap-3 lg:col-span-2 lg:overflow-y-auto lg:min-h-0">
       <h4 class="mg-h">Theme style</h4>
     {#if siteSettings.handles.length === 0}
       <p class="italic text-ink-soft m-0">The active template declares no handles — its stylesheet is the only way in.</p>
@@ -361,7 +363,7 @@
     <!-- THE INTEGRATIONS CARD (2026-11-12, user order): last in the
          bento, 1x1. A rack of squares, two per row — GitHub is the
          first; a live logo wears the primary colour. -->
-    <section class="mg flex flex-col gap-3 lg:col-span-1">
+    <section class="mg flex flex-col gap-3 lg:col-span-1 lg:overflow-y-auto lg:min-h-0">
       <h4 class="mg-h">Integrations</h4>
       <div class="grid grid-cols-2 gap-2">
         <button
@@ -414,7 +416,7 @@
          moved from the old users tab — a 1x1 bento card, the list on top,
          the New button at the bottom opening the add modal. An account
          never removes itself. -->
-    <section class="mg flex flex-col gap-2 lg:col-span-1">
+    <section class="mg flex flex-col gap-2 lg:col-span-1 lg:overflow-y-auto lg:min-h-0">
       <h4 class="mg-h">Users</h4>
       <ul class="list-none p-0 m-0 flex flex-col gap-1 overflow-y-auto">
         {#each accounts as account (account.user)}
