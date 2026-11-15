@@ -235,15 +235,14 @@
 </script>
 
 <!-- THE BENTO (2026-11-11, user order; repacked 2026-11-15, user order):
-     4 columns x 2 rows = EIGHT cells, filled by EIGHT units — row 1:
-     attribution | site settings | integrations | users (1x1 each), row 2:
-     theme style as the full-width band (4 units). Every card covers ONE
-     row of height and scrolls inside itself: the page never moves, and
-     no cell is ever left empty (the old 5-column packing left four
-     dead cells in row 2 — the "empty lower border" the user called
-     out). The DOM order is LAW: grid auto-placement fills row-major, so
-     the theme card rides LAST, or its four-unit width swallows a row
-     and pushes a 1x1 card down into a third row. -->
+     4 columns x 2 rows = EIGHT cells. The READING ORDER is the user's:
+     attribution | site settings | theme style (2x1), then integrations |
+     users (1x1 each) — and the last TWO cells are DELIBERATE empty mg
+     tiles holding the shelf's shape (the freight-waiting law). An
+     unframed hole reads as a broken border; a tile reads as a plan.
+     Every card covers ONE row of height and scrolls inside itself: the
+     page never moves. The DOM order IS the layout — grid auto-placement
+     fills row-major, so the cards keep this order in the markup. -->
 {#if siteSettings}
   <div class="grid grid-cols-1 gap-4 min-h-0 overflow-y-auto lg:grid-cols-4 lg:grid-rows-2 lg:h-full lg:overflow-hidden">
     <!-- THE ATTRIBUTION CARD (2026-11-12, user order): first in the
@@ -306,9 +305,68 @@
       {#if siteError}<p class="alert alert-err m-0" role="alert">{siteError}</p>{/if}
     </form>
 
-    <!-- THE INTEGRATIONS CARD (2026-11-12, user order): last in the
-         bento, 1x1. A rack of squares, two per row — GitHub is the
-         first; a live logo wears the primary colour. -->
+    <section class="mg flex flex-col gap-3 lg:col-span-2 lg:overflow-y-auto lg:min-h-0">
+      <h4 class="mg-h">Theme style</h4>
+    {#if siteSettings.handles.length === 0}
+      <p class="italic text-ink-soft m-0">The active template declares no handles — its stylesheet is the only way in.</p>
+    {:else}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+        <!-- LEFT: the color stack (2026-11-12, user order) — squares as
+             tall as the text, stacked vertically, each with what it
+             CHANGES beside it. The theme's color NAMES are gone: a
+             label like "Crust — panels & header" speaks as "panels &
+             header". The hook returns the template's default. -->
+        <div class="flex flex-col gap-1.5">
+          {#each siteSettings.handles.filter((h) => h.type === 'color') as handle (handle.var)}
+            <div class="flex items-center gap-2">
+              <input
+                type="color"
+                class="w-6 h-6 p-0 border border-line rounded cursor-pointer bg-transparent shrink-0"
+                bind:value={handleValues[handle.var]}
+                title={handle.label}
+                aria-label={handle.label}
+              />
+              <button
+                type="button"
+                class="btn-ghost text-xs shrink-0"
+                title="Back to the template's default ({handle.label})"
+                onclick={() => resetHandle(handle.var, handle.default)}
+              >↺</button>
+              <span class="text-sm text-ink-soft truncate">{shortHandleLabel(handle.label)}</span>
+            </div>
+          {/each}
+        </div>
+        <!-- RIGHT: the type side — the font moved here (2026-11-12,
+             user order) from the site form; text handles ride along. -->
+        <div class="flex flex-col gap-3">
+          {#each siteSettings.handles.filter((h) => h.type !== 'color') as handle (handle.var)}
+            <div class="field">
+              <span>{handle.label}</span>
+              <div class="flex items-center gap-2">
+                <input class="input" bind:value={handleValues[handle.var]} aria-label={handle.label} />
+                <button type="button" class="btn-ghost" title="Back to the template's default" onclick={() => resetHandle(handle.var, handle.default)}>↺</button>
+              </div>
+            </div>
+          {/each}
+          <label class="field">
+            <span>Font <span class="hint">(Google name, https:// URL, or upload)</span></span>
+            <input class="input" bind:value={siteSettings.font} placeholder="e.g. Comic Neue — empty = theme default" />
+            <label class="btn btn-secondary self-start cursor-pointer">
+              <input class="hidden" type="file" accept=".woff2,.woff,.ttf,.otf" onchange={onFontPick} disabled={siteBusy} />
+              {siteBusy ? 'Uploading…' : 'Upload font…'}
+            </label>
+            <span class="hint">A plain name uses Google Fonts; a https:// link is used as-is; an uploaded file is served from the site itself.</span>
+          </label>
+        </div>
+      </div>
+      <button type="button" class="btn btn-primary self-start" onclick={saveHandlesNow} disabled={styleBusy}>{styleBusy ? 'Saving…' : 'Save style'}</button>
+      {#if styleError}<p class="alert alert-err m-0" role="alert">{styleError}</p>{/if}
+    {/if}
+    </section>
+    <!-- THE INTEGRATIONS CARD (2026-11-12, user order): the rack of
+         squares, two per row — GitHub is the first; a live logo wears
+         the primary colour. 1x1 in the shelf; the empties carry the
+         shape. -->
     <section class="mg flex flex-col gap-3 lg:col-span-1 lg:overflow-y-auto lg:min-h-0">
       <h4 class="mg-h">Integrations</h4>
       <div class="grid grid-cols-2 gap-2">
@@ -382,65 +440,14 @@
       {#if usersError}<p class="alert alert-err m-0" role="alert">{usersError}</p>{/if}
       <button type="button" class="btn btn-primary self-start" onclick={() => (addOpen = true)}>New user</button>
     </section>
+    <!-- THE EMPTY CELLS (2026-11-15, user order): the bento is 4x2 = 8
+         cells; the five cards cover six units, and the remaining two sit
+         here DELIBERATELY — empty mg tiles holding the shelf's shape
+         (the "empty cells wait for later freight" law). An unframed hole
+         reads as a broken border; a tile reads as a plan. -->
+    <div class="mg hidden lg:block lg:col-span-1" aria-hidden="true"></div>
+    <div class="mg hidden lg:block lg:col-span-1" aria-hidden="true"></div>
 
-    <section class="mg flex flex-col gap-3 lg:col-span-4 lg:overflow-y-auto lg:min-h-0">
-      <h4 class="mg-h">Theme style</h4>
-    {#if siteSettings.handles.length === 0}
-      <p class="italic text-ink-soft m-0">The active template declares no handles — its stylesheet is the only way in.</p>
-    {:else}
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-        <!-- LEFT: the color stack (2026-11-12, user order) — squares as
-             tall as the text, stacked vertically, each with what it
-             CHANGES beside it. The theme's color NAMES are gone: a
-             label like "Crust — panels & header" speaks as "panels &
-             header". The hook returns the template's default. -->
-        <div class="flex flex-col gap-1.5">
-          {#each siteSettings.handles.filter((h) => h.type === 'color') as handle (handle.var)}
-            <div class="flex items-center gap-2">
-              <input
-                type="color"
-                class="w-6 h-6 p-0 border border-line rounded cursor-pointer bg-transparent shrink-0"
-                bind:value={handleValues[handle.var]}
-                title={handle.label}
-                aria-label={handle.label}
-              />
-              <button
-                type="button"
-                class="btn-ghost text-xs shrink-0"
-                title="Back to the template's default ({handle.label})"
-                onclick={() => resetHandle(handle.var, handle.default)}
-              >↺</button>
-              <span class="text-sm text-ink-soft truncate">{shortHandleLabel(handle.label)}</span>
-            </div>
-          {/each}
-        </div>
-        <!-- RIGHT: the type side — the font moved here (2026-11-12,
-             user order) from the site form; text handles ride along. -->
-        <div class="flex flex-col gap-3">
-          {#each siteSettings.handles.filter((h) => h.type !== 'color') as handle (handle.var)}
-            <div class="field">
-              <span>{handle.label}</span>
-              <div class="flex items-center gap-2">
-                <input class="input" bind:value={handleValues[handle.var]} aria-label={handle.label} />
-                <button type="button" class="btn-ghost" title="Back to the template's default" onclick={() => resetHandle(handle.var, handle.default)}>↺</button>
-              </div>
-            </div>
-          {/each}
-          <label class="field">
-            <span>Font <span class="hint">(Google name, https:// URL, or upload)</span></span>
-            <input class="input" bind:value={siteSettings.font} placeholder="e.g. Comic Neue — empty = theme default" />
-            <label class="btn btn-secondary self-start cursor-pointer">
-              <input class="hidden" type="file" accept=".woff2,.woff,.ttf,.otf" onchange={onFontPick} disabled={siteBusy} />
-              {siteBusy ? 'Uploading…' : 'Upload font…'}
-            </label>
-            <span class="hint">A plain name uses Google Fonts; a https:// link is used as-is; an uploaded file is served from the site itself.</span>
-          </label>
-        </div>
-      </div>
-      <button type="button" class="btn btn-primary self-start" onclick={saveHandlesNow} disabled={styleBusy}>{styleBusy ? 'Saving…' : 'Save style'}</button>
-      {#if styleError}<p class="alert alert-err m-0" role="alert">{styleError}</p>{/if}
-    {/if}
-    </section>
 
 
   </div>
