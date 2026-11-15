@@ -19,13 +19,13 @@
     "year"
   ],
   "handles": [
-    { "var": "--crust", "label": "Crust — panels & header", "type": "color", "default": "#f6e7d7" },
-    { "var": "--batter", "label": "Batter — the page", "type": "color", "default": "#fff8ef" },
-    { "var": "--blossom", "label": "Blossom — rules & borders", "type": "color", "default": "#f2b8c6" },
-    { "var": "--sky", "label": "Sky — notes", "type": "color", "default": "#bcd9ea" },
-    { "var": "--jam", "label": "Jam — links & accents", "type": "color", "default": "#e2543e" },
-    { "var": "--ink", "label": "Ink — text", "type": "color", "default": "#3a2e26" },
-    { "var": "--ink-soft", "label": "Soft ink — secondary text", "type": "color", "default": "#6f5d4f" },
-    { "var": "--line", "label": "Line — hairlines", "type": "color", "default": "#e5d5c0" }
+    { "var": "--crust", "label": "Crust — panels & header", "type": "color", "default": "#f1ebe1" },
+    { "var": "--batter", "label": "Batter — the page", "type": "color", "default": "#f8f5ef" },
+    { "var": "--blossom", "label": "Blossom — rules & borders", "type": "color", "default": "#f0dfd7" },
+    { "var": "--sky", "label": "Sky — notes", "type": "color", "default": "#c5cfd4" },
+    { "var": "--jam", "label": "Jam — links & accents", "type": "color", "default": "#d6006f" },
+    { "var": "--ink", "label": "Ink — text", "type": "color", "default": "#5f564a" },
+    { "var": "--ink-soft", "label": "Soft ink — secondary text", "type": "color", "default": "#6e6459" },
+    { "var": "--line", "label": "Line — hairlines", "type": "color", "default": "#e3dbcd" }
   ]
 }
