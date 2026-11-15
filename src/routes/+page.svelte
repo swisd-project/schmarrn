@@ -894,7 +894,7 @@
       </form>
     </div>
   {:else}
-    <header class="flex items-center gap-3 px-4 py-3">
+    <header class="flex items-center gap-3 px-4 py-3 bg-crust border-b-[3px] border-blossom">
       <button class="burger" aria-label="Open menu" onclick={openMenu}>
         <span></span><span></span><span></span>
       </button>

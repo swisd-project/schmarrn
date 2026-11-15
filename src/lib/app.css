@@ -86,8 +86,9 @@
 }
 
 body {
-  /* the page itself is the bg layer — a breath of gradient from the light */
-  background: linear-gradient(145deg, #fffdf7 0%, var(--color-batter) 45%, #f9ecd9 100%);
+  /* the page wears BATTER (the theme's word: batter = the page itself);
+     the depth edge breathes crust — both stops ride the theme's handles */
+  background: linear-gradient(145deg, var(--color-batter) 0%, var(--color-batter) 55%, var(--color-crust) 100%);
   color: var(--color-ink);
   font-family: var(--font-body);
   font-size: var(--text-base);
@@ -99,7 +100,10 @@ body {
    01 · DEPTH — mg: the grouping signal
    ———————————————————————————————————————————————— */
 .mg {
-  background: var(--color-batter);
+  /* PANELS wear CRUST — the theme's word (crust = panels & header); the
+     page behind them wears batter. The mirror's handles then move what
+     their labels promise. */
+  background: var(--color-crust);
   border-radius: var(--radius-lg);
   box-shadow: var(--raise-mg);
   padding: var(--sp-6, 1.5rem);
@@ -132,7 +136,7 @@ body {
 .btn:active:not(:disabled) { transform: translateY(0); box-shadow: none; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
 
-.btn-secondary { background: linear-gradient(145deg, #fffdf7, var(--color-batter) 55%, #f5e7d2); }
+.btn-secondary { background: linear-gradient(145deg, var(--color-batter), var(--color-crust) 75%); }
 .btn-primary { background: linear-gradient(145deg, #f06a52, var(--color-jam) 55%, #c94630); color: #fff; }
 .btn-primary:hover:not(:disabled) { filter: brightness(1.06); }
 .btn-attention { background: linear-gradient(145deg, #ff55a0, var(--color-neon-pink) 55%, #d9006a); color: #fff; }
@@ -206,7 +210,7 @@ textarea.input { resize: vertical; min-height: 5rem; }
 .alert-ok { background: #e8f2ea; color: #2e5c3a; }
 .alert-warn { background: #faf0dd; color: #7a5410; }
 .alert-err { background: #fae4e0; color: #7c2318; }
-.alert-info { background: #e8f1f8; color: #33586e; }
+.alert-info { background: var(--color-sky); color: var(--color-ink); }
 
 /* ————————————————————————————————————————————————
    07 · CARDS — mg, breathing on hover
@@ -326,7 +330,7 @@ textarea.input { resize: vertical; min-height: 5rem; }
    that shadow is position, not decoration.
    ———————————————————————————————————————————————— */
 .modal-card {
-  background: var(--color-batter); border-radius: var(--radius-lg);
+  background: var(--color-crust); border-radius: var(--radius-lg);
   box-shadow: var(--float-shadow);
   width: min(34rem, 92vw); max-height: 84vh; overflow: auto;
   display: flex; flex-direction: column; gap: 0.7rem;
@@ -350,7 +354,7 @@ textarea.input { resize: vertical; min-height: 5rem; }
 .float-menu {
   display: inline-flex; gap: 0.25rem; background: var(--color-ink); color: #fff;
   padding: 0.25rem;
-  box-shadow: 0 8px 20px rgba(58, 46, 38, 0.3);
+  box-shadow: 0 8px 20px rgba(95, 86, 74, 0.3);
 }
 .float-menu button {
   font: inherit; font-size: var(--text-xs); color: #fff; background: transparent;

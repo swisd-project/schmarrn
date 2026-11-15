@@ -205,7 +205,7 @@ ${n.comment}`:n.comment}this.doc.range[2]=n.offset;break}default:this.errors.pus
    rect, grey triangle, items waiting invisibly. Open: same rect, wider. */
 .sm-admin-root {
   position:fixed; right:0; top:0; bottom:0; padding:.45rem;
-  overflow:hidden; background:#fff; border:2px solid #e3dccd; border-right:none;
+  overflow:hidden; background:#fff; border:2px solid var(--line,#e3dccd); border-right:none;
   border-radius:6px 0 0 6px; box-shadow:0 1px 4px rgba(0,0,0,.10);
   transition:width .15s ease; cursor:pointer;
   display:flex; flex-direction:column;
@@ -218,7 +218,7 @@ ${n.comment}`:n.comment}this.doc.range[2]=n.offset;break}default:this.errors.pus
   position:fixed; right:0; top:50%; transform:translateY(-50%);
   z-index:9991; /* above the drawer strip */
   width:2.4rem; height:3.4rem;
-  background:#fff; border:2px solid #e3dccd; border-right:none;
+  background:#fff; border:2px solid var(--line,#e3dccd); border-right:none;
   border-radius:6px 0 0 6px; box-shadow:0 1px 4px rgba(0,0,0,.10);
   font:inherit; font-size:1.1rem; font-weight:700; color:#767676;
   cursor:pointer; display:none; /* shown when the drawer is collapsed */
@@ -229,7 +229,7 @@ ${n.comment}`:n.comment}this.doc.range[2]=n.offset;break}default:this.errors.pus
 .sm-admin-menu { display:flex; flex-direction:column; gap:.15rem; flex:1 1 auto; min-height:0; overflow-y:auto; }
 /* the retail band: the shelf between the tabs and Log out \u2014 same item law,
    one hairline to mark where the menu ends and the market begins */
-.sm-admin-retail { display:flex; flex-direction:column; gap:.15rem; margin-top:.25rem; padding-top:.3rem; border-top:1px solid #e3dccd; }
+.sm-admin-retail { display:flex; flex-direction:column; gap:.15rem; margin-top:.25rem; padding-top:.3rem; border-top:1px solid var(--line,#e3dccd); }
 .sm-admin-menu button {
   display:block; width:100%; text-align:left; white-space:nowrap;
   background:none; border:none; padding:.5rem .65rem; border-radius:4px;
@@ -283,7 +283,7 @@ textarea.sm-input { resize:vertical; min-height:8rem; font-family:ui-monospace,m
 .sm-float {
   position:fixed; z-index:9997; display:flex; flex-direction:column; gap:.25rem;
   background:var(--color-ink); color:#fff; padding:.35rem; border-radius:4px;
-  box-shadow:0 8px 20px rgba(58,46,38,.3);
+  box-shadow:0 8px 20px rgba(95,86,74,.3);
   font-family:'Noto Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
 }
 .sm-float-row { display:flex; gap:.25rem; }
