@@ -466,7 +466,10 @@ function fontRolesHead(array $site): string
             . ($styles !== '' ? ':' . $styles : '') . '&display=swap';
         $links[] = '<link rel="stylesheet" href="' . htmlspecialchars($url, ENT_QUOTES) . '" />';
         $safe = str_replace(["'", '"', '\\', ';'], '', $family);
-        $rules[] = $role['elements'] . '{font-family:\'' . $safe . '\'}';
+        // !important is the user's word: the stored override beats the theme's
+        // own qualified rules (main h1… out-specifies a bare h1) — the handle
+        // law's spirit, kept honest at the cascade
+        $rules[] = $role['elements'] . '{font-family:\'' . $safe . '\'!important}';
     }
     if ($rules === []) {
         return '';
