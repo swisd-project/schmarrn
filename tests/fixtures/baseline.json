@@ -3,23 +3,23 @@
     "urls": {
         "home": {
             "status": 200,
-            "sha256": "dd4da6ec59f35636976401b563453945a1125a4ac4ec486d25ccf85a85d85dbb",
-            "bytes": 1361
+            "sha256": "3abff33ab0953051bbdc0a0f6bede14ec37ba939b5e7040205a17907cad39fdc",
+            "bytes": 2699
         },
         "page-hello": {
             "status": 200,
-            "sha256": "4233a4955f72df449327f3e70f3bac5aa77b5f2d4b3d441789d9824a79da5ab1",
-            "bytes": 1366
+            "sha256": "8c7e1150c735c7b560c89b6dbd6c6c38f1b7e4c66bcfa102fd0359ae91cc2a55",
+            "bytes": 2704
         },
         "page-test": {
             "status": 200,
-            "sha256": "93f510c08840c63ec402b643694c507172f418a20cf1ac06a9a4ff3c6b5cc894",
-            "bytes": 2077
+            "sha256": "46aff25c4418dae27c2d284bdf1927d9c272787276d08b58931b5a6c724b528e",
+            "bytes": 3223
         },
         "page-404": {
             "status": 404,
-            "sha256": "171620a9a6c1b61a3acb0cadd77589fc689a7ba3fe15192042d54b51d1fad6dc",
-            "bytes": 1205
+            "sha256": "2d64ad5b5bf8eb3ac3cae345b3fb9388409f2bda82a1cc0360a6c143a1faeedb",
+            "bytes": 2788
         },
         "api-pages": {
             "status": 200,

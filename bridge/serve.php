@@ -188,8 +188,9 @@ function page(string $type, string $slug, array $site): never
     exit;
 }
 
-// ——— theme contract: manifest + page.html/slide.html + assets/, placeholders filled
-// ——— by str_replace. Style comes from the page's frontmatter, default from the theme.
+// ——— theme contract: manifest + page.html + assets/, placeholders filled
+// ——— by str_replace. page.html wears EVERY page (the unified base, 2026-11-16);
+// ——— a frontmatter style is honored for non-home pages when the theme offers it.
 
 /** Validated theme directory — a rogue theme name in settings falls back to bakery. */
 function themeDir(array $site): string
@@ -236,23 +237,28 @@ function themeStyles(array $site): array
     return $out;
 }
 
-/** Page style. THE FRONTPAGE LAW (2026-11-09, user order): the home page
- *  wears the theme's `frontpage` style automatically — the crown IS the
- *  frontpage, unique by law (one home), never written to frontmatter, and
- *  the name is reserved there (frontmatter frontpage on a non-home page is
- *  dust). Else the page's own frontmatter style, honored only when the
- *  theme declares it; else the site's global style, same rule; else the
- *  theme's declared default; else '' — the theme's base template. */
+/** Page style. THE FRONTPAGE LAW (2026-11-16, amended — was 2026-11-09):
+ *  `frontpage` is NO LONGER a style — the home page wears the SAME layout
+ *  as every other page (the unified theme base), no style auto-applies to
+ *  it. What the law kept (its true meaning, 2026-11-16): (1) the single
+ *  index .md can't be OVERWRITTEN with a style — its frontmatter style is
+ *  reserved (the guard below), and (2) a clear boundary between that
+ *  must-exist index and the user-generated pages around it. Else the page's
+ *  own frontmatter style, honored only when the theme declares it; else the
+ *  site's global style, same rule; else the theme's declared default; else
+ *  '' — the theme's base template. */
 function styleOf(string $type, string $slug, array $site): string
 {
     $styles = themeStyles($site);
-    if ($slug === homeSlug($site) && in_array('frontpage', $styles, true)) {
-        return 'frontpage';
-    }
     $raw = \Store\read($type, $slug);
-    $style = $raw !== null ? \Meta\peek($raw)['style'] : null;
-    if ($style !== null && $style !== 'frontpage' && in_array($style, $styles, true)) {
-        return $style;
+    // THE FRONTPAGE LAW (2026-11-16): the index's frontmatter style is
+    // reserved — the single must-exist .md can't be overwritten with one.
+    // Every other page may declare a style, honored when the theme offers it.
+    if ($raw !== null && $slug !== homeSlug($site)) {
+        $style = \Meta\peek($raw)['style'] ?? null;
+        if ($style !== null && in_array($style, $styles, true)) {
+            return $style;
+        }
     }
     if (($site['style'] ?? '') !== '' && in_array((string)$site['style'], $styles, true)) {
         return (string)$site['style'];

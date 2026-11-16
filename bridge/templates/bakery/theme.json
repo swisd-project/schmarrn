@@ -2,10 +2,9 @@
   "name": "bakery",
   "title": "Bakery",
   "version": "0.1.0",
-  "style": "sub-page-1",
-  "defaultStyle": "sub-page-1",
-  "styles": ["frontpage", "sub-page-1"],
-  "description": "The house theme — grey on white, crisp documentation dress.",
+  "defaultStyle": "",
+  "styles": [],
+  "description": "The house theme — one unified sidebar layout on every page, grey on white, crisp documentation dress.",
   "placeholders": [
     "siteName",
     "claim",
@@ -29,7 +28,7 @@
     { "var": "--line", "label": "Line — hairlines", "type": "color", "default": "#e4e8ec" }
   ],
   "fonts": [
-    { "role": "headline", "label": "Headline (H1, H2, H3)", "elements": "h1, h2, h3, .site-name, .slide-brand a", "default": "Noto Sans" },
+    { "role": "headline", "label": "Headline (H1, H2, H3)", "elements": "h1, h2, h3, .site-name", "default": "Noto Sans" },
     { "role": "paragraph", "label": "Paragraph (p, a, li, …)", "elements": "p, a, li, blockquote, figcaption, td, th", "default": "Noto Sans" }
   ]
 }

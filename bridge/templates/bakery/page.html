@@ -1,4 +1,22 @@
 <!doctype html>
+<!--
+  page — THE LAYOUT, worn by every page (the base, and the only style).
+  2026-11-16, user order: one unified sidebar menu (header + footer) on
+  all pages — landing or not. The frontpage law was amended the same day:
+  `frontpage` is no longer a style, only a content concept (the single
+  index .md can't be overwritten; a clear boundary between it and the
+  user pages). The distinct slide/frontpage/sub-page-1 layouts are gone.
+
+  THE SIDEBAR (left, 1/5 of the DOM, full height, top → bottom):
+    1. brand  — the logo, the site title, the claim
+    2. search + filter  (theme furniture; search rides the rendered nav,
+       the filter is a scaffold awaiting a tag data door — see BACKLOG)
+    3. nav  — the page entries (the core fills {{navHtml}}), grows to push
+       the footer down
+    4. footer  — pinned to the very bottom of the sidebar (side-foot)
+
+  Under 60rem the sidebar stacks to a top band; the content flows under it.
+-->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -6,23 +24,38 @@
   {{seoHead}}
   <link rel="stylesheet" href="/bridge/assets/noto/noto.css">
   <link rel="stylesheet" href="{{themeBase}}assets/theme.css">
+  <script src="{{themeBase}}assets/menu.js" defer></script>
 </head>
-<body>
-  <header class="site-head">
-    <a class="brand" href="/">
-      {{logoHtml}}
-      <span class="site-name">{{siteName}}</span>
-    </a>
-    {{navHtml}}
-    {{claimHtml}}
-  </header>
+<body class="doc-page">
+  <div class="layout">
+    <aside class="doc-side">
+      <div class="side-top">
+        <a class="brand" href="/">
+          {{logoHtml}}
+          <span class="site-name">{{siteName}}</span>
+        </a>
+        {{claimHtml}}
+      </div>
 
-  <main>
+      <div class="side-tools">
+        <input type="search" class="sm-search" placeholder="Search pages…" aria-label="Search pages">
+        <select class="sm-filter" aria-label="Filter by tag" data-sm-filter>
+          <option value="">Filter by tag…</option>
+        </select>
+      </div>
+
+      {{navHtml}}
+
+      <div class="side-foot">
+        <footer class="site-foot">
+          <p>© {{year}} {{siteName}}</p>
+        </footer>
+      </div>
+    </aside>
+
+    <main>
 {{bodyHtml}}
-  </main>
-
-  <footer class="site-foot">
-    <p>© {{year}} {{siteName}}</p>
-  </footer>
+    </main>
+  </div>
 </body>
 </html>

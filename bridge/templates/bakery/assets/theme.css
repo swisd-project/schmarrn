@@ -12,22 +12,34 @@
    theme.json MUST equal its value here, or the Settings tab lies.
    The eight handle names are the dashboard's MIRROR list — same names,
    same meanings:
-     crust  = panels, header, code blocks      batter = the page
-     blossom = rules & borders                 line   = hairlines
-     sky    = notes                            jam    = links, accents
-     ink    = text                             ink-soft = secondary text
+     crust  = sidebar, panels, code blocks       batter = the page
+     blossom = strong rules & borders            line   = hairlines
+     sky    = notes                             jam    = links, accents
+     ink    = text                              ink-soft = secondary text
 
-   THE CRISP LAW (2026-11-15, user order — bakery becomes a template for
-   software-project documentation): grey on white, clean, minimalist.
-   Nothing decorative — no gradients, no shadows, radius ≤ 4px.
-   Structure comes from hairlines and whitespace, hierarchy from weight.
-   The whole page reads in Noto Sans (the BAKED core subsets,
-   /bridge/assets/noto/noto.css — linked in the theme's heads, no
-   third-party fetch): headlines 600, body 400, code in the mono stack.
-   One accent (jam) — links, current nav, active marks; everything else
-   is grey. No serif: the 2026-11-15 pairing law's lesson (the serif is
-   hard to read) taken to its conclusion — the headline role's default
-   is now Noto Sans too.
+   THE LAYOUT (2026-11-16, user order — the unified menu, all pages):
+   one sidebar on every page, left, 1/5 of the DOM, FULL HEIGHT (the
+   whole page tall, footer pinned to its bottom). Top → bottom:
+     brand  (logo, site title, claim)
+     search + filter  (theme furniture — see the search note)
+     nav  (the page entries — the core fills {{navHtml}})
+     footer (pinned to the bottom of the sidebar)
+   The content column is the other 4/5. Under 60rem the sidebar stacks
+   to a top band and the content flows under it.
+
+   THE CRISP LAW: grey on white, minimalist. Nothing decorative — no
+   gradients, no shadows, radius ≤ 4px. Structure from hairlines and
+   whitespace, hierarchy from weight. The whole page reads in Noto Sans
+   (the BAKED core subsets, /bridge/assets/noto/noto.css — linked in
+   the theme's heads, no third-party fetch): headlines 600, body 400,
+   code in the mono stack. One accent (jam) — links, current nav,
+   active marks; everything else is grey.
+
+   THE SEARCH (2026-11-16): theme furniture, NO plugin. The box rides
+   the RENDERED nav — a tiny client-side filter (assets/menu.js) over
+   the page entries, zero fetch, works for strangers. The filter is a
+   scaffold awaiting a tag data door (a core tags endpoint or a small
+   plugin) — flagged in BACKLOG, not a fake control.
 
    YOUR SHELF IMAGE (the theme's own face on the Templates tab): drop a
    preview.png next to theme.json (SQUARE is the shape the shelf draws)
@@ -35,14 +47,14 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 :root {
-  --crust: #f6f7f9;    /* handle: Crust — panels, header, code blocks   */
-  --batter: #ffffff;   /* handle: Batter — the page itself              */
-  --blossom: #e9edf1;  /* handle: Blossom — rules, borders              */
-  --sky: #e3ecf3;      /* handle: Sky — notes, cool fills               */
-  --jam: #0550ae;      /* handle: Jam — links, the one accent           */
-  --ink: #1f2328;      /* handle: Ink — body text                       */
-  --ink-soft: #59636e; /* handle: Soft ink — secondary text, meta       */
-  --line: #e4e8ec;     /* handle: Line — hairlines, dividers            */
+  --crust: #f6f7f9;    /* handle: Crust — sidebar, panels, code blocks */
+  --batter: #ffffff;   /* handle: Batter — the page itself             */
+  --blossom: #e9edf1;  /* handle: Blossom — strong rules, borders      */
+  --sky: #e3ecf3;      /* handle: Sky — notes, cool fills              */
+  --jam: #0550ae;      /* handle: Jam — links, the one accent          */
+  --ink: #1f2328;      /* handle: Ink — body text                      */
+  --ink-soft: #59636e; /* handle: Soft ink — secondary text, meta      */
+  --line: #e4e8ec;     /* handle: Line — hairlines, dividers           */
   --mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', 'Source Code Pro', Menlo, Consolas, monospace;
 }
 
@@ -58,16 +70,29 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-.site-head {
-  background: var(--crust);
-  border-bottom: 1px solid var(--line);
-  padding: 0.9rem 1.5rem;
+/* ——— the unified layout: the sidebar beside the content column ——— */
+.layout {
   display: flex;
-  align-items: center;
-  gap: 2rem;
-  flex-wrap: wrap;
+  align-items: stretch;
+  min-height: 100vh;
 }
 
+/* ——— the sidebar: 1/5 of the DOM, the full page tall ——— */
+.doc-side {
+  flex: 0 0 20%;
+  width: 20%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--crust);
+  border-right: 1px solid var(--line);
+}
+
+/* 1. brand — logo, site title, claim (the top of the sidebar) */
+.side-top {
+  padding: 1.5rem 1.25rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
 .brand {
   display: inline-flex;
   align-items: center;
@@ -75,33 +100,80 @@ body {
   text-decoration: none;
   color: var(--ink);
 }
-
 .brand .logo { height: 1.75rem; width: auto; }
-
 .site-name {
   font-size: 1.05rem;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
-
 .claim {
   margin: 0.5rem 0 0;
   color: var(--ink-soft);
   font-size: 0.9rem;
 }
 
-.sm-nav { display: flex; gap: 1.25rem; flex-wrap: wrap; }
-.sm-nav a { color: var(--ink-soft); text-decoration: none; font-size: 0.9rem; }
-.sm-nav a:hover { color: var(--ink); }
-.sm-nav a[aria-current] { color: var(--jam); font-weight: 600; }
+/* 2. search + filter (the sidebar's tools) */
+.side-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+.sm-search,
+.sm-filter {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--batter);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.875rem;
+}
+.sm-search::placeholder { color: var(--ink-soft); }
+.sm-search:focus {
+  outline: none;
+  border-color: var(--jam);
+}
+.sm-filter { color: var(--ink-soft); }
 
-.site-head .sm-nav { margin-left: auto; }
-.site-head .claim { margin: 0; }
+/* 3. nav — the page entries; grows to push the footer to the bottom */
+.sm-nav {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 1rem 0.75rem;
+}
+.sm-nav a {
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+.sm-nav a:hover { background: var(--blossom); color: var(--ink); }
+.sm-nav a[aria-current] {
+  background: var(--batter);
+  color: var(--jam);
+  font-weight: 600;
+}
 
+/* 4. footer — pinned to the very bottom of the sidebar */
+.side-foot {
+  margin-top: auto;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--line);
+}
+.site-foot { font-size: 0.85rem; color: var(--ink-soft); }
+.site-foot p { margin: 0; }
+
+/* ——— the content column: the other 4/5 ——— */
 main {
-  max-width: 44rem;
-  margin: 0 auto;
-  padding: 2.5rem 1.5rem 3rem;
+  flex: 1 1 auto;
+  max-width: 60rem;
+  padding: 2.5rem 2.5rem 3rem;
 }
 
 main h1, main h2, main h3 {
@@ -120,6 +192,7 @@ main h2 {
 main h3 { font-size: 1.1rem; margin: 2rem 0 0.6rem; }
 main h1 + p, main h2 + p, main h3 + p { margin-top: 0; }
 
+main p, main li { color: var(--ink); }
 main a { color: var(--jam); text-decoration: none; }
 main a:hover { text-decoration: underline; }
 main img, main video { max-width: 100%; height: auto; border-radius: 4px; }
@@ -158,11 +231,30 @@ main th, main td {
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--line);
 }
-main th { font-weight: 600; border-bottom: 1px solid var(--blossom); }
+main th { font-weight: 600; color: var(--ink); border-bottom: 1px solid var(--blossom); }
 
 main hr { border: none; border-top: 1px solid var(--line); margin: 2.5rem 0; }
 
-/* Modules that arrived unknown or failed validation — inert, visible, honest. */
+/* ——— narrow screens: the sidebar stacks to a top band ——— */
+@media (max-width: 60rem) {
+  .layout { flex-direction: column; }
+  .doc-side {
+    width: auto;
+    flex: initial;
+    min-height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .side-tools { flex-direction: row; }
+  .sm-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+  main { max-width: none; padding: 2rem 1.5rem 2.5rem; }
+}
+
+/* ——— modules that arrived unknown or failed validation — inert, visible, honest ——— */
 .sm-unknown-module {
   border: 1px dashed var(--blossom);
   background: var(--crust);
@@ -172,7 +264,7 @@ main hr { border: none; border-top: 1px solid var(--line); margin: 2.5rem 0; }
   font-size: 0.9rem;
 }
 
-/* Client-side fallback shell target — brief blank while the browser bakes. */
+/* client-side fallback shell target — brief blank while the browser bakes */
 .sm-fallback:empty { min-height: 40vh; }
 
 /* ——— the empty image slot: a fillable placeholder (page-type scaffolds seed it) ——— */
@@ -186,125 +278,6 @@ main hr { border: none; border-top: 1px solid var(--line); margin: 2.5rem 0; }
   font-style: italic;
 }
 
-/* ——— slide style: the full-screen page standard ——— */
-body.slide {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  background: var(--batter);
-}
-
-.slide-brand {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 1.5rem;
-  padding: 1rem 2rem;
-  border-bottom: 1px solid var(--line);
-}
-.slide-brand a {
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  font-size: 0.85rem;
-  color: var(--ink);
-  text-decoration: none;
-}
-.slide-brand a:hover { color: var(--jam); }
-.slide-brand .sm-nav { margin-top: 0; }
-
-.slide-stage {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  max-width: 52rem;
-  width: 100%;
-  margin: 0 auto;
-  padding: 3rem 2rem;
-}
-
-.slide-stage h1 { font-size: clamp(2.2rem, 6vw, 4rem); }
-.slide-stage h2 { font-size: clamp(1.6rem, 4vw, 2.4rem); }
-.slide-stage p  { font-size: clamp(1.05rem, 2vw, 1.3rem); }
-
-.slide-foot {
-  display: flex;
-  justify-content: space-between;
-  padding: 1rem 2rem;
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-  border-top: 1px solid var(--line);
-}
-
-.sm-notfound { text-align: center; padding: 3rem 0; }
-.sm-notfound h1 { font-size: 4rem; margin: 0; color: var(--jam); }
-
-.site-foot {
-  border-top: 1px solid var(--line);
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-  text-align: center;
-  padding: 1.25rem;
-}
-.site-foot p { margin: 0; }
-
-/* ——— the deck: the DOCUMENT scrolls, the root snaps. No inner scroller cage. ———
-   Native snap = native momentum, native keys, native anchors. scroll-snap-stop:
-   always makes every wheel gesture stop on one slide, exactly like the big
-   full-page decks behave. Only deck.js handles the loaded-at-mid-air edge. */
-html:has(.slide-stage > .sm-slide) {
-  scroll-snap-type: y mandatory;
-  scroll-behavior: smooth;
-  scrollbar-width: none; /* the deck is the scrollbar */
-}
-html:has(.slide-stage > .sm-slide)::-webkit-scrollbar { display: none; }
-html:has(.slide-stage > .sm-slide) body.slide {
-  display: block; /* document scroll, no flex column, no inner sage */
-  min-height: 100vh;
-}
-html:has(.slide-stage > .sm-slide) .slide-brand {
-  position: fixed; left: 0; right: 0; top: 0; z-index: 20;
-  background: color-mix(in srgb, var(--batter) 88%, transparent);
-  backdrop-filter: blur(8px);
-}
-/* the footer is NOT a snap target (fullPage's fp-auto-height lesson): it flows
-   after the last slide and reads like the page's quiet end of day. */
-html:has(.slide-stage > .sm-slide) .slide-foot {
-  border-top: none;
-  padding: 1.5rem 2rem 2rem;
-}
-html:has(.slide-stage > .sm-slide) .slide-foot a { color: inherit; }
-.slide-stage:has(> .sm-slide) {
-  display: block; /* the slides ARE the page */
-  max-width: none;
-  width: 100%;
-  padding: 0;
-  margin: 0;
-}
-.slide-stage:has(> .sm-slide) > .sm-slide {
-  min-height: 100vh;         /* each slide owns the viewport */
-  scroll-snap-align: start;
-  scroll-snap-stop: always;  /* one slide per gesture — natively */
-  box-sizing: border-box;
-  padding: 4.5rem 2rem;      /* clears the fixed brand / foot */
-}
-/* slide content breathes: nothing pins to the very edge of a full-height slide */
-.sm-slide > :first-child { margin-top: 0; }
-.sm-slide > :last-child { margin-bottom: 0; }
-.sm-slide p, .sm-slide ul, .sm-slide ol { max-width: 52rem; }
-.sm-slide {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  max-width: 52rem;
-  width: 100%;
-  margin: 0 auto;
-}
-.sm-slide:target {
-  outline: none;
-}
-
 /* ——— the callout (:::note) ——— */
 .sm-note {
   padding: 0.9rem 1.25rem;
@@ -314,7 +287,7 @@ html:has(.slide-stage > .sm-slide) .slide-foot a { color: inherit; }
   font-size: 0.925rem;
 }
 .sm-note-tip { border-left-color: var(--blossom); background: var(--crust); }
-.sm-note-warn { border-left-color: var(--jam); }
+.sm-note-warn { border-left-color: var(--jam); background: var(--sky); }
 
 /* ——— the disclosure (:::details) ——— */
 .sm-details {
@@ -339,34 +312,7 @@ hr.sm-more {
   margin: 2.5rem auto;
 }
 
-/* ——— deck dots (deck.js builds them; this is the dress) ——— */
-.sm-dots {
-  position: fixed;
-  right: 1.25rem;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-}
-.sm-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 1.5px solid var(--ink-soft);
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
-  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
-}
-.sm-dot:hover { transform: scale(1.4); border-color: var(--jam); }
-.sm-dot.active { background: var(--jam); border-color: var(--jam); }
-.sm-slide.active { opacity: 1; }
-.sm-slide { transition: opacity 0.3s ease; }
-html:has(.slide-stage > .sm-slide) .sm-slide:not(.active) { opacity: 0.92; }
-
-/* ——— the 404 owns the stage (sidequest, 2026-11-07): full-height, centered ——— */
+/* ——— the 404 ——— */
 .sm-notfound {
   min-height: calc(100dvh - 12rem);
   display: grid;
