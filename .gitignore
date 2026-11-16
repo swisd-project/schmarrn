@@ -5,6 +5,10 @@ output/
 build/
 dist/
 
+# The docs bake's static output is NOT the dashboard build — it ships to
+# GitHub Pages (Deploy from a branch: main → /docs/build), so it must ride the repo.
+!docs/build/
+
 # PHP cache + runtime
 bridge/cache/
 bridge/config/auth.local.php

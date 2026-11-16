@@ -1,0 +1,83 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>API Shape · Schmarrn</title>
+<meta property="og:title" content="API Shape · Schmarrn">
+<meta property="og:site_name" content="Schmarrn">
+<meta property="og:type" content="website">
+  <link rel="stylesheet" href="assets/noto/noto.css">
+  <link rel="stylesheet" href="assets/theme.css">
+  <script src="assets/menu.js" defer></script>
+</head>
+<body class="doc-page">
+  <div class="layout">
+    <aside class="doc-side">
+      <div class="side-top">
+        <a class="brand" href="./">
+          
+          <span class="site-name">Schmarrn</span>
+        </a>
+        <p class="claim">Markdown CMS, baked to a static docs face.</p>
+      </div>
+
+      <div class="side-tools">
+        <input type="search" class="sm-search" placeholder="Search pages…" aria-label="Search pages">
+        <select class="sm-filter" aria-label="Filter by tag" data-sm-filter>
+          <option value="">Filter by tag…</option>
+        </select>
+      </div>
+
+      <nav class="sm-nav"><a href="index.html">Schmarrn Docs</a><a href="api-shape.html" aria-current="page">API Shape</a><a href="module-cookbook.html">Module Cookbook</a><a href="theme-contract.html">Theme Contract</a></nav>
+
+      <div class="side-foot">
+        <footer class="site-foot">
+          <p>© 2026 Schmarrn</p>
+        </footer>
+      </div>
+    </aside>
+
+    <main>
+<h1>API Shape</h1>
+<p>The doors under <code>/bridge/</code>. Pinned by the test battery: <code>tests/snapshot.php</code>
+→ <code>urls()</code> is the exact door list.</p>
+<p>Pages come from the CMS store (<code>bridge/store.php</code>, <code>src/content/&#x3C;type>/&#x3C;slug>/index.md</code>).</p>
+<h2>The doors</h2>
+<p>| Door | Method | Answers |
+|---|---|---|
+| <code>/bridge/pages</code> | GET | The page index — <code>{type: [{slug, updatedAt, draft, hasDraft, tags, title, home?}]}</code>. Drafts filtered for strangers, full tree for editors. |
+| <code>/bridge/page/:type/:slug</code> | GET | The page's <strong>raw Markdown</strong> (not JSON; <code>Content-Type: text/markdown</code>). <code>X-Cache: HIT</code>/<code>MISS</code>. |
+| <code>/bridge/public/:type/:slug</code> | GET | Public JSON per page: <code>type</code>, <code>slug</code>, <code>title</code>, <code>bodyHtml</code> (null when the cache is stale), <code>children</code> (siblings), <code>files</code> (page-local media). Drafts never ride along. |
+| <code>/bridge/search?q=</code> | GET | Authed text search over the editorial copies; same tree shape as the index. |
+| <code>/bridge/session</code> | GET | <code>authenticated</code>, <code>user</code>, <code>role</code>, <code>csrf</code>. |
+| <code>/bridge/templates</code> | GET | Installed themes with their manifest face: <code>name</code>, <code>title</code>, <code>version</code>, <code>description</code>, <code>styles</code>, <code>defaultStyle</code>, <code>default</code>, <code>active</code>, <code>preview</code>. Admin-only. |
+| <code>/bridge/plugins</code> | GET | Installed plugins with state. Admin-only. |
+| <code>/bridge/drawer</code> | GET | <code>{handles: [...]}</code> — the admin drawer's retail band (plugin handles + theme handles). Any authed session. |
+| <code>/bridge/editor-blocks</code> | GET | The canvas insertables of every <strong>enabled</strong> plugin. Authed. |
+| <code>/bridge/pagetypes</code> | GET | The fillable scaffolds from <code>pagetypes/</code>: <code>name</code>, <code>title</code>, <code>body</code>. Authed. |
+| <code>/bridge/core</code> | GET | The core's self-update verdict: <code>current</code>, <code>latest</code>, <code>dashboard</code>, <code>updatable</code>, <code>error</code>, <code>localVersion</code>, <code>releaseName</code>, <code>published</code>, <code>contributors</code>. Admin-only. |</p>
+<h2>The refusals</h2>
+<p>Statuses below are the pinned ones (<code>tests/fixtures/baseline.json</code>).</p>
+<p>| Path | Status |
+|---|---|
+| <code>/bridge/page/pages/no-such-page</code>, <code>/bridge/public/pages/no-such-page</code> | 404 |
+| <code>/bridge/no-such-route</code> | 404 |
+| <code>/bridge/page/pages/NOT_A_SLUG</code>, <code>/bridge/page/NOT_A_TYPE/hello</code> | 404 — an uppercase identifier misses the route pattern; the store's own lid (<code>Invalid slug/type</code>, <code>bridge/store.php</code>) answers 400 only when it is reached |
+| <code>/bridge/search?q=x</code> | 401 |
+| <code>/bridge/templates</code>, <code>/bridge/plugins</code>, <code>/bridge/drawer</code>, <code>/bridge/editor-blocks</code>, <code>/bridge/pagetypes</code>, <code>/bridge/core</code> | 401 (anonymous) |
+| <code>/bridge/plugin/&#x3C;name>/&#x3C;route></code> | 404 — unknown plugin or undeclared route |
+| <code>/bridge/media/pages/hello</code> | 401 |</p>
+<p>Errors answer <code>{"error": "…"}</code> (<code>Router\refuse</code>).</p>
+<h2>The wall</h2>
+<p>The API is the ware's boundary: reads are open where they are safe
+(<code>/bridge/pages</code>, <code>/bridge/page/…</code>, <code>/bridge/public/…</code>, <code>/bridge/session</code>),
+and everything editorial or administrative — search, drawer, editor blocks,
+page types, templates, plugins, core — is closed behind a session, admin
+where the inventory demands it. The PHP core still never parses Markdown;
+the API serves bytes, or rendered HTML from the cache.</p>
+    </main>
+  </div>
+</body>
+</html>

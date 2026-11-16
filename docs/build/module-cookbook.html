@@ -1,0 +1,112 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Module Cookbook · Schmarrn</title>
+<meta property="og:title" content="Module Cookbook · Schmarrn">
+<meta property="og:site_name" content="Schmarrn">
+<meta property="og:type" content="website">
+  <link rel="stylesheet" href="assets/noto/noto.css">
+  <link rel="stylesheet" href="assets/theme.css">
+  <script src="assets/menu.js" defer></script>
+</head>
+<body class="doc-page">
+  <div class="layout">
+    <aside class="doc-side">
+      <div class="side-top">
+        <a class="brand" href="./">
+          
+          <span class="site-name">Schmarrn</span>
+        </a>
+        <p class="claim">Markdown CMS, baked to a static docs face.</p>
+      </div>
+
+      <div class="side-tools">
+        <input type="search" class="sm-search" placeholder="Search pages…" aria-label="Search pages">
+        <select class="sm-filter" aria-label="Filter by tag" data-sm-filter>
+          <option value="">Filter by tag…</option>
+        </select>
+      </div>
+
+      <nav class="sm-nav"><a href="index.html">Schmarrn Docs</a><a href="api-shape.html">API Shape</a><a href="module-cookbook.html" aria-current="page">Module Cookbook</a><a href="theme-contract.html">Theme Contract</a></nav>
+
+      <div class="side-foot">
+        <footer class="site-foot">
+          <p>© 2026 Schmarrn</p>
+        </footer>
+      </div>
+    </aside>
+
+    <main>
+<h1>Modules</h1>
+<p>Source of truth: <code>src/lib/modules.ts</code>.</p>
+<h2>The closed set</h2>
+<pre><code class="language-ts">export const MODULE_NAMES = ['image','video','embed','slide','note','details','more'] as const;
+</code></pre>
+<p>Seven names, pinned. Any other directive name is de-fanged to
+<code>&#x3C;p class="sm-unknown-module"></code> — never a live tag.</p>
+<h2>Syntax</h2>
+<p>remark-directive: <code>:::name{key=value "label"}</code> — container, leaf or text
+directive; body may be plain Markdown.</p>
+<h2>The injection wall</h2>
+<pre><code class="language-ts">export const MODULE_ATTRS = {
+  image:   ['file','caption'],
+  video:   ['url','file'],
+  embed:   ['url'],
+  slide:   ['title'],
+  note:    ['kind'],
+  details: ['summary'],
+  more:    []
+};
+</code></pre>
+<p>Any attribute outside this table never reaches the HTML — no <code>on*</code>, no
+<code>style</code>, no <code>data-*</code>, no <code>srcdoc</code>. The allowlist is applied in the remark
+phase (<code>stampDirectives</code>), before hast exists.</p>
+<p>The editor's write-side validates submitted attributes against the <strong>same</strong>
+wall, so an author is told the wall refuses a key instead of losing it
+silently.</p>
+<h2>One directive per module</h2>
+<pre><code class="language-markdown">:::image{file="photo.jpg" caption="The bakery, 2026"}
+:::
+
+:::video{url="https://example.org/clip.mp4"}
+:::
+
+:::embed{url="https://example.org/embed"}
+:::
+
+:::slide{title="The proof"}
+Slide body — markdown inside.
+:::
+
+:::note{kind="tip"}
+Knead gently.
+:::
+
+:::details{summary="More"}
+Folded body.
+:::
+
+:::more
+:::
+</code></pre>
+<h2>Notes per module</h2>
+<ul>
+<li><strong>image</strong> — <code>file</code> is a page-local filename or an http(s) URL; local paths must match <code>^[\w./-]+$</code>. No file → a visible, fillable empty slot (<code>figure.sm-empty-slot</code>). A caption wraps the image in <code>figcaption</code>.</li>
+<li><strong>video</strong> — <code>url</code> (http(s) only) or <code>file</code>; one of the two must yield a source. Renders <code>figure.sm-video > video[controls]</code>.</li>
+<li><strong>embed</strong> — <code>url</code> http(s) only → <code>iframe</code> inside <code>figure.sm-embed</code>.</li>
+<li><strong>slide</strong> — <code>title</code> becomes the anchor id (lowercase, non-alphanumerics → one hyphen); duplicates get <code>-2</code>, <code>-3</code>. Children pass through untouched.</li>
+<li><strong>note</strong> — <code>kind="tip"</code> or <code>kind="warn"</code> adds <code>sm-note-tip</code> / <code>sm-note-warn</code>; anything else is the plain <code>aside.sm-note</code>.</li>
+<li><strong>details</strong> — <code>summary</code> labels the disclosure; falls back to the directive label, then <code>More</code>. Native <code>details</code>/<code>summary</code>, zero JS.</li>
+<li><strong>more</strong> — the teaser fold; renders as <code>hr.sm-more</code>. No attributes allowed.</li>
+</ul>
+<h2>The URL gate</h2>
+<p><code>safeUrls()</code> (rehype phase) sweeps every <code>href</code>/<code>src</code>/<code>poster</code> afterwards:
+<code>http(s)</code>, <code>mailto</code>, <code>tel</code> and site-relative paths pass; dangerous schemes
+collapse to <code>#</code> (links) or lose the attribute (media).</p>
+    </main>
+  </div>
+</body>
+</html>

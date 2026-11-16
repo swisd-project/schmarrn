@@ -10,6 +10,7 @@
     "build": "vite build",
     "build:fallback": "node scripts/build-fallback.mjs",
     "build:edit": "node scripts/build-edit.mjs",
+    "build:docs": "tsx scripts/bake-docs.ts",
     "preview": "vite preview",
     "test": "bash scripts/run-tests.sh",
     "lint:arch": "node scripts/arch-lint.mjs",

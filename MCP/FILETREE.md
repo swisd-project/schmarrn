@@ -11,7 +11,7 @@
 ├── .git/
 ├── .gitignore
 ├── README.md
-├── package.json                  # SvelteKit root (dashboard)
+├── package.json                  # SvelteKit root (dashboard) + `build:docs` → `tsx scripts/bake-docs.ts` (the docs bake)
 ├── package-lock.json
 ├── node_modules/                 # ignored
 ├── .svelte-kit/                  # ignored
@@ -22,6 +22,14 @@
 ├── index.php                     # root front controller: /bridge/* → core, /_ → 301 /_/ → dashboard SPA (host _/ dir or repo build/), else public site (also php -S router)
 ├── .htaccess                     # whitelist law: _/ (dashboard home, mod_dir index), bridge/templates/, bridge/assets/, dashboard/, bridge/plugins/<n>/assets/ + index.php
 ├── pagetypes/                    # page-type scaffolds: pre-made, fillable pages (blank/landing/gallery/article); :::image slots CLOSE with :::
+├── docs/                         # the static docs face (bake: `npm run build:docs`)
+│   ├── content/                  # the books the bake reads — its OWN content root, NOT the CMS store (/src/content/ stays clean)
+│   │   ├── index.md              # the docs index
+│   │   ├── module-cookbook.md
+│   │   ├── theme-contract.md
+│   │   └── api-shape.md
+│   ├── build/                    # the baked static output — TRACKED (Pages: branch main → folder /docs/build); index.html + 3 pages + assets/{theme.css,menu.js,noto/}
+│   └── theme-contract.md         # the older tracked theme-contract book (NOT part of the bake — duplicate, see BACKLOG user-to-apply)
 ├── scripts/
 │   ├── build-fallback.mjs        # esbuild → bridge/assets/render.esm.js (committed)
 │   ├── build-edit.mjs            # esbuild → bridge/assets/edit.esm.js (committed live-page editor)
@@ -30,6 +38,7 @@
 │   ├── run-tests.sh                # THE TEST RUNNER: `npm test` — byte-identity + arch-lint + the five batteries, one verdict
 │   ├── arch-lint.mjs               # the architecture law, enforced: domain purity, queries never write, commands unreachable from GET, every mutating route names a command (`npm run lint:arch`)
 │   ├── repair-frontmatter.php      # the frontmatter repair service, CLI door — the same service POST /bridge/meta/repair rides; whole tree or one page, never silent
+│   ├── bake-docs.ts               # THE DOCS BAKE (`npm run build:docs`, tsx): reads docs/content/*.md (NOT the CMS tree), renders through the ONE renderer (renderMdms/mdms), fills the bakery template with a DOCS nav (not Serve\navHtml), copies the assets, writes static HTML to docs/build/
 │   └── (*.mts)                   # dev probes
 ├── tests/                          # the batteries live in the REPO now (p8 STEP 1 — the /tmp ones died with the machine)
 │   ├── harness.php                 # the shared verdict harness: check() = must-pass, xfail() = known defect (printed loudly, never blocking), verdict()

@@ -1,0 +1,96 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Theme Contract · Schmarrn</title>
+<meta property="og:title" content="Theme Contract · Schmarrn">
+<meta property="og:site_name" content="Schmarrn">
+<meta property="og:type" content="website">
+  <link rel="stylesheet" href="assets/noto/noto.css">
+  <link rel="stylesheet" href="assets/theme.css">
+  <script src="assets/menu.js" defer></script>
+</head>
+<body class="doc-page">
+  <div class="layout">
+    <aside class="doc-side">
+      <div class="side-top">
+        <a class="brand" href="./">
+          
+          <span class="site-name">Schmarrn</span>
+        </a>
+        <p class="claim">Markdown CMS, baked to a static docs face.</p>
+      </div>
+
+      <div class="side-tools">
+        <input type="search" class="sm-search" placeholder="Search pages…" aria-label="Search pages">
+        <select class="sm-filter" aria-label="Filter by tag" data-sm-filter>
+          <option value="">Filter by tag…</option>
+        </select>
+      </div>
+
+      <nav class="sm-nav"><a href="index.html">Schmarrn Docs</a><a href="api-shape.html">API Shape</a><a href="module-cookbook.html">Module Cookbook</a><a href="theme-contract.html" aria-current="page">Theme Contract</a></nav>
+
+      <div class="side-foot">
+        <footer class="site-foot">
+          <p>© 2026 Schmarrn</p>
+        </footer>
+      </div>
+    </aside>
+
+    <main>
+<h1>The Theme Contract</h1>
+<p>What a theme may assume, what it receives, what it must never do.
+Full book: <code>docs/theme-contract.md</code>. This page: the bakery, as baked.</p>
+<h2>The layout (bakery)</h2>
+<p><code>bridge/templates/bakery/page.html</code> — one unified sidebar layout, worn by
+every page. The sidebar (left, full height):</p>
+<ol>
+<li>brand — <code>{{logoHtml}}</code> + <code>{{siteName}}</code></li>
+<li>search + filter — theme furniture</li>
+<li>nav — <code>{{navHtml}}</code> (the page entries)</li>
+<li>footer — <code>© {{year}} {{siteName}}</code>, pinned to the bottom</li>
+</ol>
+<p>Under 60rem the sidebar stacks to a top band; content flows under it.</p>
+<h2>Placeholders the layout fills</h2>
+<p><code>{{navHtml}}</code> <code>{{bodyHtml}}</code> <code>{{themeBase}}</code> <code>{{siteName}}</code> <code>{{claim}}</code>
+<code>{{claimHtml}}</code> <code>{{logoUrl}}</code> <code>{{logoHtml}}</code> <code>{{pageTitle}}</code> <code>{{seoHead}}</code>
+<code>{{year}}</code></p>
+<p>Filled by <code>fill()</code> in <code>bridge/serve.php</code>; the bake fills the same names from
+<code>docs/content/</code> (<code>scripts/bake-docs.ts</code>). All escaped except <code>{{bodyHtml}}</code>
+and <code>{{seoHead}}</code>, which core generates. A template carries no styles — it
+only links the one stylesheet.</p>
+<h2>Assets</h2>
+<ul>
+<li><code>&#x3C;link rel="stylesheet" href="{{themeBase}}assets/theme.css"></code> — the ONE stylesheet</li>
+<li><code>&#x3C;script src="{{themeBase}}assets/menu.js" defer>&#x3C;/script></code></li>
+<li><code>/bridge/assets/noto/noto.css</code> — the fonts</li>
+</ul>
+<p>In the bake <code>{{themeBase}}</code> is <code>''</code> (assets sit next to the page) and the noto
+link is repointed to <code>assets/noto/noto.css</code>; <code>theme.css</code>, <code>menu.js</code> and the
+noto folder are copied into <code>docs/build/assets/</code>.</p>
+<h2>Search and filter</h2>
+<ul>
+<li><strong>Search</strong> — client-side over the <strong>rendered nav</strong> (<code>.sm-nav</code> entries). No fetch, no core route, works for a stranger.</li>
+<li><strong>Filter</strong> — a bare scaffold: the <code>.sm-filter</code> select has no tag data door yet (no core tags endpoint). It stands honest and does nothing.</li>
+</ul>
+<h2>The class namespace</h2>
+<p><code>sm-</code> is shared between core, the render pipeline, the editor and themes.
+Core emits <code>sm-nav</code>, <code>sm-fallback</code>, <code>sm-notfound</code>, <code>claim</code>, <code>logo</code>; the
+pipeline emits <code>sm-slide</code>, <code>sm-module</code>, <code>sm-details</code>, <code>sm-embed</code>,
+<code>sm-image</code>, <code>sm-empty-slot</code>, <code>sm-video</code>, <code>sm-note</code>, <code>sm-note-tip</code>,
+<code>sm-note-warn</code>, <code>sm-more</code>, <code>sm-unknown-module</code>. Themes extend the contract
+here — they emit no <code>sm-</code> classes of their own.</p>
+<h2>What a theme must never do</h2>
+<ul>
+<li>Assume DOM timing (some doors deliver the body asynchronously)</li>
+<li>Style or depend on editor-internal classes (<code>sm-edit-*</code>, <code>data-sm-*</code>)</li>
+<li>Carry styles in the markup — the one stylesheet holds them</li>
+<li>Emit <code>sm-</code> classes of its own</li>
+<li>Parse content HTML structurally — style it</li>
+</ul>
+    </main>
+  </div>
+</body>
+</html>
