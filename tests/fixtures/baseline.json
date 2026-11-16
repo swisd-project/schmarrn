@@ -13,8 +13,8 @@
         },
         "page-test": {
             "status": 200,
-            "sha256": "46aff25c4418dae27c2d284bdf1927d9c272787276d08b58931b5a6c724b528e",
-            "bytes": 3223
+            "sha256": "8e96cc1c07410b977466d6d8a5d87b3b5e64fe1e75d59d594dc410fc1db341ee",
+            "bytes": 6379
         },
         "page-404": {
             "status": 404,
@@ -23,7 +23,7 @@
         },
         "api-pages": {
             "status": 200,
-            "sha256": "a8cd0fccc0c32460eeb7f02f2789c1d9c47371d2a2621b1fa8a4c095c6f02a58",
+            "sha256": "ae33d4cb883fbc7cb5cf5806780246081e6fe618ba3735b10b18b0c0a10c3d66",
             "bytes": 219
         },
         "api-raw": {

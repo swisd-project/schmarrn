@@ -78,6 +78,24 @@ const EDIT_CSS = `
 .${SURGERY_CLASS} > * { cursor:not-allowed !important; }
 .${SURGERY_CLASS} > *:hover::after { content:none; }
 [data-sm-edit-root]>[data-sm-selected] { outline:3px solid var(--color-neon-blue); outline-offset:3px; }
+/* the CANVAS ZOOM (user order 2026-11-16: "it's so small, I can't read it"):
+   the CONTENT zooms, the editor's chrome stays crisp. The scale rides a CSS var
+   on the document root; the canvas' width compensates (100% / zoom), so the
+   column keeps its place and the TYPE grows — the line shortens, nothing
+   overflows sideways. The pill sits clear of the drawer's open panel (the
+   drawer is a full-height column at the right edge; its foot holds Log out). */
+[data-sm-edit-root] { zoom:var(--sm-canvas-zoom,1); width:calc(100% / var(--sm-canvas-zoom,1)); }
+.sm-zoom {
+  position:fixed; bottom:1rem; right:calc(max(20vw,14rem) + .75rem); z-index:9996;
+  display:flex; align-items:center; gap:.1rem; padding:.25rem;
+  background:var(--color-batter); border:1px solid var(--color-line,#e3dccd); border-radius:4px;
+  box-shadow:0 4px 14px rgba(95,86,74,.18);
+  font-family:'Noto Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size:12px;
+}
+.sm-zoom button { font:inherit; font-weight:700; color:var(--color-ink-soft); background:none; border:none; padding:.25rem .5rem; cursor:pointer; border-radius:3px; }
+.sm-zoom button:hover:not(:disabled) { background:var(--color-crust); color:var(--color-ink); }
+.sm-zoom button:disabled { opacity:.35; cursor:not-allowed; }
+.sm-zoom .sm-zoom-val { min-width:3.4rem; color:var(--color-ink); font-variant-numeric:tabular-nums; }
 /* the ONE management door, user-corrected 2026-11-04: "the closed rect should be
    as tall as the opened rect" — so the menu stays IN FLOW at all times and only
    its VISIBILITY toggles (no reflow, no height change): the rect's height is
@@ -185,6 +203,58 @@ textarea.sm-input { resize:vertical; min-height:8rem; font-family:ui-monospace,m
 .sm-toast { position:fixed; top:1rem; left:50%; transform:translateX(-50%); z-index:10000; max-width:90vw; }
 `;
 
+// ——— the canvas zoom (user order 2026-11-16: "it's so small, I can't read
+// it") ——
+// The CONTENT zooms; the editor's chrome stays crisp. The scale rides a CSS
+// var on the document root (the canvas' width compensates — see the CSS), so
+// the column keeps its place and the type grows. The level is remembered: a
+// screen truth, not a page truth — the same glasses on the next page.
+
+const ZOOM_KEY = 'sm-canvas-zoom';
+const ZOOM_STEPS: readonly number[] = [0.67, 0.8, 1, 1.25, 1.5, 1.75, 2];
+
+function mountZoom(): void {
+  const steps = ZOOM_STEPS;
+  let level = steps.indexOf(1);
+  try {
+    const at = steps.indexOf(Number(localStorage.getItem(ZOOM_KEY)));
+    if (at !== -1) level = at;
+  } catch {
+    /* private mode — the default level stands, the zoom still works */
+  }
+
+  const pill = el('div', { class: 'sm-zoom', role: 'group', 'aria-label': 'Canvas zoom' });
+  const minus = el('button', { type: 'button', 'aria-label': 'Zoom out', title: 'Zoom out' }, ['−']);
+  const value = el('button', { type: 'button', class: 'sm-zoom-val', title: 'Reset to 100%' }, ['100%']);
+  const plus = el('button', { type: 'button', 'aria-label': 'Zoom in', title: 'Zoom in' }, ['+']);
+
+  function apply(): void {
+    const z = steps[level];
+    document.documentElement.style.setProperty('--sm-canvas-zoom', String(z));
+    value.textContent = `${Math.round(z * 100)}%`;
+    minus.disabled = level === 0;
+    plus.disabled = level === steps.length - 1;
+  }
+  function step(delta: number): void {
+    const next = Math.min(steps.length - 1, Math.max(0, level + delta));
+    if (next === level) return;
+    level = next;
+    apply();
+    try {
+      localStorage.setItem(ZOOM_KEY, String(steps[level]));
+    } catch {
+      /* private mode — the zoom still works, it just won't be remembered */
+    }
+  }
+
+  minus.addEventListener('click', () => step(-1));
+  plus.addEventListener('click', () => step(1));
+  value.addEventListener('click', () => { level = steps.indexOf(1); apply(); });
+  pill.append(minus, value, plus);
+  document.body.append(pill);
+  apply();
+}
+
 // ——— state ———
 
 const root = document.querySelector<HTMLElement>('[data-sm-edit-root]');
@@ -193,6 +263,7 @@ if (root !== null) void boot(root);
 async function boot(root: HTMLElement): Promise<void> {
   const style = el('style', {}, [EDIT_CSS]);
   document.head.append(style);
+  mountZoom();
 
   const type = root.dataset.type ?? 'pages';
   const slug = root.dataset.slug ?? '';
