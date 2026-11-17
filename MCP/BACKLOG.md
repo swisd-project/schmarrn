@@ -30,6 +30,7 @@ v1 — todos
 [~] SMTP: vendored PHPMailer 6.9.3, config template + invite/reset endpoints — real SMTP host unconfigured (docs at ship-out).
 
 ## p2 visual editor
+[x] Admin-mode persistence (2026-11-16, user order): `src/public/edit.ts` — one document-level click listener (capture phase) re-anchors every same-origin PAGE link onto its `/_` twin, so `/_` admin mode survives link navigation; ends only at logout (drawer Log out, untouched). Skipped: `/bridge/` doors, `/_` dashboard, files (dotted last segment), hash links, foreign hosts, `target="_blank"`, drawer chrome. Editor bundle = authed-only → anon bytes untouched, byte gate GREEN. Capture phase mandatory: canvas block handler `stopPropagation()`s bubble clicks. Confirmed at edit.ts:593-614.
 [x] Canvas editor on live page: click block → float menu → save-confirm modal → markdown truth; module spec v1 (text/image/video/embed + slide/note/details/more) in mdms.
 [x] Guardrails: sha256 draft fingerprints (409 conflict flow), per-module attribute allowlist + URL gate, atomic writes.
 [~] Uploads into immutable assets (v1 stores originals); media browser in the overlay Contents tab.

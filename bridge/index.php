@@ -1016,18 +1016,35 @@ try {
             if (!Auth\check()) {
                 Router\refuse(401, 'The kitchen door is locked — log in first.');
             }
+            // THE PLUGIN GUARD's data: the defs AND the enabled plugin names —
+            // the canvas can only say "isn't installed" when it knows what IS.
+            // The DISABLED plugins ride too, with their DECLARED fences — the
+            // manifest is the evidence, zero guessing: a fence a disabled ware
+            // declares gets "installed but disabled", never a silent code block.
             $defs = [];
+            $enabledNames = [];
+            $disabled = [];
             foreach (Plugins\all() as $plugin) {
                 if (isset($plugin['error']) || $plugin['enabled'] !== true) {
+                    if (!isset($plugin['error']) && is_string($plugin['name'] ?? null)) {
+                        $fences = [];
+                        foreach (($plugin['editorBlocks'] ?? []) as $blockDef) {
+                            if (is_array($blockDef) && is_string($blockDef['fence'] ?? null) && $blockDef['fence'] !== '') {
+                                $fences[] = $blockDef['fence'];
+                            }
+                        }
+                        $disabled[] = ['name' => (string)$plugin['name'], 'fences' => $fences];
+                    }
                     continue;
                 }
+                $enabledNames[] = (string)$plugin['name'];
                 foreach ($plugin['editorBlocks'] as $blockDef) {
                     $defs[] = is_array($blockDef)
                         ? $blockDef
                         : ['name' => $blockDef, 'label' => $plugin['title'], 'template' => ''];
                 }
             }
-            echo json_encode($defs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            echo json_encode(['defs' => $defs, 'plugins' => $enabledNames, 'disabled' => $disabled], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
             break;
 
         // ——— admin tabs (slice 5a): the overlay tabs of every ENABLED plugin,———

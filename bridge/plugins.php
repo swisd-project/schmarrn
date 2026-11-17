@@ -856,6 +856,47 @@ function resolve(string $name, string $route, string $method, array $body): arra
  *  touches editor JS. */
 function previewStash(array $body): array
 {
+    // ——— THE TOKEN-FILTER MODE (p6 slice 6, 2026-11-16, user order): the
+    // canvas posts a block's RENDERED html; the enabled plugins' content
+    // filters run over it — the exact machinery the public face gets, no
+    // plugin cooperation needed. A ware that ships a contentFilter previews
+    // in the canvas by that fact alone; nothing is declared, nothing is
+    // changed. No filter touches the html → 404 → the canvas keeps the inert
+    // chip (fail-open). Same lids as the route mode: auth+CSRF at the door,
+    // the size roofs, the identifier law — and the filters are the same code
+    // the public serve runs, so no new trust surface rides here. ———
+    if (($body['mode'] ?? '') === 'filter') {
+        $html = is_string($body['html'] ?? null) ? (string)$body['html'] : '';
+        $type = is_string($body['type'] ?? null) ? (string)$body['type'] : '';
+        $slug = is_string($body['slug'] ?? null) ? (string)$body['slug'] : '';
+        if ($html === '' || strlen($html) > 65536
+            || preg_match(IDENTIFIER, $type) !== 1 || preg_match(IDENTIFIER, $slug) !== 1) {
+            throw new \Domain\Error(400, 'That preview order is unbaked dough.');
+        }
+        load(); // plugin code in place — the route mode gets this via resolve(); the filter mode brings its own
+        $site = \Site\load();
+        $filtered = contentFilters([
+            'site' => $site,
+            'type' => $type,
+            'slug' => $slug,
+            'title' => \Serve\titleOf($type, $slug, $slug),
+        ], $html);
+        if ($filtered === $html) {
+            throw new \Domain\Error(404, 'No plugin preview there — the tag stays a chip.');
+        }
+        if (strlen($filtered) > 256 * 1024) {
+            @error_log('[schmarrn-plugins] filter preview over the roof');
+            throw new \Domain\Error(502, 'That preview is too heavy for the canvas.');
+        }
+        previewPrune();
+        $handle = bin2hex(random_bytes(16));
+        @mkdir(__DIR__ . '/cache', 0775, true);
+        @file_put_contents(__DIR__ . "/cache/preview-{$handle}.json", json_encode([
+            'exp' => time() + 300,
+            'html' => $filtered,
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        return ['t' => $handle];
+    }
     $name = is_string($body['name'] ?? null) ? (string)$body['name'] : '';
     $route = is_string($body['route'] ?? null) ? (string)$body['route'] : '';
     $source = is_string($body['source'] ?? null) ? (string)$body['source'] : '';

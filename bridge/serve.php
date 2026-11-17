@@ -537,6 +537,29 @@ function fill(array $theme, array $site, string $title, string $bodyHtml, string
 {
     /** Plugin content filters (p6 slice 2) transform the stored body HTML — serve-time, live. */
     $bodyHtml = \Plugins\contentFilters(['site' => $site, 'type' => $type, 'slug' => $currentSlug, 'title' => $title], $bodyHtml);
+    // ——— THE PLUGIN GUARD (2026-11-16, user order): a plugin-shaped tag whose
+    // plugin is NOT enabled is invisible on the public face — wrapped in
+    // display:none. The md keeps the literal tag (never rewritten — the cache
+    // carries it raw, the admin canvas says what is missing); the street sees
+    // nothing of a plugin that is not there. Runs AFTER the filters: an
+    // enabled plugin's tag is already rendered by its own filter — the sweep
+    // only ever meets orphans. ———
+    $enabled = array_keys(array_filter(\Plugins\effective()));
+    $bodyHtml = (string)preg_replace_callback('/\{\{([a-z0-9]+)_[a-z0-9-]+\}\}/', function (array $m) use ($enabled): string {
+        return in_array($m[1], $enabled, true)
+            ? $m[0]
+            : '<span style="display:none">' . $m[0] . '</span>';
+    }, $bodyHtml);
+    // ——— THE FENCE BOUNDARY (2026-11-17): a 4-tick fence is a PLUGIN fence —
+    // the stamp (data-sm-plugin-fence) rides the code node from the renderer.
+    // A fence whose plugin is not enabled is invisible on the public face —
+    // the whole pre block hides, the md keeps the literal. ———
+    $bodyHtml = (string)preg_replace_callback('/<pre><code([^>]*)data-sm-plugin-fence="([a-z0-9-]+)"([^>]*)>([\s\S]*?)<\/code><\/pre>/', function (array $m) use ($enabled): string {
+        $attrs = $m[1] . 'data-sm-plugin-fence="' . $m[2] . '"' . $m[3];
+        return in_array($m[2], $enabled, true)
+            ? '<pre><code' . $attrs . '>' . $m[4] . '</code></pre>'
+            : '<pre style="display:none"><code' . $attrs . '>' . $m[4] . '</code></pre>';
+    }, $bodyHtml);
     $replacements = [];
     foreach (\Plugins\placeholderFills(['site' => $site, 'type' => $type, 'slug' => $currentSlug, 'title' => $title]) as $token => $value) {
         $replacements[$token] = $value;
@@ -681,8 +704,13 @@ function shell(array $site, string $type, string $slug): string
 {
     $theme = themeTemplate($site, styleOf($type, $slug, $site));
     $title = titleOf($type, $slug, $slug);
+    // THE PLUGIN GUARD's fallback face: the shell carries the ENABLED plugin
+    // names — the client render can then hide an orphan tag the same way the
+    // cached-path sweep does (the guard can't ask the door anonymously).
+    $plugins = implode(',', array_keys(array_filter(\Plugins\effective())));
     $body = '<div class="sm-fallback" data-schmarrn-root data-type="' . htmlspecialchars($type, ENT_QUOTES)
-        . '" data-slug="' . htmlspecialchars($slug, ENT_QUOTES) . '"></div>' . "\n"
+        . '" data-slug="' . htmlspecialchars($slug, ENT_QUOTES) . '"'
+        . ' data-plugins="' . htmlspecialchars($plugins, ENT_QUOTES) . '"></div>' . "\n"
         . '<script type="module" src="/bridge/assets/render.esm.js"></script>';
     return fill($theme, $site, $title, $body, seoHead($title, $site['name'], "{$type}/{$slug}"), $slug, $type);
 }

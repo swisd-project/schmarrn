@@ -20,7 +20,30 @@ if (root !== null) {
   fetch(`/bridge/page/${type}/${slug}`)
     .then((res) => (res.ok ? res.text() : Promise.reject(new Error(`API ${res.status}`))))
     .then((raw) => {
-      root.innerHTML = renderMdms(raw, { type, slug }).fullHtml;
+      // tokens: true — the fallback shell is a DISPLAY render; the chip
+      // previews the tag instead of raw text. The cache/publish renders keep
+      // the raw tag for the serve-time PHP filters.
+      root.innerHTML = renderMdms(raw, { type, slug, tokens: true }).fullHtml;
+      // THE PLUGIN GUARD's fallback face: the shell carries the ENABLED plugin
+      // names (data-plugins) — an orphan tag hides here exactly as the cached
+      // path's sweep hides it. No plugin names → nothing to judge → the chips
+      // stay (fail-open).
+      const enabled = (root.dataset.plugins ?? '').split(',').filter(Boolean);
+      if (enabled.length > 0) {
+        root.querySelectorAll<HTMLElement>('[data-sm-token]').forEach((chip) => {
+          const prefix = (chip.dataset.smToken ?? '').split('/')[0] ?? '';
+          if (!enabled.includes(prefix)) chip.style.display = 'none';
+        });
+        // THE FENCE BOUNDARY's fallback face (2026-11-17, user order "fix
+        // please"): an orphan PLUGIN fence (4-tick, data-sm-plugin-fence)
+        // hides here exactly as the cached path's sweep hides it — same
+        // boundary law, both faces. No plugin names → nothing to judge → the
+        // fence stays a code block (fail-open).
+        root.querySelectorAll<HTMLElement>('[data-sm-plugin-fence]').forEach((pre) => {
+          const lang = pre.dataset.smPluginFence ?? '';
+          if (lang !== '' && !enabled.includes(lang)) pre.style.display = 'none';
+        });
+      }
       // Byte-peek the title, same discipline as the PHP side.
       const title = /^title:\s*(.+)$/m.exec(raw)?.[1]?.trim();
       if (title !== undefined && title !== '') {

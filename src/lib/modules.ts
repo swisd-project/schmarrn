@@ -353,3 +353,85 @@ export function stampDirectives() {
     );
   };
 }
+
+// ——— THE FENCE BOUNDARY (2026-11-17, user order; 2026-11-17 bug ride: the
+// stamp never landed on real pages — mdms strips the frontmatter BEFORE
+// parsing, so AST lines are BODY-relative while `raw` included the
+// frontmatter and every lookup was offset by the frontmatter's line count).
+// The law: a 4-tick fence (````) is a PLUGIN fence — a 3-tick fence (```) is
+// a code block, ALWAYS. The parser reads both as `code` nodes, so the boundary
+// is checked against the BODY source line the parser actually saw: 4 ticks at
+// the open = the fence announces itself as a plugin's, no manifest lookup, no
+// guessing. The stamp (data-sm-plugin-fence) rides the rendered node so every
+// consumer — the editor's fence guard, the public sweep — can tell a plugin
+// fence from a code block by structure alone.
+// WHAT: skips the frontmatter (house format: opens `---`, closes at the next
+// `---` — mirroring mdms's own boundary regex, without parsing it) before
+// splitting lines, so the AST line lookup hits the line the parser saw.
+// FAILS: fail-open — a line that cannot be decided (no frontmatter match, no
+// position) stays a code block; never a dead page.
+export function fenceBoundary(raw: string) {
+  const body = raw.replace(/^\uFEFF?[\s]*?---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+  const lines = body.split('\n');
+  return () => (tree: unknown) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    visit(tree, 'code' as never, (node: any) => {
+      const line = lines[((node.position?.start?.line ?? 1) as number) - 1] ?? '';
+      if (!line.startsWith('````')) return; // 3 ticks — a code block, always
+      const lang = typeof node.lang === 'string' ? node.lang : '';
+      node.data = {
+        ...(node.data ?? {}),
+        hProperties: { ...((node.data?.hProperties ?? {}) as Record<string, unknown>), dataSmPluginFence: lang }
+      };
+    });
+  };
+}
+
+// ——— THE TOKEN HOOK (p6 slice 6, 2026-11-16, user order — direction A: the
+// token hook, NOT a fence form): a render-only PREVIEW of the plugin tags.
+// The dialect: {{prefix_name}} — underscore, lowercase; the OLD colon form is
+// dead (mdms reads a bare :name as a directive and eats it — never
+// reintroduce one). The hook walks the hast TEXT nodes and dresses every tag
+// in an inert chip — a span carrying the prefix and the name. Purely
+// syntactic and generic: every plugin's tag, present and future, no
+// registry, no manifest capability, no PHP.
+// RENDER-ONLY by law: the raw md keeps the literal tag — always. The hook
+// rides only the DISPLAY renders (the editor canvas + the public fallback
+// shell); renderMdms turns it on with context.tokens, and every
+// cache/publish render keeps it OFF — the cached HTML must carry the raw tag
+// or the serve-time PHP content filters never resolve it.
+// Fail-open by construction: anything that doesn't match stays plain text —
+// never a dead page, never a blank.
+const TOKEN_TEST = /\{\{[a-z0-9]+_[a-z0-9-]+\}\}/;
+const TOKEN_TAG = /\{\{([a-z0-9]+)_([a-z0-9-]+)\}\}/g;
+
+export function tokenHook() {
+  return () => (tree: unknown) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    visit(tree as never, 'text' as never, (node: any, index: number | undefined, parent: any) => {
+      if (parent === null || parent === undefined || typeof index !== 'number') return;
+      // A token inside code is CODE — the fence and inline-code literals win.
+      if (parent.type === 'element' && (parent.tagName === 'code' || parent.tagName === 'pre')) return;
+      const value = typeof node.value === 'string' ? node.value : '';
+      if (!TOKEN_TEST.test(value)) return;
+      const parts: HastNode[] = [];
+      let last = 0;
+      for (const m of value.matchAll(TOKEN_TAG)) {
+        const at = m.index ?? 0;
+        if (at > last) parts.push(text(value.slice(last, at)));
+        const prefix = m[1];
+        const name = m[2];
+        parts.push({
+          type: 'element',
+          tagName: 'span',
+          properties: { className: 'sm-token', dataSmToken: `${prefix}/${name}` },
+          children: [text(`${prefix}/${name}`)]
+        });
+        last = at + m[0].length;
+      }
+      if (last < value.length) parts.push(text(value.slice(last)));
+      parent.children.splice(index, 1, ...parts);
+      return index + parts.length;
+    });
+  };
+}

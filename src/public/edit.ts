@@ -78,24 +78,9 @@ const EDIT_CSS = `
 .${SURGERY_CLASS} > * { cursor:not-allowed !important; }
 .${SURGERY_CLASS} > *:hover::after { content:none; }
 [data-sm-edit-root]>[data-sm-selected] { outline:3px solid var(--color-neon-blue); outline-offset:3px; }
-/* the CANVAS ZOOM (user order 2026-11-16: "it's so small, I can't read it"):
-   the CONTENT zooms, the editor's chrome stays crisp. The scale rides a CSS var
-   on the document root; the canvas' width compensates (100% / zoom), so the
-   column keeps its place and the TYPE grows — the line shortens, nothing
-   overflows sideways. The pill sits clear of the drawer's open panel (the
-   drawer is a full-height column at the right edge; its foot holds Log out). */
-[data-sm-edit-root] { zoom:var(--sm-canvas-zoom,1); width:calc(100% / var(--sm-canvas-zoom,1)); }
-.sm-zoom {
-  position:fixed; bottom:1rem; right:calc(max(20vw,14rem) + .75rem); z-index:9996;
-  display:flex; align-items:center; gap:.1rem; padding:.25rem;
-  background:var(--color-batter); border:1px solid var(--color-line,#e3dccd); border-radius:4px;
-  box-shadow:0 4px 14px rgba(95,86,74,.18);
-  font-family:'Noto Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size:12px;
-}
-.sm-zoom button { font:inherit; font-weight:700; color:var(--color-ink-soft); background:none; border:none; padding:.25rem .5rem; cursor:pointer; border-radius:3px; }
-.sm-zoom button:hover:not(:disabled) { background:var(--color-crust); color:var(--color-ink); }
-.sm-zoom button:disabled { opacity:.35; cursor:not-allowed; }
-.sm-zoom .sm-zoom-val { min-width:3.4rem; color:var(--color-ink); font-variant-numeric:tabular-nums; }
+/* THE PAGE-WIDE ZOOM LEFT THE CORE (2026-11-16, user order): the per-diagram
+   zoom lives in the mermaid ware now — the core carries no ware's behavior,
+   zoom handles included. */
 /* the ONE management door, user-corrected 2026-11-04: "the closed rect should be
    as tall as the opened rect" — so the menu stays IN FLOW at all times and only
    its VISIBILITY toggles (no reflow, no height change): the rect's height is
@@ -179,6 +164,24 @@ textarea.sm-input { resize:vertical; min-height:8rem; font-family:ui-monospace,m
   transition: border-color var(--lift), color var(--lift);
 }
 .sm-edit-starter:hover { border-color: var(--color-neon-blue); color: var(--color-ink); }
+/* the token chip (p6 slice 6): a plugin tag {{prefix_name}} dresses as an
+   inert, recognisable chip in the canvas. DISPLAY ONLY — the raw md (and the
+   cached HTML the serve-time PHP filters regex) keeps the literal tag. */
+.sm-token {
+  display:inline-block; padding:.05rem .35rem; border-radius:3px;
+  border:1px solid var(--color-line,#e3dccd); background:var(--color-crust,#f1ebe1);
+  color:var(--color-ink-soft,#6e6459);
+  font-family:ui-monospace,monospace,'Noto Sans'; font-size:.85em;
+}
+/* the guard's admin face: an orphan tag says what is missing, with the walk
+   to the Plugins overlay. Warn tone — a missing plugin is a fixable state. */
+.sm-token-missing {
+  display:inline-block; padding:.05rem .35rem; border-radius:3px;
+  border:1px dashed var(--color-warn,#c98a1b);
+  color:var(--color-warn,#c98a1b);
+  font-size:.85em;
+}
+.sm-token-missing a { color:var(--color-ink,#1f2328); font-weight:600; text-decoration:underline; }
 .sm-float {
   position:fixed; z-index:9997; display:flex; flex-direction:column; gap:.25rem;
   background:var(--color-ink); color:#fff; padding:.35rem; border-radius:4px;
@@ -203,59 +206,8 @@ textarea.sm-input { resize:vertical; min-height:8rem; font-family:ui-monospace,m
 .sm-toast { position:fixed; top:1rem; left:50%; transform:translateX(-50%); z-index:10000; max-width:90vw; }
 `;
 
-// ——— the canvas zoom (user order 2026-11-16: "it's so small, I can't read
-// it") ——
-// The CONTENT zooms; the editor's chrome stays crisp. The scale rides a CSS
-// var on the document root (the canvas' width compensates — see the CSS), so
-// the column keeps its place and the type grows. The level is remembered: a
-// screen truth, not a page truth — the same glasses on the next page.
-
-const ZOOM_KEY = 'sm-canvas-zoom';
-const ZOOM_STEPS: readonly number[] = [0.67, 0.8, 1, 1.25, 1.5, 1.75, 2];
-
-function mountZoom(): void {
-  const steps = ZOOM_STEPS;
-  let level = steps.indexOf(1);
-  try {
-    const at = steps.indexOf(Number(localStorage.getItem(ZOOM_KEY)));
-    if (at !== -1) level = at;
-  } catch {
-    /* private mode — the default level stands, the zoom still works */
-  }
-
-  const pill = el('div', { class: 'sm-zoom', role: 'group', 'aria-label': 'Canvas zoom' });
-  const minus = el('button', { type: 'button', 'aria-label': 'Zoom out', title: 'Zoom out' }, ['−']);
-  const value = el('button', { type: 'button', class: 'sm-zoom-val', title: 'Reset to 100%' }, ['100%']);
-  const plus = el('button', { type: 'button', 'aria-label': 'Zoom in', title: 'Zoom in' }, ['+']);
-
-  function apply(): void {
-    const z = steps[level];
-    document.documentElement.style.setProperty('--sm-canvas-zoom', String(z));
-    value.textContent = `${Math.round(z * 100)}%`;
-    minus.disabled = level === 0;
-    plus.disabled = level === steps.length - 1;
-  }
-  function step(delta: number): void {
-    const next = Math.min(steps.length - 1, Math.max(0, level + delta));
-    if (next === level) return;
-    level = next;
-    apply();
-    try {
-      localStorage.setItem(ZOOM_KEY, String(steps[level]));
-    } catch {
-      /* private mode — the zoom still works, it just won't be remembered */
-    }
-  }
-
-  minus.addEventListener('click', () => step(-1));
-  plus.addEventListener('click', () => step(1));
-  value.addEventListener('click', () => { level = steps.indexOf(1); apply(); });
-  pill.append(minus, value, plus);
-  document.body.append(pill);
-  apply();
-}
-
 // ——— state ———
+
 
 const root = document.querySelector<HTMLElement>('[data-sm-edit-root]');
 if (root !== null) void boot(root);
@@ -263,7 +215,6 @@ if (root !== null) void boot(root);
 async function boot(root: HTMLElement): Promise<void> {
   const style = el('style', {}, [EDIT_CSS]);
   document.head.append(style);
-  mountZoom();
 
   const type = root.dataset.type ?? 'pages';
   const slug = root.dataset.slug ?? '';
@@ -285,6 +236,14 @@ async function boot(root: HTMLElement): Promise<void> {
   // The plugins' canvas insertables (p6 editorBlocks) — lazily fetched with
   // the page. Load failure leaves an empty shelf, never a dead editor.
   let pluginBlocks: readonly EditorBlockDef[] = [];
+  /** THE PLUGIN GUARD's truth: the ENABLED plugin names (from editor-blocks)
+   *  and whether the shelf answered at all. A failed shelf keeps the chips —
+   *  the guard never says "isn't installed" on a maybe. */
+  let enabledPlugins: readonly string[] = [];
+  let pluginShelfOk = false;
+  /** Installed but SWITCHED OFF: the manifest is the evidence — a token or a
+   *  declared fence of a disabled ware says "is disabled", never "isn't". */
+  let disabledPlugins: readonly { name: string; fences: readonly string[] }[] = [];
   let selected: number | null = null;
   let busy = false;
   let hadDraft = false;
@@ -321,18 +280,37 @@ async function boot(root: HTMLElement): Promise<void> {
     blocks = splitBlocks(splitFrontmatter(raw).body);
     renderBody();
     mountChrome();
-    // The plugins' menu row rides the same boot — off, it stays quiet.
+    // The plugins' menu row rides the same boot — off, it stays quiet. The
+    // shelf also carries the ENABLED plugin names: THE PLUGIN GUARD's truth
+    // (the canvas can only say "isn't installed" when it knows what is).
     void fetch('/bridge/editor-blocks')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((defs) => {
+      .then((r) => (r.ok ? r.json() : { defs: [], plugins: [] }))
+      .then((shelf: { defs?: unknown; plugins?: unknown; disabled?: unknown }) => {
+        const defs = shelf?.defs;
+        const plugins = shelf?.plugins;
+        const disabled = shelf?.disabled;
         pluginBlocks = Array.isArray(defs)
-          ? defs.filter((d: unknown): d is EditorBlockDef =>
+          ? (defs as unknown[]).filter((d: unknown): d is EditorBlockDef =>
               !!d && typeof d === 'object'
               && typeof (d as { name?: unknown }).name === 'string'
               && typeof (d as { label?: unknown }).label === 'string'
               && typeof (d as { template?: unknown }).template === 'string')
-          : [];      })
-      .catch(() => { pluginBlocks = []; });
+          : [];
+        enabledPlugins = Array.isArray(plugins)
+          ? (plugins as unknown[]).filter((n: unknown): n is string => typeof n === 'string')
+          : [];
+        disabledPlugins = Array.isArray(disabled)
+          ? (disabled as unknown[]).flatMap((d: unknown) => {
+              if (!(typeof d === 'object' && d !== null)) return [];
+              const name = (d as { name?: unknown }).name;
+              const fences = (d as { fences?: unknown }).fences;
+              if (typeof name !== 'string' || !Array.isArray(fences)) return [];
+              return [{ name, fences: fences.filter((f: unknown): f is string => typeof f === 'string') }];
+            })
+          : [];
+        pluginShelfOk = true;
+      })
+      .catch(() => { pluginBlocks = []; enabledPlugins = []; disabledPlugins = []; pluginShelfOk = false; });
     if (hadDraft) toast('warn', 'An unpublished draft exists — saving here replaces it with the published page + your edit.');
   }
 
@@ -356,20 +334,62 @@ async function boot(root: HTMLElement): Promise<void> {
     }
     for (const block of blocks) {
       const holder = el('div', { 'data-sm-block': '1' });
-      holder.innerHTML = renderMdms(block.source, context).fullHtml;
+      // tokens: true — the canvas is a DISPLAY render; the chip previews the
+      // tag. The raw source (and the cache render below) keeps the literal tag.
+      holder.innerHTML = renderMdms(block.source, { ...context, tokens: true }).fullHtml;
+      // ——— the TOKEN PREVIEW (p6 slice 6): an enabled contentFilter plugin
+      // hydrates the chip into the REAL preview — the same sandboxed iframe
+      // the plugin fences ride. The door runs the serve-time PHP content
+      // filters over the block's html rendered WITHOUT the hook (the literal
+      // tag rides in it, the way the cached html carries it). No filter
+      // touches it → 404 → the chip stays (fail-open; the md is never touched). ———
+      const chip = holder.querySelector<HTMLElement>('[data-sm-token]');
+      if (chip !== null) {
+        const prefix = (chip.dataset.smToken ?? '').split('/')[0] ?? '';
+        const isDisabled = disabledPlugins.some((d) => d.name === prefix);
+        if (pluginShelfOk && enabledPlugins.includes(prefix)) {
+          void mountTokenPreview(holder, chip, block.source);
+        } else if (pluginShelfOk && isDisabled) {
+          // installed but SWITCHED OFF — the honest middle state
+          chip.replaceWith(mountTokenNotice(prefix, 'is installed but disabled'));
+        } else if (pluginShelfOk) {
+          // THE PLUGIN GUARD: the tag's plugin is not installed — the canvas
+          // says so, with the Plugins overlay one walk away (admins only —
+          // the tab is admin-gated). The md keeps the literal tag.
+          chip.replaceWith(mountTokenNotice(prefix, "isn't installed"));
+        } else {
+          void mountTokenPreview(holder, chip, block.source);
+        }
+      }
+      // THE FENCE BOUNDARY (2026-11-17; 2026-11-17 user fix: the guard must
+      // speak BOTH words for fences, same as chips): a 4-tick fence carries
+      // the stamp — that is a PLUGIN fence, and the guard reads the stamp.
+      // Enabled → nothing (the plugin's preview renders it). Installed but
+      // disabled → the disabled notice. Not installed → the "isn't installed"
+      // notice with the Plugins walk. The md keeps the literal either way.
+      const fenceEl = holder.querySelector<HTMLElement>('[data-sm-plugin-fence]');
+      const fenceNm = fenceEl !== null ? (fenceEl.dataset.smPluginFence ?? '') : '';
+      if (fenceNm !== '') {
+        const off = disabledPlugins.find((d) => d.name === fenceNm || d.fences.includes(fenceNm));
+        const owner = pluginBlocks.find((d) => d.fence === fenceNm);
+        if (off !== undefined && holder.querySelector('.sm-token-missing') === null) {
+          holder.append(mountTokenNotice(fenceNm, 'is installed but disabled — this block renders when it is enabled'));
+        } else if (pluginShelfOk && owner === undefined) {
+          holder.append(mountTokenNotice(fenceNm, "isn't installed"));
+        }
+      }
       // The plugin fences speak their own preview (slice 5b): a fence a
       // plugin owns with a preview route is rendered BY THE PLUGIN inside a
       // sandboxed iframe (the handle transport — the plugin's HTML never
-      // touches editor JS). The legacy stop-motion stage stays for the
-      // un-migrated ware (no fence declared yet).
+      // touches editor JS). THE LEGACY BRIDGE IS DEAD (2026-11-16, user
+      // order): no ware's behavior lives in the core — an unowned fence is a
+      // plain code block, exactly what an uninstalled plugin must look like.
       const fenceCode = holder.querySelector('code[class*="language-"]');
       const fenceName = fenceCode !== null ? (/language-([a-z][a-z0-9-]*)/.exec(fenceCode.className)?.[1] ?? '') : '';
       if (fenceCode !== null && fenceName !== '' && fenceCode.textContent !== null && fenceCode.textContent.trim() !== '') {
         const owner = pluginBlocks.find((d) => d.fence === fenceName);
         if (owner?.preview) {
           void mountPluginPreview(holder, owner, fenceCode.textContent.trim());
-        } else if (owner === undefined && fenceName === 'stop-motion') {
-          mountStopPreview(holder, fenceCode.textContent.trim());
         }
       }
       root.append(holder);
@@ -588,6 +608,31 @@ async function boot(root: HTMLElement): Promise<void> {
         deselect();
       }
     });
+    // ——— THE ADMIN-MODE PERSISTENCE (2026-11-16, user order: "the admin mode
+    // should persist and is only disabled, when I logout"): a link click on an
+    // admin page must not walk out of the /_ house. Every same-origin PAGE link
+    // (nav, brand, content) is re-anchored onto its /_ twin — admin mode is a
+    // URL, so the URL keeps its prefix. /bridge doors, the dashboard itself,
+    // files (media, css, pdf), hash links, foreign hosts and new-tab links ride
+    // untouched. Capture phase: the canvas' block handler stops propagation on
+    // every block click, so a bubble listener here would never hear a content
+    // link click. ———
+    document.addEventListener('click', (e) => {
+      if (e.defaultPrevented) return;
+      const anchor = (e.target as HTMLElement).closest('a[href]');
+      if (!(anchor instanceof HTMLAnchorElement)) return;
+      if (anchor.closest('.sm-admin-root') !== null) return;
+      if (anchor.getAttribute('target') === '_blank') return;
+      const url = new URL(anchor.href, window.location.origin);
+      if (url.origin !== window.location.origin) return;
+      const path = url.pathname;
+      if (path === '/_' || path.startsWith('/_/') || path.startsWith('/bridge/')) return;
+      const last = path.split('/').pop() ?? '';
+      if (last.includes('.')) return; // a file is not a page — media/css/pdf ride plain
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      window.location.href = '/_' + path + url.search + url.hash;
+    }, true);
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         // Escape first dismisses the open editor modal (one Escape = one door),
@@ -610,17 +655,6 @@ async function boot(root: HTMLElement): Promise<void> {
       }
       const index = [...root.children].indexOf(holder);
       const block = blocks[index];
-      // A fence the plugins own gets its own modal: a ```stop-motion text
-      // block opens the frames manager, not the raw text box (block marked).
-      if (block?.kind === 'text' && /^```stop-motion\b/.test(block.source)) {
-        selected = index;
-        [...root.children].forEach((child, i) => {
-          if (i === index) child.setAttribute('data-sm-selected', '1');
-          else child.removeAttribute('data-sm-selected');
-        });
-        openStopMotionModal(index, false);
-        return;
-      }
       // The generic fence law (slice 5b): a block whose fence a plugin owns
       // opens that plugin's modal (first declaration wins — the server's
       // alphabetical order). No modal declared → the float menu stays honest.
@@ -697,8 +731,11 @@ async function boot(root: HTMLElement): Promise<void> {
       el('button', {
         title: def.name,
         onclick: () => {
-          if (def.modal === 'stop-motion') openStopMotionModal(insertAt, true);
-          else if (def.modal && typeof def.modal === 'object') void openPluginModal(def, insertAt, null);
+          // THE LEGACY BRIDGE IS DEAD: a bare-string modal def degrades to the
+          // generic text modal (the template is the dough, the core carries no
+          // ware's behavior). A ware that wants a bespoke modal declares
+          // modal: {route} — the descriptor door.
+          if (def.modal && typeof def.modal === 'object') void openPluginModal(def, insertAt, null);
           else openTextModal(insertAt, true, def.template, def.label);
         }
       }, [def.label])
@@ -763,44 +800,54 @@ async function boot(root: HTMLElement): Promise<void> {
     return el('label', { class: 'sm-field' }, [el('span', {}, [label]), input]);
   }
 
-  /** The canvas preview mirror: swap the fence's code block for the stage the
-   *  public page serves (same classes, same march, gaps ignored client-side —
-   *  the monitor shows the folder's truth, the md keeps the config). */
-  function mountStopPreview(holder: HTMLElement, payload: string): void {
-    let cfg: { files?: unknown; dir?: unknown; fps?: unknown } = {};
-    try { cfg = JSON.parse(payload) as typeof cfg; } catch { return; }
-    const files = Array.isArray(cfg.files) ? (cfg.files as unknown[]).filter((f): f is string => typeof f === 'string') : [];
-    if (files.length < 2) return; // not yet a stage — the code stays
-    const fps = typeof cfg.fps === 'number' && cfg.fps > 0 && cfg.fps <= 30 ? cfg.fps : 8;
-    const dir = typeof cfg.dir === 'string' && /^[a-z0-9][a-z0-9-]*$/.test(cfg.dir) ? cfg.dir : ''; // fence says or none — the filter's law
-    const seq = document.querySelectorAll('style[data-sm-sm-preview]').length;
-
-    if (document.querySelector('style[data-sm-sm-preview]') === null) {
-      document.head.append(el('style', { 'data-sm-sm-preview': '1' }, [
-        '.stop-motion-stage{position:relative;display:block;max-width:100%;margin:1rem 0}'
-        + '.stop-motion-stage img{position:absolute;inset:0;width:100%;height:auto;display:block;margin:0}'
-        + '.stop-motion-stage img[data-sm-lead]{position:static}'
-        + '@media (prefers-reduced-motion: reduce){.stop-motion-stage img{animation:none!important}}'
-      ]));
+  /** THE PLUGIN GUARD's admin face: "«prefix» isn't installed." — the notice
+   *  replacing an orphan chip in the canvas. Admins get the walk to the
+   *  Plugins overlay tab (the drawer link law); editors get the plain
+   *  notice — the tab is admin-gated. The md is never touched. */
+  function mountTokenNotice(prefix: string, why: string): HTMLElement {
+    const notice = el('span', { class: 'sm-token-missing', role: 'status' });
+    notice.append(el('span', {}, [`${prefix} ${why}.`]));
+    if (role === 'admin') {
+      const link = el('a', { href: backHref(window.location.pathname, window.location.hash, 'plugins') }, ['Open Plugins']);
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        window.location.href = backHref(window.location.pathname, window.location.hash, 'plugins');
+      });
+      notice.append(link);
     }
-    const dur = (files.length / fps).toFixed(4);
-    const stage = el('span', { class: 'stop-motion-stage', role: 'img', 'aria-label': 'stop-motion preview, ' + files.length + ' frames' });
-    files.forEach((file, i) => {
-      const img = document.createElement('img');
-      img.className = 'stop-motion-frame';
-      if (i === 0) img.setAttribute('data-sm-lead', '');
-      img.loading = i === 0 ? 'eager' : 'lazy';
-      img.decoding = 'async';
-      img.style.animation = `sm-editor-march-${seq} ${dur}s step-end infinite`;
-      img.style.animationDelay = `-${(i / fps).toFixed(4)}s`;
-      img.src = `/bridge/media/${context.type}/${context.slug}/` + (dir !== '' ? encodeURIComponent(dir) + '/' : '') + encodeURIComponent(file);
-      stage.append(img);
-    });
-    document.head.append(el('style', { 'data-sm-sm-preview': String(seq + 1), 'data-sm-sm-keyframes': '' }, [
-      `@keyframes sm-editor-march-${seq}{0%{opacity:1}`
-      + (100 / files.length).toFixed(4) + '%{opacity:1}' + (100 / files.length).toFixed(4) + '%{opacity:0}100%{opacity:0}}'
-    ]));
-    holder.replaceChildren(stage);
+    return notice;
+  }
+
+  /** THE TOKEN PREVIEW (p6 slice 6): hydrate a plugin-tag chip into the real
+   *  preview. The block is re-rendered WITHOUT the hook (the literal tag
+   *  rides — the exact bytes the cached html carries), the door runs the
+   *  serve-time PHP contentFilters over it, and the sandboxed iframe shows
+   *  the result — the same transport the plugin fences ride. Any refusal
+   *  (no filter, disabled plugin, dough) leaves the chip standing: fail-open,
+   *  the md is never touched, the tag is never lost. */
+  async function mountTokenPreview(holder: HTMLElement, chip: HTMLElement, source: string): Promise<void> {
+    try {
+      const html = renderMdms(source, context).fullHtml;
+      const r = await fetch('/bridge/preview-stash', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({ mode: 'filter', html, type, slug })
+      });
+      if (!r.ok) throw new Error(`filter preview refused (${r.status})`);
+      const { t } = (await r.json()) as { t?: unknown };
+      if (typeof t !== 'string' || /^[a-f0-9]{32}$/.test(t) === false) throw new Error('dough handle');
+      const frame = document.createElement('iframe');
+      // THE SANDBOX LAW: scripts yes, same-origin never, top-navigation never.
+      frame.setAttribute('sandbox', 'allow-scripts');
+      frame.src = `/bridge/preview?t=${t}`;
+      frame.className = 'sm-plugin-preview';
+      frame.setAttribute('title', `plugin preview: ${chip.dataset.smToken ?? ''}`);
+      chip.replaceWith(frame);
+    } catch (e) {
+      // fail-open: the chip stays — a recognisable placeholder, never a blank
+      console.warn('[sm] the token preview degraded:', e);
+    }
   }
 
   /** The plugin's own preview (slice 5b): the fence source rides the stash
@@ -830,133 +877,15 @@ async function boot(root: HTMLElement): Promise<void> {
     }
   }
 
-  // ——— the stop-motion block modal (p6 editorBlocks, mode 'stop-motion') ———  // Frames live in the page's dedicated stop-motion/ folder. The modal lists
-  // FILENAMES only (numeric order — last run of digits, zero padding + gaps
-  // agnostic), uploads multiply, deletes extract; Save writes the fence with
-  // the explicit ordered file list. No previews — a file is a name here.
+  // THE LEGACY STOP-MOTION BRIDGE IS DEAD (2026-11-16, user order): the
+  // stage and the frames manager left the core with the boundary law — no
+  // ware's behavior lives here. The stop-motion ware speaks for itself
+  // through the editorBlocks contract (fence + preview/modal routes) in its
+  // own repo; until it migrates, its fence is a plain code block, publicly
+  // and in the canvas.
 
-  const SM_MEDIA = 'stop-motion';
-
-  /** The frame rank: the LAST run of digits decides the order; ties fall back
-   *  to the name. 'frame-02.png' < 'frame-10.png'; '0001-x.jpg' fine; the
-   *  missing 03 in the middle offends nobody — gaps are honest. */
-  function frameRank(name: string): number {
-    const m = /(\d+)(?=[^\d]*$)/.exec(name); // last digit run — zero padding + gaps agnostic
-    return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
-  }
-  function sortFrames(names: readonly string[]): string[] {
-    return [...names].sort((a, b) => frameRank(a) - frameRank(b) || a.localeCompare(b));
-  }
-
-  function parseStopFence(source: string): { files: string[]; dir: string; fps: number } {
-    const m = /^```stop-motion\s*\n([\s\S]*?)\n```/.exec(source.trim());
-    let cfg: Record<string, unknown> = {};
-    try { cfg = m ? (JSON.parse(m[1]) as Record<string, unknown>) : {}; } catch { cfg = {}; }
-    return {
-      files: Array.isArray(cfg.files) ? (cfg.files as unknown[]).filter((f): f is string => typeof f === 'string') : [],
-      dir: typeof cfg.dir === 'string' && /^[a-z0-9][a-z0-9-]*$/.test(cfg.dir) ? cfg.dir : SM_MEDIA,
-      fps: typeof cfg.fps === 'number' && cfg.fps > 0 && cfg.fps <= 30 ? cfg.fps : 8
-    };
-  }
-
-  function openStopMotionModal(index: number, isNew: boolean): void {
-    let folderNames: string[] = [];
-    let fps = isNew ? 8 : parseStopFence(blocks[index]?.source ?? '').fps;
-
-    const frameList = el('div', { class: 'sm-media-list', style: 'flex-direction:column;max-height:16rem' });
-    const err = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:.2rem 0' });
-    const fpsBox = el('input', { class: 'sm-input', type: 'number', min: '0.5', max: '30', step: '0.5', style: 'max-width:9rem' });
-    fpsBox.value = String(fps);
-    const upload = el('input', { class: 'sm-input', type: 'file', accept: '.png,.jpg,.jpeg,.webp,.gif', multiple: true, style: 'padding:.25rem' }) as HTMLInputElement;
-
-    async function refresh(): Promise<void> {
-      try {
-        folderNames = (await apiJson<readonly { name: string }[]>(`/bridge/media/${type}/${slug}?folder=${SM_MEDIA}`)).map((f) => f.name);
-      } catch (e) {
-        err.textContent = e instanceof Error ? e.message : String(e);
-        err.style.display = '';
-        return;
-      }
-      err.style.display = 'none';
-      frameList.replaceChildren(...sortFrames(folderNames).map((name) =>
-        el('div', { style: 'display:flex;align-items:center;gap:.4rem' }, [
-          el('code', { style: 'font-size:12px' }, [name]),
-          el('button', {
-            class: 'sm-btn sm-btn-danger',
-            type: 'button',
-            title: `Delete ${name} from the folder`,
-            onclick: async () => {
-              try {
-                await fetch(`/bridge/media/${type}/${slug}/${encodeURIComponent(name)}?folder=${SM_MEDIA}`, {
-                  method: 'DELETE', headers: { 'X-CSRF-Token': csrf }
-                });
-              } finally {
-                await refresh();
-              }
-            }
-          }, ['delete'])
-        ])
-      ));
-      if (sortFrames(folderNames).length === 0) {
-        frameList.append(el('p', { style: 'font-size:12px;opacity:.7;margin:0' }, ['No frames yet — upload files named with continuous numbers (01-0n), gaps tolerated.']));
-      }
-    }
-
-    const form = el('form', {
-      onsubmit: (ev: Event) => {
-        ev.preventDefault();
-        const parsedFps = parseFloat(fpsBox.value);
-        const files = sortFrames(folderNames);
-        if (files.length < 2) {
-          err.textContent = 'A shutter needs at least two frames — upload images first.';
-          err.style.display = '';
-          return;
-        }
-        if (!Number.isFinite(parsedFps) || parsedFps < 0.5 || parsedFps > 30) {
-          err.textContent = 'The frame speed is a number between 0.5 and 30 fps.';
-          err.style.display = '';
-          return;
-        }
-        err.style.display = 'none';
-        const fence = '```stop-motion\n' + JSON.stringify({ files, dir: SM_MEDIA, fps: parsedFps }, null, 0) + '\n```';
-        writeBlock(index, { kind: 'text', source: fence }, isNew);
-      }
-    }, [
-      el('p', { class: 'sm-alert sm-alert-ok', style: 'margin:0 0 .5rem' }, [
-        `Frames live in the page's ${SM_MEDIA}/ folder. Ordered by their continuous number (01-0n, gaps tolerated — filenames only, no previews).`
-      ]),
-      el('div', { style: 'margin:0;display:flex;gap:.4rem;align-items:center;flex-wrap:wrap' }, [
-        upload,
-        el('button', {
-          class: 'sm-btn', type: 'button',
-          onclick: async () => {
-            err.style.display = 'none';
-            for (const file of upload.files ?? []) {
-              try {
-                const body = new FormData();
-                body.append('file', file);
-                await fetch(`/bridge/media/${type}/${slug}?folder=${SM_MEDIA}`, {
-                  method: 'POST', headers: { 'X-CSRF-Token': csrf }, body
-                });
-              } catch { /* the row keeps the failure note honest below */ }
-            }
-            upload.value = '';
-            await refresh();
-          }
-        }, ['Upload'])
-      ]),
-      frameList,
-      field('Frame speed (fps)', fpsBox),
-      err,
-      el('div', { style: 'display:flex;justify-content:flex-end;gap:.5rem' }, [
-        el('button', { class: 'sm-btn sm-btn-primary', type: 'submit' }, [isNew ? 'Add block' : 'Save'])
-      ])
-    ]);
-    openModal(isNew ? 'Add Stop Motion' : 'Edit Stop Motion', form);
-    void refresh();
-  }
-
-  function openTextModal(index: number, isNew = false, initial = '', label = ''): void {    const value = isNew ? (initial !== '' ? initial : 'New text — double the recipe.') : (blocks[index]?.source ?? '');
+  function openTextModal(index: number, isNew = false, initial = '', label = ''): void {
+    const value = isNew ? (initial !== '' ? initial : 'New text — double the recipe.') : (blocks[index]?.source ?? '');
     const area = el('textarea', { class: 'sm-input' });
     area.value = value;
     const err = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:0' });
