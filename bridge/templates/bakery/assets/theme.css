@@ -169,10 +169,12 @@ body {
 .site-foot { font-size: 0.85rem; color: var(--ink-soft); }
 .site-foot p { margin: 0; }
 
-/* ——— the content column: the other 4/5 ——— */
+/* ——— the content column: the other 4/5 — ALL of it (user order 2026-11-17:
+   the sidebar takes one lane, the content takes the REST; no max-width cap —
+   a wide screen gets a wide column, not a capped ribbon floating in it). */
 main {
   flex: 1 1 auto;
-  max-width: 60rem;
+  min-width: 0;
   padding: 2.5rem 2.5rem 3rem;
 }
 

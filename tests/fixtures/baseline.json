@@ -13,8 +13,8 @@
         },
         "page-test": {
             "status": 200,
-            "sha256": "5b1bfc5d953b29ae1f602b01050e7ee03d9c268277dacbadbdf66feb921a8972",
-            "bytes": 8631
+            "sha256": "bbe853dc2039edc939f90c467c4dd2651239725fb2cc55034a9f4ae146ccb122",
+            "bytes": 9111
         },
         "page-404": {
             "status": 404,

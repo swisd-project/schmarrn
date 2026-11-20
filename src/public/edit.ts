@@ -78,9 +78,9 @@ const EDIT_CSS = `
 .${SURGERY_CLASS} > * { cursor:not-allowed !important; }
 .${SURGERY_CLASS} > *:hover::after { content:none; }
 [data-sm-edit-root]>[data-sm-selected] { outline:3px solid var(--color-neon-blue); outline-offset:3px; }
-/* THE PAGE-WIDE ZOOM LEFT THE CORE (2026-11-16, user order): the per-diagram
-   zoom lives in the mermaid ware now — the core carries no ware's behavior,
-   zoom handles included. */
+/* THE CANVAS ZOOM LEFT THE CORE (2026-11-20, user order): no editor-chrome
+   zoom handle — the core carries no ware's behavior, zoom handles included.
+   The per-diagram zoom lives in the mermaid ware. */
 /* the ONE management door, user-corrected 2026-11-04: "the closed rect should be
    as tall as the opened rect" — so the menu stays IN FLOW at all times and only
    its VISIBILITY toggles (no reflow, no height change): the rect's height is
@@ -209,8 +209,32 @@ textarea.sm-input { resize:vertical; min-height:8rem; font-family:ui-monospace,m
 // ——— state ———
 
 
+// ——— THE PREVIEW'S OWN SIZE (the frame never scrolls): the caged preview
+// reports its content height (sm-preview-height, the guard's law) and this
+// one listener grows the frame to it — the CANVAS page scrolls, never the
+// frame. 320px stands until the first report; the floor keeps a stubby
+// notice readable. The sandbox speaks dough: only the height number is
+// read, only the frame's style.height is written, nothing else is trusted.
+let previewHeightsHeard = false;
+function hearPreviewHeights(): void {
+  if (previewHeightsHeard) return;
+  previewHeightsHeard = true;
+  window.addEventListener('message', (e: MessageEvent) => {
+    const d = e.data as { t?: unknown; h?: unknown } | null;
+    if (d === null || typeof d !== 'object' || d.t !== 'sm-preview-height') return;
+    const h = typeof d.h === 'number' && Number.isFinite(d.h) ? d.h : 0;
+    if (h <= 0) return;
+    const frame = Array.from(document.querySelectorAll<HTMLIFrameElement>('iframe.sm-plugin-preview'))
+      .find((f) => f.contentWindow === e.source);
+    if (frame !== undefined) frame.style.height = `${Math.max(220, Math.ceil(h))}px`;
+  });
+}
+
 const root = document.querySelector<HTMLElement>('[data-sm-edit-root]');
-if (root !== null) void boot(root);
+if (root !== null) {
+  hearPreviewHeights();
+  void boot(root);
+}
 
 async function boot(root: HTMLElement): Promise<void> {
   const style = el('style', {}, [EDIT_CSS]);
@@ -284,7 +308,13 @@ async function boot(root: HTMLElement): Promise<void> {
     // shelf also carries the ENABLED plugin names: THE PLUGIN GUARD's truth
     // (the canvas can only say "isn't installed" when it knows what is).
     void fetch('/bridge/editor-blocks')
-      .then((r) => (r.ok ? r.json() : { defs: [], plugins: [] }))
+      .then((r) => {
+        // A non-ok shelf (expired session, door refusal) is a MAYBE — the
+        // guard never says "isn't installed" on a maybe. Throw into the
+        // catch: the truth stays unknown, the blocks stay honest.
+        if (!r.ok) throw new Error(`shelf refused (${r.status})`);
+        return r.json();
+      })
       .then((shelf: { defs?: unknown; plugins?: unknown; disabled?: unknown }) => {
         const defs = shelf?.defs;
         const plugins = shelf?.plugins;
@@ -309,6 +339,11 @@ async function boot(root: HTMLElement): Promise<void> {
             })
           : [];
         pluginShelfOk = true;
+        // THE SHELF LANDS AFTER FIRST PAINT (2026-11-17, user bug ride): the
+        // boot renders before the fetch answers, so the fence guard's first
+        // run sees an empty shelf and says nothing — the notice never mounts.
+        // The shelf is the guard's truth; when it lands, the canvas speaks.
+        renderBody();
       })
       .catch(() => { pluginBlocks = []; enabledPlugins = []; disabledPlugins = []; pluginShelfOk = false; });
     if (hadDraft) toast('warn', 'An unpublished draft exists — saving here replaces it with the published page + your edit.');
@@ -374,8 +409,10 @@ async function boot(root: HTMLElement): Promise<void> {
         const owner = pluginBlocks.find((d) => d.fence === fenceNm);
         if (off !== undefined && holder.querySelector('.sm-token-missing') === null) {
           holder.append(mountTokenNotice(fenceNm, 'is installed but disabled — this block renders when it is enabled'));
+          (fenceEl?.closest('pre') ?? fenceEl)?.setAttribute('style', 'display:none');
         } else if (pluginShelfOk && owner === undefined) {
           holder.append(mountTokenNotice(fenceNm, "isn't installed"));
+          (fenceEl?.closest('pre') ?? fenceEl)?.setAttribute('style', 'display:none');
         }
       }
       // The plugin fences speak their own preview (slice 5b): a fence a
