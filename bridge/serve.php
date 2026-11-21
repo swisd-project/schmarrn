@@ -651,11 +651,17 @@ function withThemeVars(string $html, array $site): string
 function navHtml(array $site, string $currentSlug): string
 {
     $items = [];
+    $home = homeSlug($site);
     foreach (\Store\listAll()['pages'] ?? [] as $candidate) {
         if ($candidate['draft'] ?? false) {
             continue;
         }
         $slug = (string)$candidate['slug'];
+        // THE BRAND LAW (2026-11-21, user order): the site name is the link
+        // home — the nav lists the OTHER pages only.
+        if ($home !== '' && $slug === $home) {
+            continue;
+        }
         $current = $slug === $currentSlug ? ' aria-current="page"' : '';
         $items[] = '<a href="/' . htmlspecialchars($slug, ENT_QUOTES) . '"' . $current . '>'
             . htmlspecialchars(titleOf('pages', $slug, $slug), ENT_QUOTES) . '</a>';

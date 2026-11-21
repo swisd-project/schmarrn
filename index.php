@@ -142,9 +142,12 @@ if ($path !== '/') {
             $sandboxed = (str_ends_with($rel, '.svg') || str_ends_with($rel, '.html'))
                 && (str_starts_with($rel, 'bridge/templates/')
                     || preg_match('#^bridge/plugins/[a-z0-9-]+/assets/#', $rel) === 1);
-            if (PHP_SAPI === 'cli-server' && !$fromBuild && !$sandboxed) {
-                return false; // php -S serves it with proper MIME, no custom headers needed
-            }
+            // THE DEV CACHE LAW (2026-11-20, after the ghost burned four edits):
+            // php -S's own static handler sends NO cache headers — browsers
+            // heuristically hold old bytes and paint them over fresh ones.
+            // Dev streams by hand with no-cache: every reload revalidates.
+            // Prod keeps Apache + the .htaccess max-age law.
+            $devStream = PHP_SAPI === 'cli-server' && !$fromBuild && !$sandboxed;
             if ($sandboxed) {
                 header('Content-Security-Policy: default-src \'none\'; style-src \'unsafe-inline\'; sandbox');
             }
@@ -157,9 +160,11 @@ if ($path !== '/') {
                 : (str_ends_with($rel, '.woff2') ? 'font/woff2'
                 : (mime_content_type($file) ?: 'application/octet-stream')))));
             header('Content-Type: ' . $mime);
-            // Theme-contract cache law (3600, revalidate) — PHP streams these in
-            // build/dev mode only; Apache hands the .htaccess rule on prod.
-            header('Cache-Control: max-age=3600, must-revalidate');
+            // Theme-contract cache law — dev: no-cache (every reload revalidates);
+            // streamed build files + prod Apache: 3600, must-revalidate.
+            header('Cache-Control: ' . ($devStream
+                ? 'no-cache, must-revalidate'
+                : 'max-age=3600, must-revalidate'));
             header('X-Content-Type-Options: nosniff');
             readfile($file);
             exit;

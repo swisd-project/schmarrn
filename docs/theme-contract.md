@@ -70,7 +70,10 @@ and themes. Ownership:
 - **Emitted by deck.js** (theme asset): `sm-dots`, `sm-dot`, `active`.
 - **Editor-internal** (`src/public/edit.ts`, ships its own CSS): `sm-edit-*`,
   `sm-float*`, `sm-btn*`, `sm-field`, `sm-input`, `sm-alert*`, `sm-toast`,
-  `data-sm-*`. Themes must not style these and must not depend on them.
+  `data-sm-*`. Themes must not style these and must not depend on them —
+  EXCEPT the two-root exemptions (see "The two render roots"): `data-sm-block`
+  and `.sm-plugin-preview` may be styled inside the edit root when a canvas
+  layout law (grid, preview sizing) requires it.
 
 The full styled list lives in each theme's CSS; when core adds a class, this
 document and the themes move together.
@@ -156,6 +159,41 @@ fails the lid does not exist at all (`themeHandles()` in `bridge/serve.php`).
   `previewUrl` — and `"styles"` (the manifest's own words, mirrored so the
   shelf can show the tags before the install).
 
+## The two render roots (2026-11-20)
+
+A theme's layout CSS must reach TWO roots:
+
+- The served page wraps rendered content in `main > [data-schmarrn-root]`.
+- The admin canvas wraps it in `main > [data-sm-edit-root]`.
+
+BOTH roots carry `data-slug`; the served root also carries `data-type`.
+Scope layout laws on the slug attribute (`main > [data-slug="…"]`), never on
+one root's flavor — one stylesheet dresses both faces, and a selector aimed
+at only the served root leaves the canvas a bare stack.
+
+- **Block holders.** The canvas wraps EVERY block in its own
+  `div[data-sm-block]` inside the root; the served root has no holders. A
+  page-level grid cannot treat holder children as grid items until the
+  holders are made layout-transparent: `display: contents` on
+  `[data-sm-block]` (a no-op on the served root). Where the grid dissolves
+  (narrow media query), restore the holders to `display: block`.
+- **Selection affordances.** `display: contents` dissolves the holders'
+  boxes, so the editor's selection/hover rings (painted on the holders)
+  vanish. Re-hang them onto the holder's content:
+  hover on `[data-sm-block]:hover > *:first-child`, selection on
+  `[data-sm-block][data-sm-selected] > *:first-child`.
+- **Plugin fence previews.** In the canvas `mountPluginPreview` replaces
+  the fence holder's content with `iframe.sm-plugin-preview`; the editor
+  pins its height (~320px, its own CSS) and REWRITES the height inline via
+  a postMessage handler — only `!important` beats inline styles. A theme
+  that wants the preview to fill a layout area must win with higher
+  specificity AND `!important` (e.g. `grid-area` +
+  `height: 100% !important`).
+
+Worked example: `bridge/templates/catflash/assets/theme.css` — the landing
+60/40 grid (`main > [data-slug="home"]`), holders, re-hung rings, and the
+preview override, all in one stylesheet.
+
 ## The styles
 
 The style enum is the THEME's word (2026-11-09, user order): `theme.json`
@@ -187,7 +225,9 @@ page style is implemented (declare it, ship the file, done).
 ## What a theme must never do
 
 - Assume DOM timing (the readiness law above).
-- Style or depend on editor-internal classes.
+- Style or depend on editor-internal classes — except the two-root
+  exemptions (see "The two render roots"): `data-sm-block` holders and
+  `.sm-plugin-preview` inside the edit root.
 - Carry styles in the markup — the one stylesheet holds them (see Assets).
 - Emit `sm-` classes of its own — extend the contract here instead, so the
   namespace stays collision-free.

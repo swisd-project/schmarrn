@@ -1,0 +1,197 @@
+/* ═══════════════════════════════════════════════════════════════════
+   CATFLASH 0.1.0 — empty scaffold.
+
+   ONE STYLESHEET. The markup only LINKS this file — nothing inline.
+
+   THE TOKEN LAYER (:root). Each property is a HANDLE declared in
+   theme.json; the defaults here and the manifest's "default" values
+   MUST match or the Settings tab lies. Edit a token, restyle the theme.
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  --paper: #faf7f0;   /* the page */
+  --ink: #2e2b26;     /* text */
+  --ink-soft: #767676;/* secondary text */
+  --line: #e3dccd;    /* hairlines */
+  --jam: #8a5a2b;     /* links & accents */
+  --head: 2rem;       /* main's top padding — the fixed nav overlays, takes no space */
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+a { color: var(--jam); }
+a:hover { color: var(--ink-soft); }
+
+/* ——— head ——— */
+/* THE FLOATING HEAD (2026-11-21, user order): out of the flow, fixed to the
+   top, TAKING NO SPACE — the page renders from the very top and the nav
+   overlays it (its background is transparent at the top, so nothing hides).
+   --head is now only main's top padding: the landing fold math is unchanged. */
+.site-head {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 900; /* over the page, under the editor chrome (9990+) */
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  padding: 1rem 2rem;
+  background: color-mix(in srgb, var(--paper) calc(var(--head-bg, 0) * 100%), transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) var(--head-bg, 0), transparent);
+}
+.site-head .brand {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  text-decoration: none;
+  color: var(--ink);
+  font-weight: 700;
+}
+.site-head .sm-nav { margin-left: auto; display: flex; gap: 1.2rem; }
+.site-head .sm-nav a { text-decoration: none; }
+.site-head .claim { width: 100%; color: var(--ink-soft); margin: 0; }
+
+/* ——— body content ——— */
+main {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 2rem 4rem;
+}
+main img { max-width: 100%; height: auto; }
+
+/* THE FULL-DOM LAW (2026-11-21, user brief: "fills full dom"): the landing
+   page's main drops the centered reading column — the 60/40 spans the real
+   page width, and the stage square centers in the TRUE left 60%. */
+main:has(> [data-slug="home"]) { max-width: none; }
+
+/* The render roots: served pages wrap content in main > [data-schmarrn-root],
+   the editor canvas in main > [data-sm-edit-root]. BOTH carry data-slug —
+   the landing law hangs on the slug, not the root's flavor. */
+main > [data-schmarrn-root] { display: block; }
+
+/* Landing page only (root carries data-slug="home"): plain click-to-edit
+   blocks in a 3fr/2fr grid — stage left, copy right. Rows 1fr/auto/1fr
+   cluster the copy tight in the vertical middle while the stage stretches
+   the full landing height. */
+main > [data-slug="home"] {
+  display: grid;
+  grid-template-columns: 3fr 2fr; /* 60 / 40 */
+  /* THE LANDING LAW, pinned (2026-11-21, the fr-distribution lesson): the
+     two big rows are FIXED at half the viewport-fill each — 1fr rows only
+     expand into FREE space, and the lorem slides below spend it all, which
+     collapsed the landing to its content height. Fixed tracks fill the
+     first viewport no matter what the slides weigh. The middle auto row is
+     the one-line claim (~2rem). */
+  grid-template-rows: calc((100dvh - var(--head) - 2rem) / 2) auto calc((100dvh - var(--head) - 2rem) / 2);
+  column-gap: 3rem;
+  align-items: center;
+}
+/* The editor wraps EVERY block in its own holder div — display:contents
+   makes the children (h1, h3, p, pre, .sm-slide) the grid items. The
+   served root has no holders, so this is a no-op there. */
+main > [data-slug="home"] > [data-sm-block] { display: contents; }
+
+/* The editor paints selection/hover outlines on the holder divs — boxes
+   that display:contents dissolves. The affordances move onto the holder's
+   content, so the canvas keeps its handles while wearing the layout. */
+main > [data-slug="home"] > [data-sm-block]:hover > *:first-child { outline: 2px solid var(--color-neon-blue, #0891b2); outline-offset: 2px; }
+main > [data-slug="home"] > [data-sm-block][data-sm-selected] > *:first-child { outline: 3px solid var(--color-neon-blue, #0891b2); outline-offset: 3px; }
+
+main > [data-slug="home"] h1 {
+  grid-area: 1 / 2; align-self: end; margin: 0 0 .5rem;
+  font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1.1;
+}
+main > [data-slug="home"] h3 {
+  grid-area: 2 / 2; margin: 0; color: var(--ink-soft); font-weight: 400; font-size: 1.25rem;
+}
+main > [data-slug="home"] p:has(> a:only-child) {
+  grid-area: 3 / 2; align-self: start; margin: 1.25rem 0 0;
+}
+main > [data-slug="home"] p:has(> a:only-child) > a {
+  display: inline-block;
+  padding: .7rem 1.6rem;
+  background: var(--jam);
+  color: var(--paper);
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+}
+main > [data-slug="home"] p:has(> a:only-child) > a:hover {
+  background: var(--ink); color: var(--paper);
+}
+main > [data-slug="home"] :is(pre, .stop-motion-stage, .sm-plugin-preview) {
+  grid-area: 1 / 1 / 4 / 2; /* stage column, all three landing rows */
+  /* THE STAGE LAW: a perfect square, dead-center in the 60 column,
+     side = column height − 2×150px of vertical air (2026-11-21, user call:
+     +50 per side over the old 200 — the −300px constant), capped at the
+     column width. */
+  align-self: center;
+  justify-self: center;
+  width: min(100%, calc(100dvh - var(--head) - 300px));
+  aspect-ratio: 1;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  padding: .5rem;
+  background: #fff;
+  overflow: hidden;
+}
+main > [data-slug="home"] .stop-motion-stage { display: block; }
+/* The editor's plugin-preview iframe (the fence's face in the canvas):
+   the editor pins height:320px AND a postMessage handler writes the
+   height inline — only !important beats that. The square law owns the
+   stage; the frame obeys it. */
+main > [data-slug="home"] .sm-plugin-preview {
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+/* lorem sections: slides below the fold, full width */
+main > [data-slug="home"] .sm-slide {
+  grid-area: auto / 1 / auto / 3;
+  align-self: start;
+  padding: 3rem 0;
+}
+main > [data-slug="home"] .sm-slide + .sm-slide { border-top: 1px solid var(--line); }
+
+/* under 60rem: stack — copy above stage, full width */
+@media (max-width: 60rem) {
+  main { padding: 2rem; }
+  main > [data-slug="home"] {
+    display: block;
+    min-height: 0;
+  }
+  main > [data-slug="home"] > [data-sm-block] { display: block; }
+  main > [data-slug="home"] h1,
+  main > [data-slug="home"] h3,
+  main > [data-slug="home"] p:has(> a:only-child),
+  main > [data-slug="home"] :is(pre, .stop-motion-stage, .sm-plugin-preview) {
+    grid-area: auto;
+    margin-bottom: 1.5rem;
+    width: 100%;        /* square, full column width in the stack */
+    height: auto;
+    min-height: 0;
+  }
+  main > [data-slug="home"] .sm-plugin-preview { height: auto !important; }
+  main > [data-slug="home"] .sm-slide { border-top: 1px solid var(--line); }
+}
+
+/* ——— foot ——— */
+.site-foot {
+  padding: 1.5rem 2rem;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: .9rem;
+}
+.site-foot p { margin: 0; }
