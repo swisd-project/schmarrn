@@ -1303,6 +1303,65 @@ try {
             readfile($path);
             exit;
 
+        // ——— global media: the gallery's site-level collections, NOT under a
+        //     page — same gates (auth, CSRF, immutability, CSP sandbox), a
+        //     different root. `_global`'s underscore keeps it out of the
+        //     page-local [a-z0-9-]+ paths, so no collision. ———
+        // GET — the chooser's list: the named global collections.
+        case $method === 'GET' && $path === 'media/_global':
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            echo json_encode(Store\globalMediaCollections(), JSON_UNESCAPED_SLASHES);
+            break;
+        // GET — a global collection's tray; POST — upload into it (loose = '').
+        case $method === 'GET' && preg_match('#^media/_global/[a-z0-9-]+$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            [, , $collection] = explode('/', $path);
+            echo json_encode(Store\globalMediaList($collection), JSON_UNESCAPED_SLASHES);
+            break;
+        case $method === 'POST' && preg_match('#^media/_global/[a-z0-9-]+$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            Auth\assertCsrf();
+            [, , $collection] = explode('/', $path);
+            $upload = $_FILES['file'] ?? null;
+            if (!is_array($upload) || ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+                || !is_string($upload['tmp_name']) || !is_string($upload['name'])) {
+                Router\refuse(400, 'You promised pastry and brought an empty plate — no file in the upload.');
+            }
+            $stored = Store\globalMediaStore($collection, $upload['name'], $upload['tmp_name']);
+            http_response_code(201);
+            echo json_encode($stored, JSON_UNESCAPED_SLASHES);
+            break;
+        // DELETE — a named global crumb leaves its tray (the hand is CSRF-gated).
+        case $method === 'DELETE' && preg_match('#^media/_global/[a-z0-9-]+/[A-Za-z0-9._-]+$#', $path) === 1:
+            if (!Auth\check()) {
+                Router\refuse(401, 'The kitchen door is locked — log in first.');
+            }
+            Auth\assertCsrf();
+            [, , $collection, $name] = explode('/', $path);
+            Store\globalMediaDelete($collection, (string)$name);
+            echo json_encode(['ok' => true]);
+            break;
+        // GET — serve a global crumb (the same CSP sandbox as the page-local face).
+        case $method === 'GET' && preg_match('#^media/_global/[a-z0-9-]+/[A-Za-z0-9._-]+$#', $path) === 1:
+            [, , $collection, $name] = explode('/', $path);
+            $path = Store\globalMediaPath($collection, (string)$name);
+            if ($path === null) {
+                Router\refuse(404, 'That media crumb is not in the tin.');
+            }
+            header('Content-Type: ' . Store\mediaMime((string)$name));
+            header('Content-Length: ' . (string)filesize($path));
+            header('Cache-Control: public, max-age=86400');
+            header('X-Content-Type-Options: nosniff');
+            header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox");
+            readfile($path);
+            exit;
+
         // ——— editorial drafts + publishing: the editor's dirty little secret ———
 
         // GET — editorial copy (sidecar or published file, whichever freshest in life).

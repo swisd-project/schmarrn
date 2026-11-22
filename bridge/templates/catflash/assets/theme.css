@@ -187,6 +187,27 @@ main > [data-slug="home"] .sm-slide + .sm-slide { border-top: 1px solid var(--li
   main > [data-slug="home"] .sm-slide { border-top: 1px solid var(--line); }
 }
 
+/* ——— gallery ——— */
+/* The 2nd section's 4-column grid: the chosen global collection as a full-width
+   grid of ~25% tracks — repeat(4, 1fr) = 100% of the page (1/4,1/4,1/4,1/4),
+   the cheapest way to 1/4 each, ~25 rows, decent top/bottom air. The fence
+   decoder emits .gallery-grid > .gallery-cell > img. */
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  padding: 3rem 0;
+}
+.gallery-grid .gallery-cell { margin: 0; }
+.gallery-grid .gallery-cell img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+.gallery-grid .gallery-cell img:hover { opacity: .85; }
+
 /* ——— foot ——— */
 .site-foot {
   padding: 1.5rem 2rem;

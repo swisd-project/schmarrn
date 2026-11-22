@@ -383,7 +383,7 @@ async function boot(root: HTMLElement): Promise<void> {
         const prefix = (chip.dataset.smToken ?? '').split('/')[0] ?? '';
         const isDisabled = disabledPlugins.some((d) => d.name === prefix);
         if (pluginShelfOk && enabledPlugins.includes(prefix)) {
-          void mountTokenPreview(holder, chip, block.source);
+          void mountFilterPreview(chip, chip.dataset.smToken ?? '', block.source);
         } else if (pluginShelfOk && isDisabled) {
           // installed but SWITCHED OFF — the honest middle state
           chip.replaceWith(mountTokenNotice(prefix, 'is installed but disabled'));
@@ -393,7 +393,7 @@ async function boot(root: HTMLElement): Promise<void> {
           // the tab is admin-gated). The md keeps the literal tag.
           chip.replaceWith(mountTokenNotice(prefix, "isn't installed"));
         } else {
-          void mountTokenPreview(holder, chip, block.source);
+          void mountFilterPreview(chip, chip.dataset.smToken ?? '', block.source);
         }
       }
       // THE FENCE BOUNDARY (2026-11-17; 2026-11-17 user fix: the guard must
@@ -427,6 +427,12 @@ async function boot(root: HTMLElement): Promise<void> {
         const owner = pluginBlocks.find((d) => d.fence === fenceName);
         if (owner?.preview) {
           void mountPluginPreview(holder, owner, fenceCode.textContent.trim());
+        } else if (owner) {
+          // the fence's plugin ships a contentFilter but no preview route —
+          // ride the filter preview (the SAME contentFilters() the public
+          // face runs): by that fact alone. No filter touches the html →
+          // 404 → the fence stays a block (fail-open, the md is untouched).
+          void mountFilterPreview(fenceCode.closest('pre') ?? fenceCode, fenceName, block.source);
         }
       }
       root.append(holder);
@@ -856,14 +862,16 @@ async function boot(root: HTMLElement): Promise<void> {
     return notice;
   }
 
-  /** THE TOKEN PREVIEW (p6 slice 6): hydrate a plugin-tag chip into the real
+  /** THE FILTER PREVIEW (p6 slice 6): hydrate a plugin tag into the real
    *  preview. The block is re-rendered WITHOUT the hook (the literal tag
    *  rides — the exact bytes the cached html carries), the door runs the
    *  serve-time PHP contentFilters over it, and the sandboxed iframe shows
-   *  the result — the same transport the plugin fences ride. Any refusal
-   *  (no filter, disabled plugin, dough) leaves the chip standing: fail-open,
-   *  the md is never touched, the tag is never lost. */
-  async function mountTokenPreview(holder: HTMLElement, chip: HTMLElement, source: string): Promise<void> {
+   *  the result — the same transport the plugin fences ride. A token chip
+   *  and a plugin fence both ride it: a fence whose plugin ships a
+   *  contentFilter but no preview route previews by that fact alone. Any
+   *  refusal (no filter, disabled plugin, dough) leaves the placeholder
+   *  standing: fail-open, the md is never touched, the tag is never lost. */
+  async function mountFilterPreview(target: Element, title: string, source: string): Promise<void> {
     try {
       const html = renderMdms(source, context).fullHtml;
       const r = await fetch('/bridge/preview-stash', {
@@ -874,16 +882,21 @@ async function boot(root: HTMLElement): Promise<void> {
       if (!r.ok) throw new Error(`filter preview refused (${r.status})`);
       const { t } = (await r.json()) as { t?: unknown };
       if (typeof t !== 'string' || /^[a-f0-9]{32}$/.test(t) === false) throw new Error('dough handle');
-      const frame = document.createElement('iframe');
-      // THE SANDBOX LAW: scripts yes, same-origin never, top-navigation never.
-      frame.setAttribute('sandbox', 'allow-scripts');
-      frame.src = `/bridge/preview?t=${t}`;
-      frame.className = 'sm-plugin-preview';
-      frame.setAttribute('title', `plugin preview: ${chip.dataset.smToken ?? ''}`);
-      chip.replaceWith(frame);
+      // INLINE + THEMED (2026-11-22, user order): the walled sandboxed iframe is
+      // gone. The editor lives IN the themed page (the mirror law), so the preview
+      // is injected inline and wears the catflash theme for free — auto-height, no
+      // 320px cage, no height-dance postMessage. The fence's HTML is the same
+      // contentFilters() output the public face serves; injecting it (innerHTML runs
+      // no scripts) rides the trusted walled pipeline. A filter that never touches
+      // the html 404s server-side → the placeholder stays (fail-open, md untouched).
+      const preview = await fetch(`/bridge/preview?t=${t}`);
+      if (!preview.ok) throw new Error('preview refused');
+      const node = el('div', { class: 'sm-inline-preview', title: `plugin preview: ${title}` });
+      node.innerHTML = await preview.text();
+      target.replaceWith(node);
     } catch (e) {
-      // fail-open: the chip stays — a recognisable placeholder, never a blank
-      console.warn('[sm] the token preview degraded:', e);
+      // fail-open: the placeholder stays — a recognisable block, never a blank
+      console.warn('[sm] the filter preview degraded:', e);
     }
   }
 
@@ -1059,6 +1072,23 @@ async function boot(root: HTMLElement): Promise<void> {
       const list = el('div', { class: 'sm-media-list' });
       const err = el('p', { class: 'sm-alert sm-alert-err', style: 'display:none; margin:0' });
 
+      // Global collection chooser — the gallery's site-level collections. "This
+      // page" is page-local (mints a :::image block as before, resolved through
+      // the page mediaUrl); "Loose" is the global root; a named collection
+      // stores there. A global upload mints NO page block: the gallery fence
+      // displays it, and a page-local mediaUrl would 404 a global file.
+      const collection = el('select', { class: 'sm-input' });
+      collection.append(el('option', { value: '' }, ['This page']));
+      collection.append(el('option', { value: 'loose' }, ['Loose (global)']));
+      try {
+        for (const c of await apiJson<readonly string[]>('/bridge/media/_global')) {
+          if (typeof c !== 'string' || c === '') continue;
+          collection.append(el('option', { value: c }, [c]));
+        }
+      } catch { /* the chooser still speaks This page + Loose */ }
+
+      let close: () => void = () => {};
+
       function renderMedia(): void {
         list.innerHTML = '';
         for (const item of media) {
@@ -1076,11 +1106,22 @@ async function boot(root: HTMLElement): Promise<void> {
         if (!f) return;
         const body = new FormData();
         body.append('file', f);
+        const coll = collection.value;
         try {
-          const stored = await apiJson<{ name: string }>(`/bridge/media/${type}/${slug}`, { method: 'POST', body });
-          await loadMedia();
-          renderMedia();
-          file.value = stored.name;
+          const stored = coll === ''
+            ? await apiJson<{ name: string }>(`/bridge/media/${type}/${slug}`, { method: 'POST', body })
+            : await apiJson<{ name: string }>(`/bridge/media/_global/${coll}`, { method: 'POST', body });
+          if (coll === '') {
+            // page-local: the block mints a page reference (resolved via mediaUrl)
+            await loadMedia();
+            renderMedia();
+            file.value = stored.name;
+          } else {
+            // global: stored in the collection — the gallery fence displays it;
+            // no page block (a page-local mediaUrl would 404 the global file)
+            toast('ok', `Uploaded to “${coll === 'loose' ? 'loose' : coll}” — the gallery shows it.`);
+            close();
+          }
         } catch (e) {
           toast('err', e instanceof Error ? e.message : String(e));
         }
@@ -1103,6 +1144,7 @@ async function boot(root: HTMLElement): Promise<void> {
           writeBlock(index, { kind: 'module', name: 'image', source: next }, isNew);
         }
       }, [
+        field('Collection', collection),
         field('File (page media or https URL)', file),
         el('div', { style: 'display:flex;gap:.5rem;align-items:center' }, [
           el('button', { class: 'sm-btn sm-btn-secondary', type: 'button', onclick: () => upload.click() }, ['Upload…']),
@@ -1116,7 +1158,8 @@ async function boot(root: HTMLElement): Promise<void> {
           el('button', { class: 'sm-btn sm-btn-primary', type: 'submit' }, [isNew ? 'Add image' : 'Save'])
         ])
       ]);
-      openModal(isNew ? 'Add image' : 'Edit image', form);
+      const modal = openModal(isNew ? 'Add image' : 'Edit image', form);
+      close = modal.close;
       return;
     }
 

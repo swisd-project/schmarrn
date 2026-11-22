@@ -430,12 +430,61 @@ function mediaDir(string $type, string $slug, string $folder = ''): string
     return $dir;
 }
 
-function mediaList(string $type, string $slug, string $folder = ''): array
+/** Global media: a site-level shelf, NOT under a page. The gallery's global
+ *  collections ride this, not a page's media dir — no page context. A
+ *  collection name obeys the same folder law as a page sub-folder (no climb,
+ *  no walk). The loose tray is the global root itself — no collection
+ *  sub-folder — and it rides the URL as the reserved sentinel "loose" (the
+ *  only name that answers as the root rather than a sub-folder). */
+function globalMediaRoot(): string
 {
-    assertPageExists($type, $slug);
-    $dir = mediaDir($type, $slug, $folder);
+    return dirname(__DIR__) . '/src/media';
+}
+
+function globalMediaDir(string $collection = ''): string
+{
+    $dir = globalMediaRoot();
+    // "loose" is the loose tray: the root itself, no sub-folder of its own —
+    // it has no URL segment of its own, so it answers as the global root.
+    if ($collection !== '' && $collection !== 'loose') {
+        if (preg_match('/^[a-z0-9][a-z0-9-]*$/', $collection) !== 1) {
+            throw new \Domain\Error(400, 'That collection name is unbaked dough.');
+        }
+        $dir .= '/' . $collection;
+    }
+    return $dir;
+}
+
+/** The named global collections (the sub-folders of the global root) — the
+ *  chooser's list. No page context: the gallery owns the shelf. */
+function globalMediaCollections(): array
+{
+    $dir = globalMediaRoot();
     if (!is_dir($dir)) {
-        return []; // an empty folder is an empty tray, not an error
+        return [];
+    }
+    $collections = [];
+    foreach (scandir($dir) ?: [] as $name) {
+        // "loose" is the reserved loose sentinel (the root) — never a listed
+        // collection; the chooser adds it as its own option.
+        if ($name === 'loose'
+            || in_array($name, ['.', '..', 'index.md'], true)
+            || str_starts_with($name, '.') || str_ends_with($name, '.tmp')) {
+            continue;
+        }
+        if (is_dir($dir . '/' . $name)) {
+            $collections[] = $name;
+        }
+    }
+    sort($collections);
+    return $collections;
+}
+
+/** The one scandir law, page-local or global — an empty tray is [], not an error. */
+function listDir(string $dir): array
+{
+    if (!is_dir($dir)) {
+        return [];
     }
     $files = [];
     foreach (scandir($dir) ?: [] as $name) {
@@ -452,22 +501,37 @@ function mediaList(string $type, string $slug, string $folder = ''): array
     return $files;
 }
 
+function mediaList(string $type, string $slug, string $folder = ''): array
+{
+    assertPageExists($type, $slug);
+    return listDir(mediaDir($type, $slug, $folder));
+}
+
 /** Immutable against overwrite — but a file may LEAVE: deletion is not rewriting.
- *  The immutability law keeps history honest; deletion is the editor's hand, named
- *  and CSRF-gated at the route. */
+ *  The immutability law keeps history honest; a crumb's leaving is the hand's,
+ *  named and CSRF-gated at the route. Shared by page-local and global. */
+function unlinkInDir(string $dir, string $name): ?string
+{
+    $path = pathInDir($dir, $name);
+    if ($path === null || !@unlink($path)) {
+        return null;
+    }
+    return $path;
+}
+
 function mediaDelete(string $type, string $slug, string $name, string $folder = ''): void
 {
-    $path = mediaPath($type, $slug, $name, $folder);
-    if ($path === null || !@unlink($path)) {
+    if (unlinkInDir(mediaDir($type, $slug, $folder), $name) === null) {
         throw new \Domain\Error(404, 'That media crumb is not in the tin.');
     }
 }
 
-/** Immutable by law: an existing filename is never overwritten — the upload gets a fresh prefix. */
-function mediaStore(string $type, string $slug, string $originalName, string $tmpPath, string $folder = ''): array
+/** Immutable by law: an existing filename is never overwritten — the upload gets
+ *  a fresh prefix. Shared by page-local and global; the caller owns the page
+ *  gate (a global collection has no page to assert). */
+function storeInDir(string $dir, string $originalName, string $tmpPath): array
 {
     assertUploadSize($tmpPath);
-    assertPageExists($type, $slug);
     $base = basename($originalName);
     $base = preg_replace('/[^A-Za-z0-9._-]/', '-', $base) ?? 'file';
     $base = trim($base, '-._');
@@ -479,7 +543,6 @@ function mediaStore(string $type, string $slug, string $originalName, string $tm
     if ($stem === '') {
         $stem = 'file';
     }
-    $dir = mediaDir($type, $slug, $folder);
     if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
         throw new \Domain\Error(500, 'The media folder would not rise — check the host writable paths.');
     }
@@ -492,23 +555,58 @@ function mediaStore(string $type, string $slug, string $originalName, string $tm
     return ['name' => $name, 'size' => filesize($target), 'mtime' => filemtime($target)];
 }
 
-/** Contained read: the file must literally live inside the page dir (or its validated sub-folder), no ../ games. */
+function mediaStore(string $type, string $slug, string $originalName, string $tmpPath, string $folder = ''): array
+{
+    assertPageExists($type, $slug);
+    return storeInDir(mediaDir($type, $slug, $folder), $originalName, $tmpPath);
+}
+
+/** Contained read: the file must literally live inside the resolved dir
+ *  (page-local or global), no ../ games. */
+function pathInDir(string $dir, string $name): ?string
+{
+    if (preg_match('/^[A-Za-z0-9._-]+$/', $name) !== 1 || str_starts_with($name, '.')) {
+        return null;
+    }
+    $real = realpath($dir);
+    if ($real === false) {
+        return null; // no such folder — no such file
+    }
+    $path = realpath($real . '/' . $name);
+    if ($path === false || !str_starts_with($path, $real . DIRECTORY_SEPARATOR)) {
+        return null;
+    }
+    return $path;
+}
+
 function mediaPath(string $type, string $slug, string $name, string $folder = ''): ?string
 {
     assertIdentifier($type, 'type');
     assertIdentifier($slug, 'slug');
-    if (preg_match('/^[A-Za-z0-9._-]+$/', $name) !== 1 || str_starts_with($name, '.')) {
-        return null;
+    return pathInDir(mediaDir($type, $slug, $folder), $name);
+}
+
+// ——— the global media face: same gates, no page to assert ———
+function globalMediaList(string $collection = ''): array
+{
+    return listDir(globalMediaDir($collection));
+}
+
+function globalMediaStore(string $collection, string $originalName, string $tmpPath): array
+{
+    return storeInDir(globalMediaDir($collection), $originalName, $tmpPath);
+}
+
+function globalMediaPath(string $collection, string $name): ?string
+{
+    return pathInDir(globalMediaDir($collection), $name);
+}
+
+function globalMediaDelete(string $collection, string $name): void
+{
+    if (unlinkInDir(globalMediaDir($collection), $name) === null) {
+        throw new \Domain\Error(404, 'That media crumb is not in the tin.');
     }
-    $dir = realpath(mediaDir($type, $slug, $folder));
-    if ($dir === false) {
-        return null; // no such folder — no such file
-    }
-    $path = realpath($dir . '/' . $name);
-    if ($dir === false || $path === false || !str_starts_with($path, $dir . DIRECTORY_SEPARATOR)) {
-        return null;
-    }
-    return $path;
 }
 
 /** Atomic write: validation → temp file → rename. Never leaves a half-Shmarrn behind.
